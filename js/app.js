@@ -5,15 +5,17 @@ import { initStore, subscribe } from './store.js';
 import { visitFormModal } from './form.js';
 import { renderPanel } from './views/panel.js';
 import { renderAgenda } from './views/agenda.js';
+import { renderCalendario } from './views/calendario.js';
 import { renderVisitas } from './views/visitas.js';
 import { renderTecnicos } from './views/tecnicos.js';
 import { debounce } from './util.js';
 
 const ROUTES = {
-  panel:    { title: 'Panel de control',        render: renderPanel },
-  agenda:   { title: 'Agenda / Asignación',     render: renderAgenda },
-  visitas:  { title: 'Registro de visitas',     render: renderVisitas },
-  tecnicos: { title: 'Técnicos',                render: renderTecnicos },
+  panel:      { title: 'Panel de control',        render: renderPanel },
+  agenda:     { title: 'Agenda / Asignación',     render: renderAgenda },
+  calendario: { title: 'Calendario',              render: renderCalendario },
+  visitas:    { title: 'Registro de visitas',     render: renderVisitas },
+  tecnicos:   { title: 'Técnicos',                render: renderTecnicos },
 };
 
 const viewEl = document.getElementById('view');
@@ -51,7 +53,7 @@ async function boot() {
   }
 
   // Re-render cuando cambian los datos (si estamos en una vista reactiva)
-  subscribe(() => { if (['panel', 'agenda', 'visitas', 'tecnicos'].includes(current)) render(); });
+  subscribe(() => { if (['panel', 'agenda', 'calendario', 'visitas', 'tecnicos'].includes(current)) render(); });
 
   window.addEventListener('hashchange', render);
 
