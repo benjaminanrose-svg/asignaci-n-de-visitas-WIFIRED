@@ -1,82 +1,127 @@
 // ============================================================
-// WIFIRED · Servidor Express — API REST + SPA estática
+// WIFIRED · Servidor Express — API REST + SPA + Auth por rol
 // ============================================================
 const express = require('express');
 const path = require('path');
 const { getStore } = require('./db.js');
+const { verifyPassword, signToken, verifyToken } = require('./server-auth.js');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-
 app.use(express.json({ limit: '1mb' }));
 
-// Pequeño helper para envolver handlers async
-const wrap = (fn) => (req, res) => fn(req, res).catch((e) => {
-  console.error(e);
-  res.status(500).json({ error: 'Error interno del servidor' });
-});
+const wrap = (fn) => (req, res) => fn(req, res).catch((e) => { console.error(e); res.status(500).json({ error: 'Error interno del servidor' }); });
 
-// ---------------- API ----------------
+// Middleware de autenticación
+async function auth(req, res, next) {
+  try {
+    const h = req.headers.authorization || '';
+    const p = verifyToken(h.replace(/^Bearer\s+/i, ''));
+    if (!p) return res.status(401).json({ error: 'Sesión no válida' });
+    const s = await getStore();
+    const user = await s.getUserById(p.uid);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+    req.user = user;
+    next();
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Error interno del servidor' }); }
+}
+const soloCoordinador = (req, res, next) =>
+  req.user.rol === 'coordinador' ? next() : res.status(403).json({ error: 'Acción sólo para coordinación' });
+
+/** Devuelve el string de visualización del técnico del usuario */
+async function techDisplay(user) {
+  if (!user.tecnico_id) return null;
+  const s = await getStore();
+  const t = await s.getTecnicoById(user.tecnico_id);
+  return t ? t.display : null;
+}
+
 const api = express.Router();
 
-// Bootstrap: todo lo que la app necesita al cargar
-api.get('/bootstrap', wrap(async (req, res) => {
+// --- Login ---
+api.post('/login', wrap(async (req, res) => {
+  const { username, password } = req.body || {};
+  const s = await getStore();
+  const user = await s.getUserByUsername((username || '').trim().toLowerCase());
+  if (!user || !verifyPassword(password || '', user.pass)) return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+  const token = signToken({ uid: user.id, rol: user.rol });
+  const display = await techDisplay(user);
+  res.json({ token, user: { id: user.id, nombre: user.nombre, rol: user.rol, tecnico: display, username: user.username } });
+}));
+
+api.get('/me', auth, wrap(async (req, res) => {
+  res.json({ id: req.user.id, nombre: req.user.nombre, rol: req.user.rol, tecnico: await techDisplay(req.user), username: req.user.username });
+}));
+
+// --- Bootstrap (filtra por rol) ---
+api.get('/bootstrap', auth, wrap(async (req, res) => {
   const s = await getStore();
   const [visitas, tecnicos, config] = await Promise.all([s.listVisitas(), s.listTecnicos(), s.getConfig()]);
-  res.json({ visitas, tecnicos, config });
+  const me = { id: req.user.id, nombre: req.user.nombre, rol: req.user.rol, tecnico: await techDisplay(req.user), username: req.user.username };
+  if (req.user.rol === 'tecnico') {
+    const mine = visitas.filter((v) => v.tecnico === me.tecnico);
+    return res.json({ visitas: mine, tecnicos: tecnicos.filter((t) => t.id === req.user.tecnico_id), config, me });
+  }
+  res.json({ visitas, tecnicos, config, me });
 }));
 
 // --- Visitas ---
-api.get('/visitas', wrap(async (req, res) => res.json(await (await getStore()).listVisitas())));
-api.post('/visitas', wrap(async (req, res) => {
+const CAMPOS_TECNICO = ['estado', 'detalle', 'fecha', 'bloque']; // lo que un técnico puede tocar
+
+api.post('/visitas', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
   if (!req.body || !req.body.cliente) return res.status(400).json({ error: 'El nombre del cliente es obligatorio' });
-  res.status(201).json(await s.addVisita(req.body));
+  const data = { ...req.body };
+  if (data.tecnico) data.asignado_por = req.user.nombre;
+  res.status(201).json(await s.addVisita(data));
 }));
-api.put('/visitas/:id', wrap(async (req, res) => {
-  const v = await (await getStore()).updateVisita(req.params.id, req.body || {});
+
+api.put('/visitas/:id', auth, wrap(async (req, res) => {
+  const s = await getStore();
+  const body = req.body || {};
+  let patch = {};
+  if (req.user.rol === 'tecnico') {
+    // sólo sus propias visitas y sólo campos permitidos
+    const own = (await s.listVisitas()).find((v) => v._uid === String(req.params.id));
+    const display = await techDisplay(req.user);
+    if (!own || own.tecnico !== display) return res.status(403).json({ error: 'No puedes modificar esta visita' });
+    CAMPOS_TECNICO.forEach((k) => { if (k in body) patch[k] = body[k]; });
+  } else {
+    patch = { ...body };
+    if ('tecnico' in body) patch.asignado_por = body.tecnico ? req.user.nombre : '';
+  }
+  const v = await s.updateVisita(req.params.id, patch);
   if (!v) return res.status(404).json({ error: 'Visita no encontrada' });
   res.json(v);
 }));
-api.delete('/visitas/:id', wrap(async (req, res) => {
-  await (await getStore()).deleteVisita(req.params.id);
-  res.json({ ok: true });
+
+api.delete('/visitas/:id', auth, soloCoordinador, wrap(async (req, res) => {
+  await (await getStore()).deleteVisita(req.params.id); res.json({ ok: true });
 }));
 
-// --- Técnicos ---
-api.get('/tecnicos', wrap(async (req, res) => res.json(await (await getStore()).listTecnicos())));
-api.post('/tecnicos', wrap(async (req, res) => {
+// --- Técnicos (sólo coordinación administra) ---
+api.get('/tecnicos', auth, wrap(async (req, res) => res.json(await (await getStore()).listTecnicos())));
+api.post('/tecnicos', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
-  if (!req.body || !req.body.nombre && !req.body.rol) return res.status(400).json({ error: 'Nombre o rol requerido' });
+  if (!req.body || (!req.body.nombre && !req.body.rol)) return res.status(400).json({ error: 'Nombre o rol requerido' });
   res.status(201).json(await s.addTecnico(req.body));
 }));
-api.put('/tecnicos/:id', wrap(async (req, res) => {
+api.put('/tecnicos/:id', auth, soloCoordinador, wrap(async (req, res) => {
   const t = await (await getStore()).updateTecnico(req.params.id, req.body || {});
   if (!t) return res.status(404).json({ error: 'Técnico no encontrado' });
   res.json(t);
 }));
-api.delete('/tecnicos/:id', wrap(async (req, res) => {
-  await (await getStore()).deleteTecnico(req.params.id);
-  res.json({ ok: true });
+api.delete('/tecnicos/:id', auth, soloCoordinador, wrap(async (req, res) => {
+  await (await getStore()).deleteTecnico(req.params.id); res.json({ ok: true });
 }));
 
 api.get('/health', (req, res) => res.json({ ok: true }));
-
 app.use('/api', api);
 
-// ---------------- Estáticos (SPA) ----------------
-app.use(express.static(__dirname, {
-  etag: true,
-  lastModified: true,
-  // no-cache = el navegador cachea pero SIEMPRE revalida (304 si no cambió,
-  // versión nueva al instante si cambió). Evita quedarse con JS/CSS viejo.
-  setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
-}));
-
-// Fallback a index.html para navegación directa
+// --- Estáticos (SPA) ---
+app.use(express.static(__dirname, { etag: true, lastModified: true, setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-// ---------------- Arranque ----------------
 getStore()
   .then(() => app.listen(PORT, '0.0.0.0', () => console.log(`WIFIRED Agenda — servidor en http://0.0.0.0:${PORT}`)))
   .catch((e) => { console.error('Fallo al iniciar:', e); process.exit(1); });

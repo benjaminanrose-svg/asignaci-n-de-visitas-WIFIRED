@@ -2,6 +2,11 @@
 // WIFIRED · Store — estado en memoria sincronizado con la API REST
 // ============================================================
 import { toast } from './util.js';
+import { getToken, logout } from './auth.js';
+
+let me = null;
+export function currentUser() { return me; }
+export function isCoordinador() { return me && me.rol === 'coordinador'; }
 
 const COMPANY = {
   nombre: 'TELECOMUNICACIONES WIFIRED LTDA',
@@ -17,8 +22,11 @@ const listeners = new Set();
 // ---------- API helper ----------
 async function api(method, url, body) {
   const opt = { method, headers: { 'Content-Type': 'application/json' } };
+  const tk = getToken();
+  if (tk) opt.headers.Authorization = 'Bearer ' + tk;
   if (body) opt.body = JSON.stringify(body);
   const res = await fetch('/api' + url, opt);
+  if (res.status === 401) { logout(); throw new Error('Sesión expirada'); }
   if (!res.ok) {
     let msg = 'Error de servidor';
     try { msg = (await res.json()).error || msg; } catch (e) {}
@@ -32,6 +40,7 @@ export async function initStore() {
   state.visitas = data.visitas;
   state.tecnicos = data.tecnicos;
   state.config = data.config;
+  me = data.me || null;
   return state;
 }
 

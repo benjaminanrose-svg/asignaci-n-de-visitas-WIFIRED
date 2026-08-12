@@ -135,3 +135,17 @@ localStorage.removeItem('wifired_agenda_v1'); location.reload();
 ---
 
 *Propuesta de diseño — WIFIRED Ltda., Melipilla.*
+
+## Acceso / Roles (login)
+
+El sistema ahora tiene inicio de sesión con dos roles:
+
+- **Coordinación**: ve y administra todo (agenda, asignación, calendario, técnicos). Al asignar una visita queda registrado quién la asignó.
+- **Técnico**: al entrar ve **solo sus visitas asignadas** (portal simple, pensado para celular) y puede marcar **Completada**, **Reagendar** o dejar una **Nota**.
+
+### Credenciales iniciales
+- **Coordinación** → usuario `coordinacion` · contraseña `wifired2026`
+- **Técnicos** → usuario `nombre.apellido` (ej. `moises.santana`, `jeremy.jimenez`) · contraseña `wifired`
+
+> Cada técnico creado desde el panel genera automáticamente su usuario (`nombre.apellido`, contraseña `wifired`).
+> Cambia las claves por defecto en producción con las variables de entorno `ADMIN_USER`, `ADMIN_PASS`, `TECH_PASS` y define `AUTH_SECRET` (clave para firmar los tokens).

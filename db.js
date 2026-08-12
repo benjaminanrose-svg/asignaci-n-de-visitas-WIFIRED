@@ -38,7 +38,26 @@ function nextOt(existing) {
   return `OT-MEL-2026-${String(n).padStart(3, '0')}`;
 }
 
-const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico'];
+const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por'];
+
+const { hashPassword, slugUser } = require('./server-auth.js');
+const ADMIN_USER = process.env.ADMIN_USER || 'coordinacion';
+const ADMIN_PASS = process.env.ADMIN_PASS || 'wifired2026';
+const TECH_PASS = process.env.TECH_PASS || 'wifired';
+
+/** Genera usuarios semilla: 1 coordinador + 1 por técnico */
+function seedUsers(tecnicos) {
+  const users = [{ id: 1, username: ADMIN_USER, pass: hashPassword(ADMIN_PASS), rol: 'coordinador', nombre: 'Coordinación', tecnico_id: null }];
+  const taken = new Set([ADMIN_USER]);
+  let seq = 1;
+  tecnicos.forEach((t) => {
+    let u = slugUser(t.nombre || t.rol); let base = u, i = 2;
+    while (taken.has(u)) u = `${base}${i++}`;
+    taken.add(u);
+    users.push({ id: ++seq, username: u, pass: hashPassword(TECH_PASS), rol: 'tecnico', nombre: displayTecnico(t.rol, t.nombre), tecnico_id: t.id });
+  });
+  return users;
+}
 
 // ============================================================
 //  Store en memoria
@@ -59,14 +78,23 @@ function memoryStore() {
   }
   const outT = (t) => ({ ...t, display: displayTecnico(t.rol, t.nombre) });
   const outV = (v) => ({ _uid: String(v.id), id: v.ot, ...pick(v) });
+  let users = seedUsers(tecnicos);
+  let uSeq = users.length;
 
   return {
     async init() {},
     async getConfig() { return CONFIG; },
+    async getUserByUsername(u) { return users.find((x) => x.username === u) || null; },
+    async getUserById(id) { return users.find((x) => x.id == id) || null; },
+    async getTecnicoById(id) { const t = tecnicos.find((x) => x.id == id); return t ? outT(t) : null; },
     async listTecnicos() { return tecnicos.map(outT); },
     async addTecnico(d) {
       const t = { id: ++tSeq, rol: d.rol || 'Técnico', nombre: (d.nombre || '').trim(), telefono: d.telefono || '', activo: d.activo !== false };
-      tecnicos.push(t); return outT(t);
+      tecnicos.push(t);
+      let u = slugUser(t.nombre || t.rol), base = u, i = 2;
+      while (users.some((x) => x.username === u)) u = `${base}${i++}`;
+      users.push({ id: ++uSeq, username: u, pass: hashPassword(TECH_PASS), rol: 'tecnico', nombre: displayTecnico(t.rol, t.nombre), tecnico_id: t.id });
+      return outT(t);
     },
     async updateTecnico(id, patch) {
       const t = tecnicos.find((x) => x.id == id); if (!t) return null;
@@ -103,8 +131,9 @@ function pgStore(url) {
     _uid: String(r.id), id: r.ot,
     estado: r.estado || '', tipo: r.tipo || '', fecha: r.fecha || '', bloque: r.bloque || '',
     cliente: r.cliente || '', rut: r.rut || '', telefono: r.telefono || '', direccion: r.direccion || '',
-    gps: r.gps || '', detalle: r.detalle || '', tecnico: r.tecnico || '',
+    gps: r.gps || '', detalle: r.detalle || '', tecnico: r.tecnico || '', asignado_por: r.asignado_por || '',
   });
+  const outU = (r) => r ? { id: r.id, username: r.username, pass: r.pass, rol: r.rol, nombre: r.nombre, tecnico_id: r.tecnico_id } : null;
 
   return {
     async init() {
@@ -132,8 +161,19 @@ function pgStore(url) {
           gps TEXT DEFAULT '',
           detalle TEXT DEFAULT '',
           tecnico TEXT DEFAULT '',
+          asignado_por TEXT DEFAULT '',
           created_at TIMESTAMPTZ DEFAULT now(),
           updated_at TIMESTAMPTZ DEFAULT now()
+        );`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS asignado_por TEXT DEFAULT '';`);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS usuarios (
+          id SERIAL PRIMARY KEY,
+          username TEXT UNIQUE NOT NULL,
+          pass TEXT NOT NULL,
+          rol TEXT NOT NULL DEFAULT 'tecnico',
+          nombre TEXT DEFAULT '',
+          tecnico_id INTEGER
         );`);
 
       // Siembra inicial sólo si las tablas están vacías
@@ -154,8 +194,26 @@ function pgStore(url) {
              v.telefono || '', v.direccion || '', v.gps || '', v.detalle || '', v.tecnico || '']);
         }
       }
+      // Usuarios: 1 coordinador + 1 por técnico
+      const uc = await pool.query('SELECT COUNT(*)::int AS n FROM usuarios');
+      if (uc.rows[0].n === 0) {
+        await pool.query('INSERT INTO usuarios (username, pass, rol, nombre) VALUES ($1,$2,$3,$4)',
+          [ADMIN_USER, hashPassword(ADMIN_PASS), 'coordinador', 'Coordinación']);
+        const { rows: techs } = await pool.query('SELECT * FROM tecnicos ORDER BY id ASC');
+        const taken = new Set([ADMIN_USER]);
+        for (const t of techs) {
+          let u = slugUser(t.nombre || t.rol), base = u, i = 2;
+          while (taken.has(u)) u = `${base}${i++}`;
+          taken.add(u);
+          await pool.query('INSERT INTO usuarios (username, pass, rol, nombre, tecnico_id) VALUES ($1,$2,$3,$4,$5)',
+            [u, hashPassword(TECH_PASS), 'tecnico', displayTecnico(t.rol, t.nombre), t.id]);
+        }
+      }
     },
     async getConfig() { return CONFIG; },
+    async getUserByUsername(u) { const { rows } = await pool.query('SELECT * FROM usuarios WHERE username=$1', [u]); return outU(rows[0]); },
+    async getUserById(id) { const { rows } = await pool.query('SELECT * FROM usuarios WHERE id=$1', [id]); return outU(rows[0]); },
+    async getTecnicoById(id) { const { rows } = await pool.query('SELECT * FROM tecnicos WHERE id=$1', [id]); return rows[0] ? outT(rows[0]) : null; },
     async listTecnicos() {
       const { rows } = await pool.query('SELECT * FROM tecnicos ORDER BY activo DESC, id ASC');
       return rows.map(outT);
@@ -164,7 +222,12 @@ function pgStore(url) {
       const { rows } = await pool.query(
         'INSERT INTO tecnicos (rol, nombre, telefono, activo) VALUES ($1,$2,$3,$4) RETURNING *',
         [d.rol || 'Técnico', (d.nombre || '').trim(), d.telefono || '', d.activo !== false]);
-      return outT(rows[0]);
+      const t = rows[0];
+      let u = slugUser(t.nombre || t.rol), base = u, i = 2;
+      while ((await pool.query('SELECT 1 FROM usuarios WHERE username=$1', [u])).rowCount) u = `${base}${i++}`;
+      await pool.query('INSERT INTO usuarios (username, pass, rol, nombre, tecnico_id) VALUES ($1,$2,$3,$4,$5)',
+        [u, hashPassword(TECH_PASS), 'tecnico', displayTecnico(t.rol, t.nombre), t.id]);
+      return outT(t);
     },
     async updateTecnico(id, patch) {
       const cols = [], vals = []; let i = 1;
@@ -185,10 +248,10 @@ function pgStore(url) {
       const { rows: ex } = await pool.query('SELECT ot FROM visitas');
       const ot = nextOt(ex.map((r) => r.ot));
       const { rows } = await pool.query(
-        `INSERT INTO visitas (ot,estado,tipo,fecha,bloque,cliente,rut,telefono,direccion,gps,detalle,tecnico)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+        `INSERT INTO visitas (ot,estado,tipo,fecha,bloque,cliente,rut,telefono,direccion,gps,detalle,tecnico,asignado_por)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
         [ot, d.estado || 'Pendiente', d.tipo || '', d.fecha || '', d.bloque || '', d.cliente || '', d.rut || '',
-         d.telefono || '', d.direccion || '', d.gps || '', d.detalle || '', d.tecnico || '']);
+         d.telefono || '', d.direccion || '', d.gps || '', d.detalle || '', d.tecnico || '', d.asignado_por || '']);
       return outV(rows[0]);
     },
     async updateVisita(id, patch) {
