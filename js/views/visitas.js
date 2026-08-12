@@ -6,7 +6,7 @@ import { esc, parseTecnico, fmtDateShort, bloqueShort } from '../util.js';
 import { statusBadge, techAvatar, clientAvatar, visitDetailModal, workOrderModal } from '../components.js';
 import { visitFormModal } from '../form.js';
 
-const local = { estado: '', tecnico: '', bloque: '', tipo: '' };
+const local = { estado: '', tecnico: '', bloque: '', tipo: '', reagenda: false };
 
 export function renderVisitas(root, ctx) {
   const search = (ctx && ctx.search) || '';
@@ -17,6 +17,7 @@ export function renderVisitas(root, ctx) {
       <select class="select" data-f="tecnico">${optAll('Todos los técnicos', store.tecnicos(), local.tecnico, true)}</select>
       <select class="select" data-f="bloque">${optAll('Todos los bloques', store.bloques(), local.bloque)}</select>
       <select class="select" data-f="tipo">${optAll('Todos los tipos', store.tipos(), local.tipo)}</select>
+      <button class="btn btn-sm ${local.reagenda ? 'btn-primary' : ''}" data-reagenda>⏳ Solicitudes de reagenda</button>
       <div class="grow"></div>
       <button class="btn btn-sm" data-clear>Limpiar filtros</button>
       <button class="btn btn-primary btn-sm" data-new>＋ Nueva visita</button>
@@ -28,10 +29,11 @@ export function renderVisitas(root, ctx) {
   root.querySelectorAll('[data-f]').forEach((sel) => {
     sel.onchange = () => { local[sel.dataset.f] = sel.value; paint(); };
   });
+  root.querySelector('[data-reagenda]').onclick = () => { local.reagenda = !local.reagenda; renderVisitas(root, ctx); };
   root.querySelector('[data-clear]').onclick = () => {
     local.estado = local.tecnico = local.bloque = local.tipo = '';
-    root.querySelectorAll('[data-f]').forEach((s) => (s.value = ''));
-    paint();
+    local.reagenda = false;
+    renderVisitas(root, ctx);
   };
   root.querySelector('[data-new]').onclick = () => visitFormModal();
 
@@ -43,6 +45,7 @@ export function renderVisitas(root, ctx) {
     if (local.tecnico) rows = rows.filter((v) => (local.tecnico === '__none__' ? !v.tecnico : v.tecnico === local.tecnico));
     if (local.bloque) rows = rows.filter((v) => v.bloque === local.bloque);
     if (local.tipo) rows = rows.filter((v) => v.tipo === local.tipo);
+    if (local.reagenda) rows = rows.filter((v) => v.reagenda_solicitada);
     if (search) {
       rows = rows.filter((v) =>
         [v.id, v.cliente, v.rut, v.telefono, v.direccion, v.tipo, v.tecnico, v.detalle]

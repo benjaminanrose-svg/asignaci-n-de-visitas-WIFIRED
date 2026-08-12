@@ -29,7 +29,7 @@ export function visitCard(v) {
     <div class="vc-client">${esc(v.cliente || 'Sin nombre')}</div>
     <div class="vc-type">${esc(v.tipo || '—')}</div>
     ${addr}
-    <div class="vc-foot">${statusBadge(v.estado)}</div>
+    <div class="vc-foot">${statusBadge(v.estado)}${v.reagenda_solicitada ? '<span class="tag" style="color:var(--st-repr-fg)">⏳ reagenda</span>' : ''}</div>
   </div>`;
 }
 
@@ -70,6 +70,7 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
       <button class="icon-btn" data-close>✕</button>
     </div>
     <div class="modal-body">
+      ${v.reagenda_solicitada ? `<div class="req-banner">⏳ <strong>Solicitud de reagenda</strong><p>${esc(v.reagenda_motivo || 'Sin motivo indicado')}</p><span>Asigna una nueva fecha con “Editar / Asignar”.</span></div>` : ''}
       <div class="detail-list">
         <div class="detail-row"><span class="dl-k">Tipo de visita</span><span class="dl-v">${esc(v.tipo || '—')}</span></div>
         <div class="detail-row"><span class="dl-k">Fecha</span><span class="dl-v">${fmtDate(v.fecha, true)}</span></div>
@@ -79,6 +80,7 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
         <div class="detail-row"><span class="dl-k">Teléfono</span><span class="dl-v">${esc(v.telefono || '—')}</span></div>
         <div class="detail-row"><span class="dl-k">Dirección</span><span class="dl-v">${esc(v.direccion || '—')}</span></div>
         <div class="detail-row"><span class="dl-k">Detalle / problema</span><span class="dl-v">${esc(v.detalle || '—')}</span></div>
+        ${v.asignado_por ? `<div class="detail-row"><span class="dl-k">Asignado por</span><span class="dl-v">${esc(v.asignado_por)}</span></div>` : ''}
       </div>
     </div>
     <div class="modal-foot">

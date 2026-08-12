@@ -59,7 +59,10 @@ export function renderPanel(root) {
     .sort((a, b) => (a.fecha < b.fecha ? -1 : 1))
     .slice(0, 6);
 
+  const solicitudes = vs.filter((v) => v.reagenda_solicitada);
+
   root.innerHTML = `
+    ${solicitudes.length ? `<a href="#/visitas" class="req-alert">⏳ <strong>${solicitudes.length}</strong> solicitud(es) de reagenda de técnicos — revisa y asigna nueva fecha →</a>` : ''}
     <div class="grid kpi-grid">
       ${kpi('total', '▦', total, 'Total de visitas', `${sinAsignar} sin asignar`)}
       ${kpi('pend', '◔', pend, 'Pendientes', 'Requieren agenda')}

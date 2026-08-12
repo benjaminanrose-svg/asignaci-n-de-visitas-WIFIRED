@@ -38,7 +38,7 @@ function nextOt(existing) {
   return `OT-MEL-2026-${String(n).padStart(3, '0')}`;
 }
 
-const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por'];
+const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por', 'reagenda_solicitada', 'reagenda_motivo'];
 
 const { hashPassword, slugUser } = require('./server-auth.js');
 const ADMIN_USER = process.env.ADMIN_USER || 'coordinacion';
@@ -132,6 +132,7 @@ function pgStore(url) {
     estado: r.estado || '', tipo: r.tipo || '', fecha: r.fecha || '', bloque: r.bloque || '',
     cliente: r.cliente || '', rut: r.rut || '', telefono: r.telefono || '', direccion: r.direccion || '',
     gps: r.gps || '', detalle: r.detalle || '', tecnico: r.tecnico || '', asignado_por: r.asignado_por || '',
+    reagenda_solicitada: r.reagenda_solicitada || '', reagenda_motivo: r.reagenda_motivo || '',
   });
   const outU = (r) => r ? { id: r.id, username: r.username, pass: r.pass, rol: r.rol, nombre: r.nombre, tecnico_id: r.tecnico_id } : null;
 
@@ -166,6 +167,8 @@ function pgStore(url) {
           updated_at TIMESTAMPTZ DEFAULT now()
         );`);
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS asignado_por TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS reagenda_solicitada TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS reagenda_motivo TEXT DEFAULT '';`);
       await pool.query(`
         CREATE TABLE IF NOT EXISTS usuarios (
           id SERIAL PRIMARY KEY,

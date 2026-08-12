@@ -25,7 +25,14 @@ export function renderTecnico(root) {
 
   const count = (k) => all.filter(filtros[k]).length;
 
+  const online = store.isOnline();
+  const pend = store.pendingCount();
+  let syncBar = '';
+  if (!online) syncBar = `<div class="sync-bar off">📴 Sin conexión — ${pend} cambio(s) se enviarán al reconectar</div>`;
+  else if (pend > 0) syncBar = `<div class="sync-bar syncing">⟳ Sincronizando ${pend} cambio(s)…</div>`;
+
   root.innerHTML = `
+    ${syncBar}
     <div class="tec-hero">
       <div>
         <div class="tec-hello">Hola, ${esc((user.nombre || '').replace(/^(Técnico|Ingeniero|Soporte de Emergencia|Soporte|Planta Externa)\s*/, '') || user.nombre)} 👋</div>
@@ -51,7 +58,7 @@ export function renderTecnico(root) {
     const uid = b.dataset.uid, act = b.dataset.act;
     if (act === 'completar') {
       store.updateVisita(uid, { estado: 'Completada' }); toast('Visita marcada como completada');
-    } else if (act === 'reagendar') { reagendarModal(uid); }
+    } else if (act === 'solicitar') { solicitarModal(uid); }
     else if (act === 'nota') { notaModal(uid); }
   }));
 }
@@ -62,6 +69,7 @@ function tab(k, label, n) {
 
 function card(v) {
   const done = v.estado === 'Completada';
+  const pedida = !!v.reagenda_solicitada;
   const tel = (v.telefono || '').split('/')[0].replace(/\s/g, '');
   return `
   <div class="tec-card ${done ? 'done' : ''}">
@@ -77,34 +85,34 @@ function card(v) {
     ${v.direccion ? `<div class="tec-meta">📍 ${esc(v.direccion)}</div>` : ''}
     ${v.telefono ? `<div class="tec-meta">📞 <a href="tel:${esc(tel)}">${esc(v.telefono)}</a></div>` : ''}
     ${v.detalle ? `<div class="tec-note">📝 ${esc(v.detalle)}</div>` : ''}
+    ${pedida ? `<div class="tec-req">⏳ Reagenda solicitada — a la espera de nueva fecha por coordinación</div>` : ''}
     <div class="tec-actions">
       ${done ? '' : `<button class="btn btn-primary btn-sm" data-act="completar" data-uid="${esc(v._uid)}">✓ Completar</button>`}
-      <button class="btn btn-sm" data-act="reagendar" data-uid="${esc(v._uid)}">↻ Reagendar</button>
+      ${done || pedida ? '' : `<button class="btn btn-sm" data-act="solicitar" data-uid="${esc(v._uid)}">↻ Solicitar reagenda</button>`}
       <button class="btn btn-sm" data-act="nota" data-uid="${esc(v._uid)}">📝 Nota</button>
     </div>
   </div>`;
 }
 
-// ---------- Reagendar ----------
-function reagendarModal(uid) {
+// ---------- Solicitar reagenda (el coordinador asigna la nueva fecha) ----------
+function solicitarModal(uid) {
   const v = store.byUid(uid); if (!v) return;
   const node = document.createElement('div');
   node.innerHTML = `
-    <div class="modal-head"><h3>Reagendar visita</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-head"><h3>Solicitar reagenda</h3><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body">
       <p class="muted-sm" style="margin-bottom:14px">${esc(v.cliente)} · ${esc(v.tipo)}</p>
-      <div class="form-grid">
-        <div class="field"><label>Nueva fecha</label><input class="input" type="date" name="fecha" value="${esc(v.fecha || todayISO())}"></div>
-        <div class="field"><label>Bloque</label><select class="select" name="bloque">${store.bloques().map((b) => `<option ${b === v.bloque ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select></div>
-        <div class="field full"><label>Motivo (opcional)</label><textarea class="textarea" name="motivo" placeholder="Motivo de la reprogramación…">${esc(v.detalle || '')}</textarea></div>
-      </div>
+      <div class="field"><label>Motivo de la solicitud</label>
+        <textarea class="textarea" name="motivo" style="min-height:110px" placeholder="Ej: cliente no se encontraba, falta de poste, coordinar otro día…" required></textarea></div>
+      <p class="muted-sm" style="margin-top:10px">Coordinación revisará tu solicitud y asignará una nueva fecha.</p>
     </div>
-    <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-save>Reagendar</button></div>`;
+    <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-save>Enviar solicitud</button></div>`;
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
   node.querySelector('[data-save]').onclick = () => {
-    node.querySelector('[data-save]').disabled = true;
-    store.updateVisita(uid, { fecha: node.querySelector('[name=fecha]').value, bloque: node.querySelector('[name=bloque]').value, detalle: node.querySelector('[name=motivo]').value, estado: 'Reprogramada' });
-    toast('Visita reprogramada'); closeModal();
+    const motivo = node.querySelector('[name=motivo]').value.trim();
+    if (!motivo) { node.querySelector('[name=motivo]').focus(); return; }
+    store.updateVisita(uid, { reagenda_solicitada: 'true', reagenda_motivo: motivo });
+    toast('Solicitud de reagenda enviada'); closeModal();
   };
   openModal(node, 'md');
 }
