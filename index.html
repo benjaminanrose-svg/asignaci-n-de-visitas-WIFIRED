@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WIFIRED · Agenda de Visitas Técnicas</title>
+  <meta name="description" content="Sistema de asignación y control de visitas técnicas — WIFIRED Melipilla" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Cpath d='M8 19c4.5-4.5 11.5-4.5 16 0M11 22c2.8-2.8 7.2-2.8 10 0M16 25.2a1.4 1.4 0 100-2.8 1.4 1.4 0 000 2.8z' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="26" height="26">
+            <path d="M6 18c5.5-5.5 14.5-5.5 20 0M9.5 21.5c3.6-3.6 9.4-3.6 13 0M16 25.5a1.8 1.8 0 100-3.6 1.8 1.8 0 000 3.6z"
+                  stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <strong>WIFIRED</strong>
+          <span>Agenda Técnica</span>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav">
+        <a class="nav-item" data-route="panel" href="#/panel">
+          <span class="nav-ico">▦</span> Panel
+        </a>
+        <a class="nav-item" data-route="agenda" href="#/agenda">
+          <span class="nav-ico">◐</span> Agenda / Asignación
+        </a>
+        <a class="nav-item" data-route="visitas" href="#/visitas">
+          <span class="nav-ico">☰</span> Visitas
+        </a>
+        <a class="nav-item" data-route="tecnicos" href="#/tecnicos">
+          <span class="nav-ico">◉</span> Técnicos
+        </a>
+      </nav>
+
+      <div class="sidebar-foot">
+        <button class="btn btn-primary btn-block" id="btn-nueva-visita">＋ Nueva visita</button>
+        <p class="muted-sm">Melipilla · Región Metropolitana</p>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn only-mobile" id="btn-menu" aria-label="Menú">☰</button>
+        <div class="topbar-title" id="page-title">Panel</div>
+        <div class="topbar-actions">
+          <div class="search-box">
+            <span class="search-ico">⌕</span>
+            <input type="search" id="global-search" placeholder="Buscar cliente, OT, dirección…" autocomplete="off" />
+          </div>
+          <div class="user-chip">
+            <div class="avatar">MB</div>
+            <div class="user-meta">
+              <strong>Coordinación</strong>
+              <span>WIFIRED Ltda.</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="view" id="view"><!-- vistas se inyectan aquí --></main>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
