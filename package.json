@@ -1,0 +1,12 @@
+{
+  "name": "wifired-agenda-visitas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema web de agenda y asignación de visitas técnicas — WIFIRED Melipilla",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

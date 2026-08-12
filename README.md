@@ -24,8 +24,42 @@ npx serve .
 
 Luego abrir en el navegador: **http://localhost:8000**
 
+También se incluye un servidor Node sin dependencias (el mismo que se usa en producción):
+
+```bash
+npm start          # sirve en http://localhost:8080 (o el puerto de la variable PORT)
+```
+
 > Debe abrirse mediante un servidor (`http://…`), no con doble clic al archivo (`file://`),
 > porque la app usa módulos JavaScript.
+
+---
+
+## Despliegue en Railway
+
+El proyecto ya viene listo para Railway (u otro hosting tipo Render/Fly). Usa un servidor
+estático en Node **sin dependencias** (`server.js`) que escucha en el puerto que asigna la
+plataforma (`process.env.PORT`).
+
+**Pasos:**
+1. En Railway: **New Project → Deploy from GitHub repo** y elegir este repositorio
+   (rama `claude/visit-assignment-web-system-jm2u9e` o la que se haya fusionado).
+2. Railway detecta `package.json` automáticamente (Nixpacks), instala y ejecuta `npm start`.
+3. En **Settings → Networking → Generate Domain** para obtener la URL pública.
+
+No hay que configurar variables de entorno: Railway inyecta `PORT` y el servidor lo toma solo.
+
+Archivos relevantes para el despliegue:
+
+| Archivo | Rol |
+|---------|-----|
+| `server.js` | Servidor estático Node (cero dependencias, respeta `PORT`, MIME correctos, guard anti path-traversal). |
+| `package.json` | Script `start` y versión de Node (`>=18`). |
+| `railway.json` | Builder Nixpacks + comando de inicio y política de reinicio. |
+
+> Nota: los datos se guardan en el navegador de cada usuario (localStorage). No hay base de
+> datos compartida todavía; es una demo de diseño. El siguiente paso para producción real
+> sería agregar un backend con persistencia.
 
 ---
 
