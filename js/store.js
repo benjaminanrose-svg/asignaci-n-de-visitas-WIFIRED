@@ -1,9 +1,7 @@
 // ============================================================
-// WIFIRED · Store — estado + persistencia en localStorage
+// WIFIRED · Store — estado en memoria sincronizado con la API REST
 // ============================================================
-import { SEED } from '../data/seed.js';
-
-const LS_KEY = 'wifired_agenda_v1';
+import { toast } from './util.js';
 
 const COMPANY = {
   nombre: 'TELECOMUNICACIONES WIFIRED LTDA',
@@ -13,77 +11,98 @@ const COMPANY = {
   autoriza: 'Martin Ballesteros Escarate',
 };
 
-let state = null;
+let state = { visitas: [], tecnicos: [], config: { bloques: [], tipos: [], estados: [] } };
 const listeners = new Set();
 
-function load() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) { /* ignore */ }
-  // primera carga: sembrar desde el Excel
-  const seeded = {
-    visitas: SEED.visitas.map((v, i) => ({ _uid: 'v' + (i + 1), ...v })),
-    bloques: SEED.bloques,
-    tipos: SEED.tipos,
-    estados: SEED.estados,
-    tecnicos: SEED.tecnicos,
-  };
-  return seeded;
+// ---------- API helper ----------
+async function api(method, url, body) {
+  const opt = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opt.body = JSON.stringify(body);
+  const res = await fetch('/api' + url, opt);
+  if (!res.ok) {
+    let msg = 'Error de servidor';
+    try { msg = (await res.json()).error || msg; } catch (e) {}
+    throw new Error(msg);
+  }
+  return res.status === 204 ? null : res.json();
 }
 
-export function initStore() {
-  state = load();
-  persist();
+export async function initStore() {
+  const data = await api('GET', '/bootstrap');
+  state.visitas = data.visitas;
+  state.tecnicos = data.tecnicos;
+  state.config = data.config;
   return state;
 }
 
-function persist() {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* full */ }
-}
-
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
-function emit() { persist(); listeners.forEach((fn) => fn(state)); }
+function emit() { listeners.forEach((fn) => fn(state)); }
 
 // ---------- Getters ----------
 export function getState() { return state; }
 export const company = COMPANY;
 export function visitas() { return state.visitas; }
 export function byUid(uid) { return state.visitas.find((v) => v._uid === uid); }
-export function tecnicos() { return state.tecnicos; }
-export function tipos() { return state.tipos; }
-export function bloques() { return state.bloques; }
-export function estados() { return state.estados; }
+export function tecnicosList() { return state.tecnicos; }
+/** Nombres de visualización de técnicos ACTIVOS (para selects) */
+export function tecnicos() { return state.tecnicos.filter((t) => t.activo).map((t) => t.display); }
+export function tipos() { return state.config.tipos; }
+export function bloques() { return state.config.bloques; }
+export function estados() { return state.config.estados; }
 
-// ---------- Mutations ----------
-export function updateVisita(uid, patch) {
-  const v = byUid(uid);
-  if (!v) return;
-  Object.assign(v, patch);
+// ---------- Visitas ----------
+export async function updateVisita(uid, patch) {
+  const idx = state.visitas.findIndex((v) => v._uid === uid);
+  if (idx < 0) return;
+  const prev = state.visitas[idx];
+  state.visitas[idx] = { ...prev, ...patch }; // optimista
   emit();
+  try {
+    const updated = await api('PUT', '/visitas/' + uid, patch);
+    state.visitas[idx] = updated; emit();
+  } catch (e) {
+    state.visitas[idx] = prev; emit();
+    toast(e.message, 'info');
+  }
 }
 
-export function addVisita(data) {
-  const uid = 'v' + (Date.now());
-  const nums = state.visitas
-    .map((v) => parseInt((v.id.match(/(\d+)\s*$/) || [])[1] || '0', 10))
-    .filter((n) => !isNaN(n));
-  const next = (nums.length ? Math.max(...nums) : 0) + 1;
-  const id = `OT-MEL-2026-${String(next).padStart(3, '0')}`;
-  const v = { _uid: uid, id, gps: '', ...data };
-  state.visitas.unshift(v);
-  emit();
-  return v;
+export async function addVisita(data) {
+  try {
+    const v = await api('POST', '/visitas', data);
+    state.visitas.unshift(v); emit();
+    return v;
+  } catch (e) { toast(e.message, 'info'); throw e; }
 }
 
-export function deleteVisita(uid) {
-  state.visitas = state.visitas.filter((v) => v._uid !== uid);
-  emit();
+export async function deleteVisita(uid) {
+  const prev = state.visitas.slice();
+  state.visitas = state.visitas.filter((v) => v._uid !== uid); emit();
+  try { await api('DELETE', '/visitas/' + uid); }
+  catch (e) { state.visitas = prev; emit(); toast(e.message, 'info'); }
 }
 
-/** Reinicia a los datos originales del Excel */
-export function resetSeed() {
-  localStorage.removeItem(LS_KEY);
-  state = load();
-  emit();
+// ---------- Técnicos ----------
+export async function addTecnico(data) {
+  try {
+    const t = await api('POST', '/tecnicos', data);
+    state.tecnicos.push(t); emit();
+    return t;
+  } catch (e) { toast(e.message, 'info'); throw e; }
+}
+
+export async function updateTecnico(id, patch) {
+  const idx = state.tecnicos.findIndex((t) => t.id == id);
+  if (idx < 0) return;
+  try {
+    const t = await api('PUT', '/tecnicos/' + id, patch);
+    state.tecnicos[idx] = t; emit();
+    return t;
+  } catch (e) { toast(e.message, 'info'); throw e; }
+}
+
+export async function deleteTecnico(id) {
+  const prev = state.tecnicos.slice();
+  state.tecnicos = state.tecnicos.filter((t) => t.id != id); emit();
+  try { await api('DELETE', '/tecnicos/' + id); }
+  catch (e) { state.tecnicos = prev; emit(); toast(e.message, 'info'); }
 }

@@ -41,8 +41,14 @@ function render() {
   document.getElementById('sidebar').classList.remove('open');
 }
 
-function boot() {
-  initStore();
+async function boot() {
+  viewEl.innerHTML = `<div class="empty-state"><div class="es-ico">◐</div><p>Cargando datos…</p></div>`;
+  try {
+    await initStore();
+  } catch (e) {
+    viewEl.innerHTML = `<div class="empty-state"><div class="es-ico">⚠</div><p>No se pudo conectar con el servidor.</p><p class="muted-sm">${e.message}</p></div>`;
+    return;
+  }
 
   // Re-render cuando cambian los datos (si estamos en una vista reactiva)
   subscribe(() => { if (['panel', 'agenda', 'visitas', 'tecnicos'].includes(current)) render(); });

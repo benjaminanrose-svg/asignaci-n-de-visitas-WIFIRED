@@ -73,27 +73,28 @@ export function visitFormModal(existing = null, prefill = {}) {
 
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
 
-  node.querySelector('[data-save]').onclick = () => {
+  node.querySelector('[data-save]').onclick = async () => {
     const form = node.querySelector('#visit-form');
     if (!form.reportValidity()) return;
     const fd = new FormData(form);
     const data = Object.fromEntries(fd.entries());
-    // Auto-avanza estado si se asigna técnico a una pendiente
-    if (isNew) {
-      if (!data.estado) data.estado = data.tecnico ? 'Programada' : 'Pendiente';
-      store.addVisita(data);
-      toast('Visita creada correctamente');
-    } else {
-      store.updateVisita(v._uid, data);
-      toast('Cambios guardados');
-    }
-    closeModal();
+    try {
+      if (isNew) {
+        if (!data.estado) data.estado = data.tecnico ? 'Programada' : 'Pendiente';
+        await store.addVisita(data);
+        toast('Visita creada correctamente');
+      } else {
+        await store.updateVisita(v._uid, data);
+        toast('Cambios guardados');
+      }
+      closeModal();
+    } catch (e) { /* el store ya mostró el error */ }
   };
 
   const del = node.querySelector('[data-del]');
-  if (del) del.onclick = () => {
+  if (del) del.onclick = async () => {
     if (confirm('¿Eliminar esta visita? Esta acción no se puede deshacer.')) {
-      store.deleteVisita(v._uid);
+      await store.deleteVisita(v._uid);
       toast('Visita eliminada', 'info');
       closeModal();
     }

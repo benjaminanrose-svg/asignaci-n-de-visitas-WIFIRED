@@ -57,9 +57,36 @@ Archivos relevantes para el despliegue:
 | `package.json` | Script `start` y versión de Node (`>=18`). |
 | `railway.json` | Builder Nixpacks + comando de inicio y política de reinicio. |
 
-> Nota: los datos se guardan en el navegador de cada usuario (localStorage). No hay base de
-> datos compartida todavía; es una demo de diseño. El siguiente paso para producción real
-> sería agregar un backend con persistencia.
+### Base de datos PostgreSQL (persistencia compartida)
+
+El sistema ya tiene backend (Express) con **PostgreSQL**. Para activarlo en Railway:
+
+1. En el proyecto de Railway: **New → Database → Add PostgreSQL**.
+2. Railway crea la variable `DATABASE_URL` y la comparte automáticamente con el servicio web
+   (si no, en el servicio web → **Variables → Reference** la variable `DATABASE_URL` de la DB).
+3. Redeploy. Al arrancar, el servidor crea las tablas (`tecnicos`, `visitas`) y las **siembra
+   una sola vez** con los datos del Excel. A partir de ahí, todo se guarda en la base de datos y
+   es compartido entre todos los usuarios.
+
+> **Sin `DATABASE_URL`** (por ejemplo en local sin Postgres) el servidor arranca en **modo
+> memoria**: funciona igual, sembrado con los datos del Excel, pero los cambios no persisten al
+> reiniciar. Ideal para desarrollo y demos rápidas.
+
+## Arquitectura
+
+- **Frontend**: SPA (HTML/CSS/JS sin framework) que consume la API REST.
+- **Backend**: `server.js` (Express) sirve la SPA y expone `/api/*`.
+- **Datos**: `db.js` — capa única con dos modos (PostgreSQL o memoria).
+
+### API REST
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/bootstrap` | Carga inicial (visitas + técnicos + configuración). |
+| GET/POST | `/api/visitas` | Listar / crear visitas. |
+| PUT/DELETE | `/api/visitas/:id` | Actualizar / eliminar visita. |
+| GET/POST | `/api/tecnicos` | Listar / crear técnicos. |
+| PUT/DELETE | `/api/tecnicos/:id` | Actualizar / eliminar técnico. |
 
 ---
 

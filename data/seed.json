@@ -1,5 +1,4 @@
-// Datos semilla extraídos de Agenda_Visitas_Melipilla_Wifired.xlsx (118 OT reales)
-export const SEED = {
+{
   "visitas": [
     {
       "id": "OT-MEL-2026-030",
@@ -1705,4 +1704,4 @@ export const SEED = {
     "Planta Externa Benito Godoy Vela",
     "Planta Externa Hernan Flores Cruz"
   ]
-};
+}
