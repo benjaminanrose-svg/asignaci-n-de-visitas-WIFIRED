@@ -66,10 +66,11 @@ app.use('/api', api);
 
 // ---------------- Estáticos (SPA) ----------------
 app.use(express.static(__dirname, {
-  extensions: false,
-  setHeaders: (res, p) => {
-    if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
-  },
+  etag: true,
+  lastModified: true,
+  // no-cache = el navegador cachea pero SIEMPRE revalida (304 si no cambió,
+  // versión nueva al instante si cambió). Evita quedarse con JS/CSS viejo.
+  setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
 }));
 
 // Fallback a index.html para navegación directa
