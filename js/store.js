@@ -17,6 +17,7 @@ const QUEUE = 'wifired_queue';
 
 let state = { visitas: [], tecnicos: [], config: { bloques: [], tipos: [], estados: [] } };
 let me = null;
+let persistent = true;
 let queue = load(QUEUE, []);
 const listeners = new Set();
 
@@ -27,6 +28,7 @@ function saveCache() { try { localStorage.setItem(CACHE, JSON.stringify({ visita
 export function currentUser() { return me; }
 export function isCoordinador() { return me && me.rol === 'coordinador'; }
 export function isOnline() { return navigator.onLine; }
+export function isPersistent() { return persistent; }
 export function pendingCount() { return queue.length; }
 
 // ---------- fetch de bajo nivel (distingue fallo de red) ----------
@@ -51,6 +53,7 @@ export async function initStore() {
   try {
     const data = await rawApi('GET', '/bootstrap');
     state.visitas = data.visitas; state.tecnicos = data.tecnicos; state.config = data.config; me = data.me || null;
+    persistent = data.persistent !== false;
     saveCache();
     flushQueue();
   } catch (e) {

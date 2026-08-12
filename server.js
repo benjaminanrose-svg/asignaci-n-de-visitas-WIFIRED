@@ -58,11 +58,12 @@ api.get('/bootstrap', auth, wrap(async (req, res) => {
   const s = await getStore();
   const [visitas, tecnicos, config] = await Promise.all([s.listVisitas(), s.listTecnicos(), s.getConfig()]);
   const me = { id: req.user.id, nombre: req.user.nombre, rol: req.user.rol, tecnico: await techDisplay(req.user), username: req.user.username };
+  const persistent = !!process.env.DATABASE_URL;
   if (req.user.rol === 'tecnico') {
     const mine = visitas.filter((v) => v.tecnico === me.tecnico);
-    return res.json({ visitas: mine, tecnicos: tecnicos.filter((t) => t.id === req.user.tecnico_id), config, me });
+    return res.json({ visitas: mine, tecnicos: tecnicos.filter((t) => t.id === req.user.tecnico_id), config, me, persistent });
   }
-  res.json({ visitas, tecnicos, config, me });
+  res.json({ visitas, tecnicos, config, me, persistent });
 }));
 
 // --- Visitas ---

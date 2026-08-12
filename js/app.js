@@ -1,7 +1,7 @@
 // ============================================================
 // WIFIRED · App — router + arranque + auth por rol
 // ============================================================
-import { initStore, subscribe, currentUser } from './store.js';
+import { initStore, subscribe, currentUser, isPersistent } from './store.js';
 import { visitFormModal } from './form.js';
 import { renderPanel } from './views/panel.js';
 import { renderAgenda } from './views/agenda.js';
@@ -78,6 +78,17 @@ async function startApp() {
   esTecnico = currentUser() && currentUser().rol === 'tecnico';
   document.body.setAttribute('data-role', esTecnico ? 'tecnico' : 'coordinador');
   setupUserChip();
+
+  // Aviso: sin base de datos los cambios no persisten entre reinicios
+  const prev = document.getElementById('no-db-bar');
+  if (prev) prev.remove();
+  if (!isPersistent()) {
+    const bar = document.createElement('div');
+    bar.id = 'no-db-bar';
+    bar.className = 'no-db-bar';
+    bar.innerHTML = '⚠️ <strong>Sin base de datos conectada</strong> — los cambios se perderán al reiniciar. Conecta PostgreSQL en Railway para guardar todo de forma permanente.';
+    document.querySelector('.main').prepend(bar);
+  }
 
   subscribe(() => { if (REACTIVE.includes(current)) render(); });
   window.addEventListener('hashchange', render);

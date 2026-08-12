@@ -63,11 +63,8 @@ function seedUsers(tecnicos) {
 //  Store en memoria
 // ============================================================
 function memoryStore() {
-  let tecnicos = SEED.tecnicos.map((full, i) => {
-    const { rol, nombre } = splitTecnico(full);
-    return { id: i + 1, rol, nombre, telefono: '', activo: true };
-  });
-  let tSeq = tecnicos.length;
+  let tecnicos = []; // se empieza desde 0: la coordinación crea los técnicos
+  let tSeq = 0;
   let visitas = SEED.visitas.map((v, i) => ({ id: i + 1, ot: v.id, ...pick(v) }));
   let vSeq = visitas.length;
 
@@ -179,14 +176,12 @@ function pgStore(url) {
           tecnico_id INTEGER
         );`);
 
-      // Siembra inicial sólo si las tablas están vacías
-      const tc = await pool.query('SELECT COUNT(*)::int AS n FROM tecnicos');
-      if (tc.rows[0].n === 0) {
-        for (const full of SEED.tecnicos) {
-          const { rol, nombre } = splitTecnico(full);
-          await pool.query('INSERT INTO tecnicos (rol, nombre) VALUES ($1,$2)', [rol, nombre]);
-        }
+      // Reset opcional de técnicos (poner RESET_TECNICOS=1 una vez y redeploy)
+      if (process.env.RESET_TECNICOS === '1') {
+        await pool.query(`DELETE FROM usuarios WHERE rol='tecnico'`);
+        await pool.query('DELETE FROM tecnicos');
       }
+      // Los técnicos se crean desde la coordinación (no se siembran)
       const vc = await pool.query('SELECT COUNT(*)::int AS n FROM visitas');
       if (vc.rows[0].n === 0) {
         for (const v of SEED.visitas) {
