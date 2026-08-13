@@ -257,11 +257,14 @@ table.data tbody tr:hover { background: var(--surface-2); }
 .ot-legal { font-size: 10px; color:#555; line-height:1.5; margin-top: 22px; border-top:1px solid #eee; padding-top:10px; }
 
 @media print {
-  .sidebar, .topbar, .modal-head, .modal-foot, #toast-root { display:none !important; }
-  body, .app-shell, .main, .view { background:#fff !important; display:block !important; }
-  .modal-overlay { position: static; background:none; padding:0; backdrop-filter:none; }
-  .modal { box-shadow:none; max-height:none; }
-  .modal-body { overflow: visible; padding: 0; }
+  html, body { background:#fff !important; }
+  /* Ocultar TODA la app (sidebar, topbar y la vista de fondo: calendario, etc.) */
+  .app-shell, #toast-root, .no-db-bar { display:none !important; }
+  .modal-head, .modal-foot { display:none !important; }
+  .modal-overlay { position:static; background:none; padding:0; backdrop-filter:none; display:block; overflow:visible; }
+  .modal { box-shadow:none; max-height:none; margin:0; width:100%; display:block; }
+  .modal-body { overflow:visible; padding:0; }
+  .ot-doc { color:#000; }
 }
 
 /* ---------- Calendario mensual ---------- */
