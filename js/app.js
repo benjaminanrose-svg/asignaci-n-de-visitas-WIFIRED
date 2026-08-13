@@ -4,7 +4,7 @@
 import { initStore, subscribe, currentUser, isPersistent, refresh } from './store.js';
 import * as store from './store.js';
 import { visitFormModal } from './form.js';
-import { visitDetailModal, workOrderModal, openModal, closeModal } from './components.js';
+import { visitDetailModal, workOrderModal, openModal, closeModal, downloadEvidence } from './components.js';
 import { renderPanel } from './views/panel.js';
 import { renderAgenda } from './views/agenda.js';
 import { renderCalendario } from './views/calendario.js';
@@ -83,17 +83,19 @@ function reqPanel() {
     <div class="modal-head"><h3>Solicitudes de reagenda (${reqs.length})</h3><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body">
       ${reqs.length ? reqs.map((v) => `
-        <button class="day-row" data-uid="${esc(v._uid)}">
-          <span style="flex:1; min-width:0; text-align:left">
+        <div class="day-row" style="cursor:default">
+          <span class="grow" data-open="${esc(v._uid)}" style="min-width:0; cursor:pointer">
             <span class="cell-strong truncate" style="display:block">${esc(v.cliente || 'Sin nombre')}</span>
             <span class="cell-sub truncate" style="display:block">${esc(parseTecnico(v.tecnico).short)} · ${esc(v.reagenda_motivo || 'Sin motivo')}</span>
           </span>
-          <span class="badge st-Reprogramada"><span class="dot"></span>reagenda</span>
-        </button>`).join('') : '<p class="muted" style="padding:10px 0">No hay solicitudes pendientes. 🎉</p>'}
+          ${(v.evidencias || []).length ? `<button class="btn btn-sm" data-dl="${esc(v._uid)}" title="Descargar evidencia">⭳</button>` : ''}
+          <button class="btn btn-sm btn-primary" data-open="${esc(v._uid)}">Reagendar</button>
+        </div>`).join('') : '<p class="muted" style="padding:10px 0">No hay solicitudes pendientes. 🎉</p>'}
     </div>`;
   node.querySelector('[data-close]').onclick = closeModal;
-  node.querySelectorAll('[data-uid]').forEach((b) => (b.onclick = () => {
-    const v = store.byUid(b.dataset.uid);
+  node.querySelectorAll('[data-dl]').forEach((b) => (b.onclick = () => { const v = store.byUid(b.dataset.dl); if (v) downloadEvidence(v); }));
+  node.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => {
+    const v = store.byUid(b.dataset.open);
     closeModal();
     if (v) visitDetailModal(v, { onEdit: (x) => visitFormModal(x), onOrder: (x) => workOrderModal(x, store.company) });
   }));

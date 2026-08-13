@@ -12,7 +12,9 @@ export function reagendarModal(v) {
     <div class="modal-head"><h3>Reagendar visita</h3><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body">
       <p class="muted-sm" style="margin-bottom:6px">${esc(v.id)} · ${esc(v.cliente || '')}</p>
-      ${v.reagenda_solicitada ? `<div class="req-banner" style="margin-bottom:16px">⏳ <strong>Solicitud del técnico</strong><p>${esc(v.reagenda_motivo || 'Sin motivo')}</p></div>` : ''}
+      ${v.reagenda_solicitada ? `<div class="req-banner" style="margin-bottom:16px">⏳ <strong>Solicitud del técnico</strong><p>${esc(v.reagenda_motivo || 'Sin motivo')}</p>
+        ${(v.evidencias || []).length || v.reagenda_motivo ? '<button class="btn btn-sm" data-download-ev style="margin-top:8px">⭳ Descargar evidencia</button>' : ''}
+        <span style="display:block;margin-top:8px;font-size:11.5px">Al confirmar, la visita queda limpia (se elimina la evidencia).</span></div>` : ''}
       <div class="form-grid">
         <div class="field"><label>Nueva fecha</label><input class="input" type="date" name="fecha" value="${esc(v.fecha || todayISO())}"></div>
         <div class="field"><label>Bloque horario</label><select class="select" name="bloque">${store.bloques().map((b) => `<option ${b === v.bloque ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select></div>
@@ -22,13 +24,15 @@ export function reagendarModal(v) {
     </div>
     <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-save>Confirmar nueva fecha</button></div>`;
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+  const dl = node.querySelector('[data-download-ev]');
+  if (dl) dl.onclick = () => downloadEvidence(v);
   node.querySelector('[data-save]').onclick = () => {
     store.updateVisita(v._uid, {
       fecha: node.querySelector('[name=fecha]').value,
       bloque: node.querySelector('[name=bloque]').value,
       tecnico: node.querySelector('[name=tecnico]').value,
       estado: node.querySelector('[name=estado]').value,
-      reagenda_solicitada: '', reagenda_motivo: '', // resuelve la solicitud
+      reagenda_solicitada: '', reagenda_motivo: '', evidencias: '[]', // limpia por completo
     });
     toast('Visita reagendada'); closeModal();
   };
@@ -37,9 +41,45 @@ export function reagendarModal(v) {
 
 export function evidenceGallery(v) {
   const ev = v.evidencias || [];
-  if (!ev.length) return '';
-  return `<div class="ev-block"><div class="ev-title">📷 Evidencia fotográfica (${ev.length})</div>
-    <div class="ev-grid">${ev.map((e, i) => `<img class="ev-thumb" data-photo="${i}" src="${e.url}" alt="evidencia">`).join('')}</div></div>`;
+  const nota = v.reagenda_motivo || v.detalle || '';
+  if (!ev.length && !nota) return '';
+  return `<div class="ev-block">
+    <div class="ev-title">📎 Evidencia · ${ev.length} foto${ev.length === 1 ? '' : 's'}${nota ? ' + nota' : ''}</div>
+    <button class="btn btn-sm" data-download-ev>⭳ Descargar evidencia</button>
+  </div>`;
+}
+
+/** Descarga un archivo con la nota del técnico y las fotos (autocontenido) */
+export function downloadEvidence(v) {
+  const ev = v.evidencias || [];
+  const nota = v.reagenda_motivo || v.detalle || '';
+  const t = parseTecnico(v.tecnico);
+  const row = (k, val) => `<div><b>${esc(k)}:</b> ${esc(val || '—')}</div>`;
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Evidencia ${esc(v.id)}</title>
+    <style>body{font-family:Arial,Helvetica,sans-serif;max-width:820px;margin:26px auto;padding:0 18px;color:#111}
+    h1{font-size:20px;margin:0 0 4px}.sub{color:#666;font-size:12px;margin-bottom:18px}
+    h2{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:26px 0 8px;border-bottom:1px solid #e2e2e2;padding-bottom:5px}
+    .meta div{font-size:13px;margin:3px 0}.nota{white-space:pre-wrap;background:#f6f7f9;border:1px solid #eee;padding:12px 14px;border-radius:8px;font-size:13px}
+    img{max-width:100%;border:1px solid #ccc;border-radius:8px;margin:6px 0}figure{margin:0 0 16px}figcaption{font-size:11px;color:#777;margin-bottom:4px}</style></head>
+    <body>
+      <h1>WIFIRED · Evidencia de visita</h1>
+      <div class="sub">Generado el ${new Date().toLocaleString('es-CL')}</div>
+      <div class="meta">
+        ${row('Orden', v.id)} ${row('Cliente', v.cliente)} ${row('Técnico', t.name)}
+        ${row('Estado', v.estado)} ${row('Fecha', (v.fecha || '') + ' ' + (v.bloque || ''))} ${row('Dirección', v.direccion)}
+        ${v.reagenda_solicitada ? row('Motivo de reagenda', v.reagenda_motivo) : ''}
+      </div>
+      <h2>Nota del técnico</h2>
+      <div class="nota">${esc(nota || 'Sin observaciones')}</div>
+      <h2>Fotografías (${ev.length})</h2>
+      ${ev.length ? ev.map((e, i) => `<figure><figcaption>Foto ${i + 1}${e.tipo ? ' · ' + esc(e.tipo) : ''}</figcaption><img src="${e.url}"></figure>`).join('') : '<p>Sin fotografías.</p>'}
+    </body></html>`;
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `evidencia_${v.id}.html`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 export function statusBadge(estado) {
@@ -142,7 +182,8 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
   node.querySelector('[data-edit]').onclick = () => { closeModal(); onEdit && onEdit(v); };
   node.querySelector('[data-order]').onclick = () => { closeModal(); onOrder && onOrder(v); };
   node.querySelector('[data-reagendar]').onclick = () => { closeModal(); reagendarModal(v); };
-  node.querySelectorAll('[data-photo]').forEach((img) => (img.onclick = () => openPhoto((v.evidencias || [])[img.dataset.photo].url)));
+  const dlEv = node.querySelector('[data-download-ev]');
+  if (dlEv) dlEv.onclick = () => downloadEvidence(v);
   openModal(node, 'md');
 }
 
