@@ -27,6 +27,7 @@ export function reagendarModal(v) {
   const dl = node.querySelector('[data-download-ev]');
   if (dl) dl.onclick = () => downloadEvidence(v);
   node.querySelector('[data-save]').onclick = () => {
+    if ((v.evidencias || []).length && !confirm('Al reagendar se eliminará la evidencia de esta visita. Descárgala antes si la necesitas. ¿Continuar?')) return;
     store.updateVisita(v._uid, {
       fecha: node.querySelector('[name=fecha]').value,
       bloque: node.querySelector('[name=bloque]').value,

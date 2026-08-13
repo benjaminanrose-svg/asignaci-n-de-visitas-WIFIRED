@@ -90,6 +90,8 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
     CAMPOS_TECNICO.forEach((k) => { if (k in body) patch[k] = body[k]; });
     // el técnico sólo puede marcar Completada o Cancelada
     if (['Completada', 'Cancelada'].includes(body.estado)) patch.estado = body.estado;
+    // al SOLICITAR reagenda, la visita pasa a Pendiente (espera nueva fecha de coordinación)
+    if (patch.reagenda_solicitada) patch.estado = 'Pendiente';
   } else {
     patch = { ...body };
     if ('tecnico' in body) patch.asignado_por = body.tecnico ? req.user.nombre : '';

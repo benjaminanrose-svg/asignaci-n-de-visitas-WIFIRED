@@ -101,9 +101,9 @@ function card(v) {
     ${pedida ? `<div class="tec-req">⏳ Reagenda solicitada — a la espera de nueva fecha por coordinación</div>` : ''}
     ${nFotos ? `<button class="tec-fotos" data-act="ver-fotos" data-uid="${esc(v._uid)}">📷 ${nFotos} foto${nFotos === 1 ? '' : 's'} de evidencia</button>` : ''}
     <div class="tec-actions">
-      ${cerrada ? '' : `<button class="btn btn-primary btn-sm" data-act="completar" data-uid="${esc(v._uid)}">✓ Completar</button>`}
+      ${cerrada || pedida ? '' : `<button class="btn btn-primary btn-sm" data-act="completar" data-uid="${esc(v._uid)}">✓ Completar</button>`}
       ${cerrada || pedida ? '' : `<button class="btn btn-sm" data-act="solicitar" data-uid="${esc(v._uid)}">↻ Reagenda</button>`}
-      ${cerrada ? '' : `<button class="btn btn-sm btn-danger" data-act="cancelar" data-uid="${esc(v._uid)}">✕ Cancelar</button>`}
+      ${cerrada || pedida ? '' : `<button class="btn btn-sm btn-danger" data-act="cancelar" data-uid="${esc(v._uid)}">✕ Cancelar</button>`}
       <button class="btn btn-sm" data-act="nota" data-uid="${esc(v._uid)}">📝 Nota</button>
     </div>
   </div>`;
@@ -185,7 +185,7 @@ function solicitarModal(uid) {
   node.querySelector('[data-save]').onclick = () => {
     const motivo = node.querySelector('[name=motivo]').value.trim();
     if (!motivo) { node.querySelector('[name=motivo]').focus(); return; }
-    store.updateVisita(uid, { reagenda_solicitada: 'true', reagenda_motivo: motivo, evidencias: evJSON(v, picker.getPhotos(), 'reagenda') });
+    store.updateVisita(uid, { reagenda_solicitada: 'true', reagenda_motivo: motivo, estado: 'Pendiente', evidencias: evJSON(v, picker.getPhotos(), 'reagenda') });
     toast('Solicitud de reagenda enviada'); closeModal();
   };
   openModal(node, 'md');
