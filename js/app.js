@@ -2,7 +2,9 @@
 // WIFIRED · App — router + arranque + auth por rol
 // ============================================================
 import { initStore, subscribe, currentUser, isPersistent, refresh } from './store.js';
+import * as store from './store.js';
 import { visitFormModal } from './form.js';
+import { visitDetailModal, workOrderModal, openModal, closeModal } from './components.js';
 import { renderPanel } from './views/panel.js';
 import { renderAgenda } from './views/agenda.js';
 import { renderCalendario } from './views/calendario.js';
@@ -11,7 +13,7 @@ import { renderTecnicos } from './views/tecnicos.js';
 import { renderTecnico } from './views/tecnico.js';
 import { renderLogin, clearLogin } from './views/login.js';
 import { isAuth, logout } from './auth.js';
-import { debounce, initials } from './util.js';
+import { debounce, initials, esc, parseTecnico, toast } from './util.js';
 
 const ROUTES = {
   panel:      { title: 'Panel de control',    render: renderPanel },
@@ -48,6 +50,54 @@ function render() {
   viewEl.innerHTML = '';
   route.render(viewEl, ctx);
   document.getElementById('sidebar').classList.remove('open');
+}
+
+// ---------- Notificaciones de reagenda (coordinación) ----------
+let prevReqCount = null;
+function updateBell() {
+  const reqs = store.visitas().filter((v) => v.reagenda_solicitada);
+  let bell = document.getElementById('notif-bell');
+  if (!bell) {
+    bell = document.createElement('button');
+    bell.id = 'notif-bell';
+    bell.className = 'notif-bell';
+    bell.title = 'Solicitudes de reagenda';
+    bell.innerHTML = '🔔<span class="notif-count"></span>';
+    bell.onclick = () => reqPanel();
+    const actions = document.querySelector('.topbar-actions');
+    actions.insertBefore(bell, actions.querySelector('.user-chip'));
+  }
+  const c = reqs.length;
+  const badge = bell.querySelector('.notif-count');
+  badge.textContent = c;
+  badge.style.display = c ? '' : 'none';
+  bell.classList.toggle('has', c > 0);
+  if (prevReqCount !== null && c > prevReqCount) toast(`🔔 ${c - prevReqCount} nueva(s) solicitud(es) de reagenda`, 'info');
+  prevReqCount = c;
+}
+
+function reqPanel() {
+  const reqs = store.visitas().filter((v) => v.reagenda_solicitada);
+  const node = document.createElement('div');
+  node.innerHTML = `
+    <div class="modal-head"><h3>Solicitudes de reagenda (${reqs.length})</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-body">
+      ${reqs.length ? reqs.map((v) => `
+        <button class="day-row" data-uid="${esc(v._uid)}">
+          <span style="flex:1; min-width:0; text-align:left">
+            <span class="cell-strong truncate" style="display:block">${esc(v.cliente || 'Sin nombre')}</span>
+            <span class="cell-sub truncate" style="display:block">${esc(parseTecnico(v.tecnico).short)} · ${esc(v.reagenda_motivo || 'Sin motivo')}</span>
+          </span>
+          <span class="badge st-Reprogramada"><span class="dot"></span>reagenda</span>
+        </button>`).join('') : '<p class="muted" style="padding:10px 0">No hay solicitudes pendientes. 🎉</p>'}
+    </div>`;
+  node.querySelector('[data-close]').onclick = closeModal;
+  node.querySelectorAll('[data-uid]').forEach((b) => (b.onclick = () => {
+    const v = store.byUid(b.dataset.uid);
+    closeModal();
+    if (v) visitDetailModal(v, { onEdit: (x) => visitFormModal(x), onOrder: (x) => workOrderModal(x, store.company) });
+  }));
+  openModal(node, 'md');
 }
 
 function setupUserChip() {
@@ -90,8 +140,9 @@ async function startApp() {
     document.querySelector('.main').prepend(bar);
   }
 
-  subscribe(() => { if (REACTIVE.includes(current)) render(); });
+  subscribe(() => { if (!esTecnico) updateBell(); if (REACTIVE.includes(current)) render(); });
   window.addEventListener('hashchange', render);
+  if (!esTecnico) updateBell();
 
   document.getElementById('btn-menu').onclick = () => document.getElementById('sidebar').classList.toggle('open');
 

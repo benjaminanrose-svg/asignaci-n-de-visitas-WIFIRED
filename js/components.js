@@ -1,8 +1,39 @@
 // ============================================================
 // WIFIRED · Componentes de UI reutilizables + modales
 // ============================================================
-import { esc, parseTecnico, fmtDate, bloqueShort, colorFor, initials, telLink, waLink } from './util.js';
+import { esc, parseTecnico, fmtDate, bloqueShort, colorFor, initials, telLink, waLink, todayISO, toast } from './util.js';
 import { openPhoto } from './photos.js';
+import * as store from './store.js';
+
+/** Reagendar (coordinación): nueva fecha, resuelve la solicitud, conserva evidencia */
+export function reagendarModal(v) {
+  const node = document.createElement('div');
+  node.innerHTML = `
+    <div class="modal-head"><h3>Reagendar visita</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-body">
+      <p class="muted-sm" style="margin-bottom:6px">${esc(v.id)} · ${esc(v.cliente || '')}</p>
+      ${v.reagenda_solicitada ? `<div class="req-banner" style="margin-bottom:16px">⏳ <strong>Solicitud del técnico</strong><p>${esc(v.reagenda_motivo || 'Sin motivo')}</p></div>` : ''}
+      <div class="form-grid">
+        <div class="field"><label>Nueva fecha</label><input class="input" type="date" name="fecha" value="${esc(v.fecha || todayISO())}"></div>
+        <div class="field"><label>Bloque horario</label><select class="select" name="bloque">${store.bloques().map((b) => `<option ${b === v.bloque ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select></div>
+        <div class="field"><label>Técnico</label><select class="select" name="tecnico"><option value="">Sin asignar</option>${store.tecnicos().map((t) => `<option ${t === v.tecnico ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
+        <div class="field"><label>Estado</label><select class="select" name="estado">${['Programada', 'Pendiente', 'Reprogramada'].map((s) => `<option ${s === 'Programada' ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-save>Confirmar nueva fecha</button></div>`;
+  node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+  node.querySelector('[data-save]').onclick = () => {
+    store.updateVisita(v._uid, {
+      fecha: node.querySelector('[name=fecha]').value,
+      bloque: node.querySelector('[name=bloque]').value,
+      tecnico: node.querySelector('[name=tecnico]').value,
+      estado: node.querySelector('[name=estado]').value,
+      reagenda_solicitada: '', reagenda_motivo: '', // resuelve la solicitud
+    });
+    toast('Visita reagendada'); closeModal();
+  };
+  openModal(node, 'md');
+}
 
 export function evidenceGallery(v) {
   const ev = v.evidencias || [];
@@ -84,7 +115,7 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
       <button class="icon-btn" data-close>✕</button>
     </div>
     <div class="modal-body">
-      ${v.reagenda_solicitada ? `<div class="req-banner">⏳ <strong>Solicitud de reagenda</strong><p>${esc(v.reagenda_motivo || 'Sin motivo indicado')}</p><span>Asigna una nueva fecha con “Editar / Asignar”.</span></div>` : ''}
+      ${v.reagenda_solicitada ? `<div class="req-banner">⏳ <strong>Solicitud de reagenda del técnico</strong><p>${esc(v.reagenda_motivo || 'Sin motivo indicado')}</p><span>Resuélvela con el botón “↻ Reagendar”.</span></div>` : ''}
       <div class="detail-list">
         <div class="detail-row"><span class="dl-k">Prioridad</span><span class="dl-v">${priorityTag(v.prioridad)}</span></div>
         <div class="detail-row"><span class="dl-k">Tipo de visita</span><span class="dl-v">${esc(v.tipo || '—')}</span></div>
@@ -104,11 +135,13 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
       <a class="btn" style="color:#128c7e" target="_blank" rel="noopener" href="${waLink(v.telefono, `Hola ${v.cliente || ''}, le contactamos de WIFIRED por su visita técnica (${v.tipo || ''}).`)}">💬 WhatsApp</a>` : ''}
       <div class="grow"></div>
       <button class="btn" data-order>🧾 Orden</button>
-      <button class="btn btn-primary" data-edit>✎ Editar / Asignar</button>
+      <button class="btn ${v.reagenda_solicitada ? 'btn-primary' : ''}" data-reagendar>↻ Reagendar</button>
+      <button class="btn ${v.reagenda_solicitada ? '' : 'btn-primary'}" data-edit>✎ Editar</button>
     </div>`;
   node.querySelector('[data-close]').onclick = closeModal;
   node.querySelector('[data-edit]').onclick = () => { closeModal(); onEdit && onEdit(v); };
   node.querySelector('[data-order]').onclick = () => { closeModal(); onOrder && onOrder(v); };
+  node.querySelector('[data-reagendar]').onclick = () => { closeModal(); reagendarModal(v); };
   node.querySelectorAll('[data-photo]').forEach((img) => (img.onclick = () => openPhoto((v.evidencias || [])[img.dataset.photo].url)));
   openModal(node, 'md');
 }
