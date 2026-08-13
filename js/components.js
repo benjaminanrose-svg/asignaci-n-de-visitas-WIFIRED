@@ -165,7 +165,7 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
         <div class="detail-row"><span class="dl-k">Técnico asignado</span><span class="dl-v row" style="gap:8px">${v.tecnico ? techAvatar(v.tecnico) + esc(t.name) : '<span class="muted">Sin asignar</span>'}</span></div>
         <div class="detail-row"><span class="dl-k">RUT</span><span class="dl-v">${esc(v.rut || '—')}</span></div>
         <div class="detail-row"><span class="dl-k">Teléfono</span><span class="dl-v">${esc(v.telefono || '—')}</span></div>
-        <div class="detail-row"><span class="dl-k">Dirección</span><span class="dl-v">${esc(v.direccion || '—')}</span></div>
+        <div class="detail-row"><span class="dl-k">Dirección</span><span class="dl-v">${v.direccion ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v.direccion + ', Melipilla, Chile')}" target="_blank" rel="noopener" style="color:var(--brand-500)">${esc(v.direccion)} · ver mapa ›</a>` : '—'}</span></div>
         <div class="detail-row"><span class="dl-k">Detalle / problema</span><span class="dl-v">${esc(v.detalle || '—')}</span></div>
         ${v.asignado_por ? `<div class="detail-row"><span class="dl-k">Asignado por</span><span class="dl-v">${esc(v.asignado_por)}</span></div>` : ''}
       </div>

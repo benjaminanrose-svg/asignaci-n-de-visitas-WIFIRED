@@ -23,11 +23,16 @@ export function renderTecnico(root) {
 
   const filtros = {
     hoy: (v) => v.fecha === today && activas(v),
-    proximas: (v) => v.fecha >= today && activas(v),
-    pendientes: (v) => activas(v),
+    porhacer: (v) => activas(v),
     completadas: (v) => v.estado === 'Completada',
     todas: () => true,
   };
+  // Primera carga: abrir en la primera pestaña con contenido (evita pantalla vacía)
+  if (!local.inited) {
+    local.inited = true;
+    local.filtro = ['hoy', 'porhacer', 'completadas', 'todas'].find((k) => all.filter(filtros[k]).length) || 'todas';
+  }
+  if (!filtros[local.filtro]) local.filtro = 'porhacer';
   let list = all.filter(filtros[local.filtro] || (() => true))
     .sort((a, b) => prioRank(a.prioridad) - prioRank(b.prioridad) || (a.fecha || '').localeCompare(b.fecha || '') || (a.bloque || '').localeCompare(b.bloque || ''));
 
@@ -50,8 +55,7 @@ export function renderTecnico(root) {
 
     <div class="tec-tabs">
       ${tab('hoy', 'Hoy', count('hoy'))}
-      ${tab('proximas', 'Próximas', count('proximas'))}
-      ${tab('pendientes', 'Pendientes', count('pendientes'))}
+      ${tab('porhacer', 'Por hacer', count('porhacer'))}
       ${tab('completadas', 'Completadas', count('completadas'))}
       ${tab('todas', 'Todas', all.length)}
     </div>
@@ -95,7 +99,7 @@ function card(v) {
     </div>
     <div class="tec-client">${esc(v.cliente || 'Sin nombre')}</div>
     <div class="tec-type">${esc(v.tipo || '—')}</div>
-    ${v.direccion ? `<div class="tec-meta">📍 ${esc(v.direccion)}</div>` : ''}
+    ${v.direccion ? `<a class="tec-meta tec-map" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v.direccion + ', Melipilla, Chile')}" target="_blank" rel="noopener">📍 ${esc(v.direccion)} <span class="tec-map-go">· Cómo llegar ›</span></a>` : ''}
     ${v.telefono ? `<div class="tec-meta">📞 <a href="${telLink(v.telefono)}">${esc(v.telefono)}</a> · <a href="${waLink(v.telefono, `Hola ${v.cliente || ''}, le contactamos de WIFIRED por su visita técnica.`)}" target="_blank" rel="noopener" style="color:#128c7e">WhatsApp</a></div>` : ''}
     ${v.detalle ? `<div class="tec-note">📝 ${esc(v.detalle)}</div>` : ''}
     ${pedida ? `<div class="tec-req">⏳ Reagenda solicitada — a la espera de nueva fecha por coordinación</div>` : ''}
