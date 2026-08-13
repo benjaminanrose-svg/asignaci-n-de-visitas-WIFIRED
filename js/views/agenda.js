@@ -2,7 +2,7 @@
 // WIFIRED · Vista Agenda / Asignación (board con drag & drop)
 // ============================================================
 import * as store from '../store.js';
-import { esc, parseTecnico, fmtDate, addDays, todayISO, toast } from '../util.js';
+import { esc, parseTecnico, fmtDate, addDays, todayISO, toast, prioRank } from '../util.js';
 import { visitCard, techAvatar, visitDetailModal, workOrderModal } from '../components.js';
 import { visitFormModal } from '../form.js';
 
@@ -82,6 +82,7 @@ function buildByBloque(board, dayVisits) {
 }
 
 function makeCol(key, headInner, list, unassigned) {
+  list = list.slice().sort((a, b) => prioRank(a.prioridad) - prioRank(b.prioridad)); // mayor prioridad primero
   const col = document.createElement('div');
   col.className = 'col' + (unassigned ? ' is-unassigned' : '');
   col.dataset.col = key;

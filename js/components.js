@@ -7,6 +7,12 @@ export function statusBadge(estado) {
   return `<span class="badge st-${esc(estado)}"><span class="dot"></span>${esc(estado || '—')}</span>`;
 }
 
+export function priorityTag(p) {
+  p = p || 'Media';
+  const cls = { Alta: 'pr-alta', Media: 'pr-media', Baja: 'pr-baja' }[p] || 'pr-media';
+  return `<span class="prio ${cls}">⚑ ${esc(p)}</span>`;
+}
+
 export function techAvatar(full, cls = 'avatar-sm') {
   const t = parseTecnico(full);
   return `<span class="${cls}" style="background:${t.color}">${esc(t.initials)}</span>`;
@@ -24,7 +30,7 @@ export function visitCard(v) {
   <div class="vcard b-${esc(v.estado)}" draggable="true" data-uid="${esc(v._uid)}" data-open="${esc(v._uid)}">
     <div class="vc-top">
       <span class="vc-id">${esc(v.id)}</span>
-      <span class="tag tag-block">${esc(bloqueShort(v.bloque))}</span>
+      <span class="row" style="gap:5px">${priorityTag(v.prioridad)}<span class="tag tag-block">${esc(bloqueShort(v.bloque))}</span></span>
     </div>
     <div class="vc-client">${esc(v.cliente || 'Sin nombre')}</div>
     <div class="vc-type">${esc(v.tipo || '—')}</div>
@@ -72,6 +78,7 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
     <div class="modal-body">
       ${v.reagenda_solicitada ? `<div class="req-banner">⏳ <strong>Solicitud de reagenda</strong><p>${esc(v.reagenda_motivo || 'Sin motivo indicado')}</p><span>Asigna una nueva fecha con “Editar / Asignar”.</span></div>` : ''}
       <div class="detail-list">
+        <div class="detail-row"><span class="dl-k">Prioridad</span><span class="dl-v">${priorityTag(v.prioridad)}</span></div>
         <div class="detail-row"><span class="dl-k">Tipo de visita</span><span class="dl-v">${esc(v.tipo || '—')}</span></div>
         <div class="detail-row"><span class="dl-k">Fecha</span><span class="dl-v">${fmtDate(v.fecha, true)}</span></div>
         <div class="detail-row"><span class="dl-k">Bloque horario</span><span class="dl-v">${esc(v.bloque || '—')}</span></div>

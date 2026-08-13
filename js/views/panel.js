@@ -2,7 +2,7 @@
 // WIFIRED · Vista Panel (dashboard)
 // ============================================================
 import * as store from '../store.js';
-import { esc, parseTecnico, fmtDateShort, todayISO, parseDate } from '../util.js';
+import { esc, parseTecnico, fmtDateShort, todayISO, parseDate, prioRank } from '../util.js';
 import { statusBadge, techAvatar, visitDetailModal, workOrderModal } from '../components.js';
 import { visitFormModal } from '../form.js';
 
@@ -56,7 +56,7 @@ export function renderPanel(root) {
   const today = todayISO();
   const proximas = activas
     .filter((v) => v.fecha)
-    .sort((a, b) => (a.fecha < b.fecha ? -1 : 1))
+    .sort((a, b) => prioRank(a.prioridad) - prioRank(b.prioridad) || (a.fecha < b.fecha ? -1 : 1))
     .slice(0, 6);
 
   const solicitudes = vs.filter((v) => v.reagenda_solicitada);

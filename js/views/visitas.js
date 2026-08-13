@@ -2,8 +2,8 @@
 // WIFIRED · Vista Registro de Visitas (tabla + filtros)
 // ============================================================
 import * as store from '../store.js';
-import { esc, parseTecnico, fmtDateShort, bloqueShort } from '../util.js';
-import { statusBadge, techAvatar, clientAvatar, visitDetailModal, workOrderModal } from '../components.js';
+import { esc, parseTecnico, fmtDateShort, bloqueShort, prioRank } from '../util.js';
+import { statusBadge, priorityTag, techAvatar, clientAvatar, visitDetailModal, workOrderModal } from '../components.js';
 import { visitFormModal } from '../form.js';
 
 const local = { estado: '', tecnico: '', bloque: '', tipo: '', reagenda: false };
@@ -46,6 +46,7 @@ export function renderVisitas(root, ctx) {
     if (local.bloque) rows = rows.filter((v) => v.bloque === local.bloque);
     if (local.tipo) rows = rows.filter((v) => v.tipo === local.tipo);
     if (local.reagenda) rows = rows.filter((v) => v.reagenda_solicitada);
+    rows = rows.slice().sort((a, b) => prioRank(a.prioridad) - prioRank(b.prioridad)); // prioridad primero
     if (search) {
       rows = rows.filter((v) =>
         [v.id, v.cliente, v.rut, v.telefono, v.direccion, v.tipo, v.tecnico, v.detalle]
@@ -106,7 +107,7 @@ function rowHtml(v) {
     <td class="nowrap">${esc(fmtDateShort(v.fecha))}</td>
     <td><span class="tag tag-block">${esc(bloqueShort(v.bloque))}</span></td>
     <td>${v.tecnico ? `<div class="row" style="gap:8px">${techAvatar(v.tecnico)}<span class="truncate" style="max-width:130px">${esc(t.short)}</span></div>` : '<span class="muted-sm">Sin asignar</span>'}</td>
-    <td>${statusBadge(v.estado)}</td>
+    <td><div class="row" style="gap:6px; flex-wrap:wrap">${statusBadge(v.estado)}${priorityTag(v.prioridad)}</div></td>
     <td class="text-right"><button class="btn btn-sm btn-ghost" data-ot title="Orden de trabajo">🧾</button></td>
   </tr>`;
 }

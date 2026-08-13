@@ -38,7 +38,7 @@ function nextOt(existing) {
   return `OT-MEL-2026-${String(n).padStart(3, '0')}`;
 }
 
-const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por', 'reagenda_solicitada', 'reagenda_motivo'];
+const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por', 'reagenda_solicitada', 'reagenda_motivo', 'prioridad'];
 
 const { hashPassword, slugUser } = require('./server-auth.js');
 const ADMIN_USER = process.env.ADMIN_USER || 'coordinacion';
@@ -74,7 +74,7 @@ function memoryStore() {
     return o;
   }
   const outT = (t) => ({ ...t, display: displayTecnico(t.rol, t.nombre) });
-  const outV = (v) => ({ _uid: String(v.id), id: v.ot, ...pick(v) });
+  const outV = (v) => { const o = { _uid: String(v.id), id: v.ot, ...pick(v) }; o.prioridad = o.prioridad || 'Media'; return o; };
   let users = seedUsers(tecnicos);
   let uSeq = users.length;
 
@@ -130,6 +130,7 @@ function pgStore(url) {
     cliente: r.cliente || '', rut: r.rut || '', telefono: r.telefono || '', direccion: r.direccion || '',
     gps: r.gps || '', detalle: r.detalle || '', tecnico: r.tecnico || '', asignado_por: r.asignado_por || '',
     reagenda_solicitada: r.reagenda_solicitada || '', reagenda_motivo: r.reagenda_motivo || '',
+    prioridad: r.prioridad || 'Media',
   });
   const outU = (r) => r ? { id: r.id, username: r.username, pass: r.pass, rol: r.rol, nombre: r.nombre, tecnico_id: r.tecnico_id } : null;
 
@@ -166,6 +167,7 @@ function pgStore(url) {
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS asignado_por TEXT DEFAULT '';`);
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS reagenda_solicitada TEXT DEFAULT '';`);
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS reagenda_motivo TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS prioridad TEXT DEFAULT 'Media';`);
       await pool.query(`
         CREATE TABLE IF NOT EXISTS usuarios (
           id SERIAL PRIMARY KEY,
@@ -246,10 +248,10 @@ function pgStore(url) {
       const { rows: ex } = await pool.query('SELECT ot FROM visitas');
       const ot = nextOt(ex.map((r) => r.ot));
       const { rows } = await pool.query(
-        `INSERT INTO visitas (ot,estado,tipo,fecha,bloque,cliente,rut,telefono,direccion,gps,detalle,tecnico,asignado_por)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        `INSERT INTO visitas (ot,estado,tipo,fecha,bloque,cliente,rut,telefono,direccion,gps,detalle,tecnico,asignado_por,prioridad)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
         [ot, d.estado || 'Pendiente', d.tipo || '', d.fecha || '', d.bloque || '', d.cliente || '', d.rut || '',
-         d.telefono || '', d.direccion || '', d.gps || '', d.detalle || '', d.tecnico || '', d.asignado_por || '']);
+         d.telefono || '', d.direccion || '', d.gps || '', d.detalle || '', d.tecnico || '', d.asignado_por || '', d.prioridad || 'Media']);
       return outV(rows[0]);
     },
     async updateVisita(id, patch) {

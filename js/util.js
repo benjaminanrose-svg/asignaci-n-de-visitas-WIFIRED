@@ -79,6 +79,10 @@ export function initials(name) {
   return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || '?';
 }
 
+export const PRIORIDADES = ['Alta', 'Media', 'Baja'];
+/** Rango para ordenar: Alta primero */
+export function prioRank(p) { return p === 'Alta' ? 0 : p === 'Baja' ? 2 : 1; }
+
 export function debounce(fn, ms = 220) {
   let t;
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };

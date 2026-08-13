@@ -2,8 +2,8 @@
 // WIFIRED · Portal del Técnico — sus visitas asignadas
 // ============================================================
 import * as store from '../store.js';
-import { esc, fmtDate, fmtDateShort, todayISO, bloqueShort, toast } from '../util.js';
-import { statusBadge, openModal, closeModal } from '../components.js';
+import { esc, fmtDate, fmtDateShort, todayISO, bloqueShort, toast, prioRank } from '../util.js';
+import { statusBadge, priorityTag, openModal, closeModal } from '../components.js';
 
 const local = { filtro: 'hoy' };
 
@@ -21,7 +21,7 @@ export function renderTecnico(root) {
     todas: () => true,
   };
   let list = all.filter(filtros[local.filtro] || (() => true))
-    .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '') || (a.bloque || '').localeCompare(b.bloque || ''));
+    .sort((a, b) => prioRank(a.prioridad) - prioRank(b.prioridad) || (a.fecha || '').localeCompare(b.fecha || '') || (a.bloque || '').localeCompare(b.bloque || ''));
 
   const count = (k) => all.filter(filtros[k]).length;
 
@@ -75,6 +75,7 @@ function card(v) {
   <div class="tec-card ${done ? 'done' : ''}">
     <div class="tec-card-top">
       <div class="row" style="gap:8px; flex-wrap:wrap">
+        ${priorityTag(v.prioridad)}
         <span class="tag tag-block">${esc(bloqueShort(v.bloque))}</span>
         <span class="tec-fecha">${esc(fmtDateShort(v.fecha))}</span>
       </div>
