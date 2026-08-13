@@ -149,3 +149,25 @@ El sistema ahora tiene inicio de sesión con dos roles:
 
 > Cada técnico creado desde el panel genera automáticamente su usuario (`nombre.apellido`, contraseña `wifired`).
 > Cambia las claves por defecto en producción con las variables de entorno `ADMIN_USER`, `ADMIN_PASS`, `TECH_PASS` y define `AUTH_SECRET` (clave para firmar los tokens).
+
+## Orden de trabajo, firmas digitales y envío por correo
+
+- Al **completar** una visita, el técnico firma la orden **con el dedo** (cliente y técnico)
+  directamente en el celular, adjunta evidencia y confirma el correo del cliente.
+- La orden replica el formato oficial de WIFIRED (copia cliente/técnico) y se puede imprimir.
+- Al completar, el sistema **envía la orden firmada al correo del cliente** automáticamente.
+  La coordinación también puede reenviarla desde la orden ("Enviar al cliente").
+
+### Configurar el envío de correo (Gmail)
+En Railway → servicio web → **Variables**, agrega:
+
+| Variable | Valor |
+|----------|-------|
+| `GMAIL_USER` | La cuenta Gmail remitente (ej. `soporte.wifired@gmail.com`). |
+| `GMAIL_APP_PASSWORD` | Una **contraseña de aplicación** de Google (16 caracteres). |
+
+Cómo obtener la contraseña de aplicación: en la cuenta de Google → **Seguridad** →
+activar **verificación en 2 pasos** → **Contraseñas de aplicaciones** → generar una para "Correo".
+
+> Sin estas variables, todo funciona igual pero **no se envía el correo** (se avisa en pantalla
+> y la orden queda firmada y guardada para imprimir/reenviar).

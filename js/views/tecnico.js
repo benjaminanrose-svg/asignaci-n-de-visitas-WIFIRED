@@ -5,6 +5,7 @@ import * as store from '../store.js';
 import { esc, fmtDate, fmtDateShort, todayISO, bloqueShort, toast, prioRank, telLink, waLink } from '../util.js';
 import { statusBadge, priorityTag, openModal, closeModal } from '../components.js';
 import { createPhotoPicker, openPhoto } from '../photos.js';
+import { createSignaturePad } from '../signature.js';
 
 /** Une evidencias existentes con las nuevas fotos y devuelve JSON */
 function evJSON(v, photos, tipo) {
@@ -120,30 +121,43 @@ function attachPicker(node) {
   return picker;
 }
 
-// ---------- Completar (con evidencia) ----------
+// ---------- Completar (observación + evidencia + firmas + correo) ----------
 function completarModal(uid) {
   const v = store.byUid(uid); if (!v) return;
   const node = document.createElement('div');
   node.innerHTML = `
-    <div class="modal-head"><h3>Completar visita</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-head"><h3>Completar y firmar orden</h3><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body">
-      <p class="muted-sm" style="margin-bottom:14px">${esc(v.cliente)} · ${esc(v.tipo)}</p>
-      <div class="field"><label>Observación (opcional)</label>
+      <p class="muted-sm" style="margin-bottom:14px">${esc(v.id)} · ${esc(v.cliente)} · ${esc(v.tipo)}</p>
+      <div class="field"><label>Correo del cliente (para enviarle la orden)</label>
+        <input class="input" type="email" name="email" value="${esc(v.email || '')}" placeholder="cliente@correo.com"></div>
+      <div class="field" style="margin-top:12px"><label>Observación del trabajo</label>
         <textarea class="textarea" name="detalle" placeholder="Trabajo realizado, equipos, mediciones…">${esc(v.detalle || '')}</textarea></div>
-      <div class="field" style="margin-top:12px"><label>Evidencia fotográfica</label><div data-photos></div></div>
+      <div class="field" style="margin-top:12px"><label>Evidencia fotográfica (opcional)</label><div data-photos></div></div>
+      <div class="field" style="margin-top:14px"><label>Firma del cliente *</label><div data-sig-cliente></div></div>
+      <div class="field" style="margin-top:6px"><label>Firma del técnico</label><div data-sig-tecnico></div></div>
     </div>
-    <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-save>✓ Marcar completada</button></div>`;
+    <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-save>✓ Completar y enviar orden</button></div>`;
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
   const picker = attachPicker(node);
+  const sigC = createSignaturePad('Firma del cliente');
+  const sigT = createSignaturePad('Firma del técnico');
+  node.querySelector('[data-sig-cliente]').appendChild(sigC.element);
+  node.querySelector('[data-sig-tecnico]').appendChild(sigT.element);
+
   node.querySelector('[data-save]').onclick = () => {
+    if (sigC.isEmpty()) { toast('Falta la firma del cliente', 'info'); return; }
     store.updateVisita(uid, {
       estado: 'Completada',
+      email: (node.querySelector('[name=email]').value || '').trim(),
       detalle: node.querySelector('[name=detalle]').value,
       evidencias: evJSON(v, picker.getPhotos(), 'completada'),
+      firma_cliente: sigC.getData(),
+      firma_tecnico: sigT.getData(),
     });
     toast('Visita completada'); closeModal();
   };
-  openModal(node, 'md');
+  openModal(node, 'lg');
 }
 
 // ---------- Cancelar (con motivo + evidencia) ----------

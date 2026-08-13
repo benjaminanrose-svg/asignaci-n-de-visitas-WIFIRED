@@ -196,7 +196,8 @@ export function workOrderModal(v, company) {
     <div class="modal-head">
       <h3>Orden de trabajo · ${esc(v.id)}</h3>
       <div class="row">
-        <button class="btn btn-primary btn-sm" data-print>🖨 Imprimir</button>
+        ${v.email ? `<button class="btn btn-primary btn-sm" data-send>✉️ Enviar al cliente</button>` : ''}
+        <button class="btn btn-sm" data-print>🖨 Imprimir</button>
         <button class="icon-btn" data-close>✕</button>
       </div>
     </div>
@@ -215,12 +216,13 @@ export function workOrderModal(v, company) {
         </div>
         <div class="ot-grid">
           <div class="ot-f"><div class="k">Nombre del cliente</div><div class="v">${esc(v.cliente || '—')}</div></div>
-          <div class="ot-f"><div class="k">RUT / ID cliente</div><div class="v">${esc(v.rut || '—')}</div></div>
-          <div class="ot-f"><div class="k">Teléfono</div><div class="v">${esc(v.telefono || '—')}</div></div>
+          <div class="ot-f"><div class="k">ID de cliente (RUT)</div><div class="v">${esc(v.rut || '—')}</div></div>
+          <div class="ot-f"><div class="k">Teléfono del cliente</div><div class="v">${esc(v.telefono || '—')}</div></div>
+          <div class="ot-f"><div class="k">Correo del cliente</div><div class="v">${esc(v.email || '—')}</div></div>
+          <div class="ot-f"><div class="k">N° de trabajo</div><div class="v">${esc((String(v.id).match(/(\d+)\s*$/) || [])[1] || '—')}</div></div>
           <div class="ot-f"><div class="k">Técnico asignado</div><div class="v">${esc(t.name)}</div></div>
           <div class="ot-f"><div class="k">Fecha prevista</div><div class="v">${fmtDate(v.fecha, true)}</div></div>
           <div class="ot-f"><div class="k">Bloque horario</div><div class="v">${esc(v.bloque || '—')}</div></div>
-          <div class="ot-f"><div class="k">Prioridad</div><div class="v">${esc(v.prioridad || 'Media')}</div></div>
           <div class="ot-f" style="grid-column:1/-1"><div class="k">Dirección del cliente</div><div class="v">${esc(v.direccion || '—')}</div></div>
           <div class="ot-f" style="grid-column:1/-1"><div class="k">Trabajo / descripción</div><div class="v">${esc(v.tipo || '—')}</div></div>
           <div class="ot-f" style="grid-column:1/-1"><div class="k">Comentarios adicionales</div><div class="v">${esc(v.detalle || '—')}</div></div>
@@ -228,13 +230,23 @@ export function workOrderModal(v, company) {
           <div class="ot-f"><div class="k">Estado</div><div class="v">${esc(v.estado || '—')}</div></div>
         </div>
         <div class="ot-sign">
-          <div class="sig">Firma del cliente</div>
-          <div class="sig">Firma del técnico</div>
+          <div class="sig"><div class="sig-img">${v.firma_cliente ? `<img src="${v.firma_cliente}">` : ''}</div><div class="sig-cap">Firma del cliente</div></div>
+          <div class="sig"><div class="sig-img">${v.firma_tecnico ? `<img src="${v.firma_tecnico}">` : ''}</div><div class="sig-cap">Firma del técnico</div></div>
         </div>
         <p class="ot-legal">Con mi firma, declaro recibir conforme el servicio técnico contratado, validando que la instalación (cableado, perforaciones y canalizado) se realizó a mi entera satisfacción. Asimismo, constato que los equipos quedan operativos, con los parámetros de navegación (velocidad y señal Wi-Fi) verificados y aceptados en mi presencia.</p>
       </div>
     </div>`;
   node.querySelector('[data-close]').onclick = closeModal;
   node.querySelector('[data-print]').onclick = () => window.print();
+  const send = node.querySelector('[data-send]');
+  if (send) send.onclick = async () => {
+    send.disabled = true; send.textContent = 'Enviando…';
+    try {
+      const r = await store.enviarOrden(v._uid);
+      if (r.ok) toast('Orden enviada a ' + v.email + ' ✉️');
+      else toast('No se envió: ' + r.reason, 'info');
+    } catch (e) { toast(e.message, 'info'); }
+    send.disabled = false; send.textContent = '✉️ Enviar al cliente';
+  };
   openModal(node, 'lg');
 }

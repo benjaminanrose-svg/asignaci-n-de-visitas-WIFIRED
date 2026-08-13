@@ -117,6 +117,11 @@ export async function updateVisita(uid, patch) {
   emit();
   try {
     const updated = await rawApi('PUT', '/visitas/' + uid, patch);
+    if (updated._email) {
+      if (updated._email.ok) toast('Orden enviada al cliente por correo ✉️');
+      else toast('Visita completada. Correo no enviado: ' + updated._email.reason, 'info');
+      delete updated._email;
+    }
     state.visitas[idx] = updated; emit();
   } catch (e) {
     if (e.network) { enqueue({ method: 'PUT', url: '/visitas/' + uid, body: patch }); } // conservar cambio local
@@ -130,6 +135,10 @@ export async function addVisita(data) {
     state.visitas.unshift(v); emit();
     return v;
   } catch (e) { toast(e.network ? 'Sin conexión: no se puede crear visitas offline' : e.message, 'info'); throw e; }
+}
+
+export async function enviarOrden(uid) {
+  return rawApi('POST', '/visitas/' + uid + '/enviar-orden');
 }
 
 export async function deleteVisita(uid) {

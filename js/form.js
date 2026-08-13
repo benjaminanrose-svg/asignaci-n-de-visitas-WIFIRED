@@ -34,6 +34,10 @@ export function visitFormModal(existing = null, prefill = {}) {
             <label>Teléfono</label>
             <input class="input" name="telefono" value="${esc(v.telefono || '')}" placeholder="9 1234 5678" />
           </div>
+          <div class="field">
+            <label>Correo del cliente</label>
+            <input class="input" type="email" name="email" value="${esc(v.email || '')}" placeholder="cliente@correo.com" />
+          </div>
           <div class="field full">
             <label>Dirección</label>
             <input class="input" name="direccion" value="${esc(v.direccion || '')}" placeholder="Sector, parcela, referencia…" />

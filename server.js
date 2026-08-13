@@ -5,6 +5,15 @@ const express = require('express');
 const path = require('path');
 const { getStore } = require('./db.js');
 const { verifyPassword, signToken, verifyToken } = require('./server-auth.js');
+const { sendOrden, mailConfigured } = require('./mailer.js');
+
+const COMPANY = {
+  nombre: 'TELECOMUNICACIONES WIFIRED LTDA',
+  direccion: 'Av. Libertad, esquina Silva Chávez #701, Melipilla',
+  fonos: ['569 89798503', '569 99967675'],
+  email: 'Soporte@wifired.cl',
+  autoriza: 'Martin Ballesteros Escarate',
+};
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -59,16 +68,17 @@ api.get('/bootstrap', auth, wrap(async (req, res) => {
   const [visitas, tecnicos, config] = await Promise.all([s.listVisitas(), s.listTecnicos(), s.getConfig()]);
   const me = { id: req.user.id, nombre: req.user.nombre, rol: req.user.rol, tecnico: await techDisplay(req.user), username: req.user.username };
   const persistent = !!process.env.DATABASE_URL;
+  const mail = mailConfigured();
   if (req.user.rol === 'tecnico') {
     const mine = visitas.filter((v) => v.tecnico === me.tecnico);
-    return res.json({ visitas: mine, tecnicos: tecnicos.filter((t) => t.id === req.user.tecnico_id), config, me, persistent });
+    return res.json({ visitas: mine, tecnicos: tecnicos.filter((t) => t.id === req.user.tecnico_id), config, me, persistent, mail });
   }
-  res.json({ visitas, tecnicos, config, me, persistent });
+  res.json({ visitas, tecnicos, config, me, persistent, mail });
 }));
 
 // --- Visitas ---
-// El técnico completa/cancela, deja notas, SOLICITA reagenda y adjunta evidencias
-const CAMPOS_TECNICO = ['detalle', 'reagenda_solicitada', 'reagenda_motivo', 'evidencias'];
+// El técnico completa/cancela, deja notas, SOLICITA reagenda, adjunta evidencias y firmas
+const CAMPOS_TECNICO = ['detalle', 'reagenda_solicitada', 'reagenda_motivo', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico'];
 
 api.post('/visitas', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
@@ -98,9 +108,28 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
     // al reagendar/editar fecha, se resuelve la solicitud pendiente
     if ('fecha' in body || 'estado' in body) { patch.reagenda_solicitada = ''; patch.reagenda_motivo = ''; }
   }
-  const v = await s.updateVisita(req.params.id, patch);
+  let v = await s.updateVisita(req.params.id, patch);
   if (!v) return res.status(404).json({ error: 'Visita no encontrada' });
-  res.json(v);
+
+  // Al completar: enviar la orden firmada al correo del cliente (si hay correo)
+  let email_result = null;
+  if (patch.estado === 'Completada' && v.email && !v.orden_enviada) {
+    email_result = await sendOrden(v, COMPANY);
+    if (email_result.ok) {
+      v = await s.updateVisita(req.params.id, { orden_enviada: new Date().toISOString() });
+    }
+  }
+  res.json({ ...v, _email: email_result });
+}));
+
+// Reenviar la orden al cliente (coordinación)
+api.post('/visitas/:id/enviar-orden', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const v = (await s.listVisitas()).find((x) => x._uid === String(req.params.id));
+  if (!v) return res.status(404).json({ error: 'Visita no encontrada' });
+  const r = await sendOrden(v, COMPANY);
+  if (r.ok) await s.updateVisita(req.params.id, { orden_enviada: new Date().toISOString() });
+  res.json(r);
 }));
 
 api.delete('/visitas/:id', auth, soloCoordinador, wrap(async (req, res) => {
