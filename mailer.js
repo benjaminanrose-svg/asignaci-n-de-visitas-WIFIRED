@@ -12,7 +12,16 @@ function getTransporter() {
   if (transporter !== undefined) return transporter;
   const user = process.env.GMAIL_USER;
   const pass = process.env.GMAIL_APP_PASSWORD;
-  transporter = (user && pass) ? nodemailer.createTransport({ service: 'gmail', auth: { user, pass } }) : null;
+  // Puerto 465 (SMTPS): el 587 suele estar bloqueado en Railway
+  transporter = (user && pass) ? nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: { user, pass },
+    connectionTimeout: 10000,
+    greetingTimeout: 8000,
+    socketTimeout: 15000,
+  }) : null;
   return transporter;
 }
 function mailConfigured() { return !!getTransporter(); }
