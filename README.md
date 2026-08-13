@@ -158,16 +158,25 @@ El sistema ahora tiene inicio de sesión con dos roles:
 - Al completar, el sistema **envía la orden firmada al correo del cliente** automáticamente.
   La coordinación también puede reenviarla desde la orden ("Enviar al cliente").
 
-### Configurar el envío de correo (Gmail)
-En Railway → servicio web → **Variables**, agrega:
+### Configurar el envío de correo
+
+> **Importante:** Railway bloquea SMTP (puertos 587 y 465), por eso el envío usa **APIs HTTP**
+> (puerto 443, no bloqueado). Recomendado: **Brevo** (gratis 300 correos/día y permite usar tu
+> Gmail como remitente sin verificar dominio).
+
+**Opción A — Brevo (recomendada):**
+1. Crea una cuenta gratis en brevo.com.
+2. **Senders & IP → Senders →** agrega y verifica tu correo remitente (puede ser tu Gmail;
+   te llega un enlace de confirmación).
+3. **SMTP & API → API Keys →** crea una API key.
+4. En Railway → servicio web → **Variables**:
 
 | Variable | Valor |
 |----------|-------|
-| `GMAIL_USER` | La cuenta Gmail remitente (ej. `soporte.wifired@gmail.com`). |
-| `GMAIL_APP_PASSWORD` | Una **contraseña de aplicación** de Google (16 caracteres). |
+| `BREVO_API_KEY` | La API key de Brevo. |
+| `MAIL_FROM` | El correo remitente verificado (ej. tu Gmail o `soporte@wifired.cl`). |
 
-Cómo obtener la contraseña de aplicación: en la cuenta de Google → **Seguridad** →
-activar **verificación en 2 pasos** → **Contraseñas de aplicaciones** → generar una para "Correo".
+**Opción B — Resend:** define `RESEND_API_KEY` y `MAIL_FROM` (requiere verificar un dominio propio).
 
-> Sin estas variables, todo funciona igual pero **no se envía el correo** (se avisa en pantalla
-> y la orden queda firmada y guardada para imprimir/reenviar).
+> Sin ninguna de estas variables, todo funciona igual pero **no se envía el correo** (se avisa en
+> pantalla y la orden queda firmada y guardada para imprimir/reenviar).
