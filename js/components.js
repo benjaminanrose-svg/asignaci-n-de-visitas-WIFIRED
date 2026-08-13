@@ -2,6 +2,14 @@
 // WIFIRED · Componentes de UI reutilizables + modales
 // ============================================================
 import { esc, parseTecnico, fmtDate, bloqueShort, colorFor, initials } from './util.js';
+import { openPhoto } from './photos.js';
+
+export function evidenceGallery(v) {
+  const ev = v.evidencias || [];
+  if (!ev.length) return '';
+  return `<div class="ev-block"><div class="ev-title">📷 Evidencia fotográfica (${ev.length})</div>
+    <div class="ev-grid">${ev.map((e, i) => `<img class="ev-thumb" data-photo="${i}" src="${e.url}" alt="evidencia">`).join('')}</div></div>`;
+}
 
 export function statusBadge(estado) {
   return `<span class="badge st-${esc(estado)}"><span class="dot"></span>${esc(estado || '—')}</span>`;
@@ -35,7 +43,7 @@ export function visitCard(v) {
     <div class="vc-client">${esc(v.cliente || 'Sin nombre')}</div>
     <div class="vc-type">${esc(v.tipo || '—')}</div>
     ${addr}
-    <div class="vc-foot">${statusBadge(v.estado)}${v.reagenda_solicitada ? '<span class="tag" style="color:var(--st-repr-fg)">⏳ reagenda</span>' : ''}</div>
+    <div class="vc-foot">${statusBadge(v.estado)}${v.reagenda_solicitada ? '<span class="tag" style="color:var(--st-repr-fg)">⏳ reagenda</span>' : ''}${(v.evidencias || []).length ? `<span class="tag">📷 ${v.evidencias.length}</span>` : ''}</div>
   </div>`;
 }
 
@@ -89,6 +97,7 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
         <div class="detail-row"><span class="dl-k">Detalle / problema</span><span class="dl-v">${esc(v.detalle || '—')}</span></div>
         ${v.asignado_por ? `<div class="detail-row"><span class="dl-k">Asignado por</span><span class="dl-v">${esc(v.asignado_por)}</span></div>` : ''}
       </div>
+      ${evidenceGallery(v)}
     </div>
     <div class="modal-foot">
       <button class="btn" data-order>🧾 Orden de trabajo</button>
@@ -97,6 +106,7 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
   node.querySelector('[data-close]').onclick = closeModal;
   node.querySelector('[data-edit]').onclick = () => { closeModal(); onEdit && onEdit(v); };
   node.querySelector('[data-order]').onclick = () => { closeModal(); onOrder && onOrder(v); };
+  node.querySelectorAll('[data-photo]').forEach((img) => (img.onclick = () => openPhoto((v.evidencias || [])[img.dataset.photo].url)));
   openModal(node, 'md');
 }
 
@@ -132,6 +142,7 @@ export function workOrderModal(v, company) {
           <div class="ot-f"><div class="k">Técnico asignado</div><div class="v">${esc(t.name)}</div></div>
           <div class="ot-f"><div class="k">Fecha prevista</div><div class="v">${fmtDate(v.fecha, true)}</div></div>
           <div class="ot-f"><div class="k">Bloque horario</div><div class="v">${esc(v.bloque || '—')}</div></div>
+          <div class="ot-f"><div class="k">Prioridad</div><div class="v">${esc(v.prioridad || 'Media')}</div></div>
           <div class="ot-f" style="grid-column:1/-1"><div class="k">Dirección del cliente</div><div class="v">${esc(v.direccion || '—')}</div></div>
           <div class="ot-f" style="grid-column:1/-1"><div class="k">Trabajo / descripción</div><div class="v">${esc(v.tipo || '—')}</div></div>
           <div class="ot-f" style="grid-column:1/-1"><div class="k">Comentarios adicionales</div><div class="v">${esc(v.detalle || '—')}</div></div>

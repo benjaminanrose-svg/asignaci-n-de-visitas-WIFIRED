@@ -67,8 +67,8 @@ api.get('/bootstrap', auth, wrap(async (req, res) => {
 }));
 
 // --- Visitas ---
-// El técnico sólo completa, deja notas o SOLICITA reagenda (no cambia fecha/bloque)
-const CAMPOS_TECNICO = ['detalle', 'reagenda_solicitada', 'reagenda_motivo'];
+// El técnico completa/cancela, deja notas, SOLICITA reagenda y adjunta evidencias
+const CAMPOS_TECNICO = ['detalle', 'reagenda_solicitada', 'reagenda_motivo', 'evidencias'];
 
 api.post('/visitas', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
@@ -88,8 +88,8 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
     const display = await techDisplay(req.user);
     if (!own || own.tecnico !== display) return res.status(403).json({ error: 'No puedes modificar esta visita' });
     CAMPOS_TECNICO.forEach((k) => { if (k in body) patch[k] = body[k]; });
-    // el técnico sólo puede marcar como Completada
-    if (body.estado === 'Completada') patch.estado = 'Completada';
+    // el técnico sólo puede marcar Completada o Cancelada
+    if (['Completada', 'Cancelada'].includes(body.estado)) patch.estado = body.estado;
   } else {
     patch = { ...body };
     if ('tecnico' in body) patch.asignado_por = body.tecnico ? req.user.nombre : '';
