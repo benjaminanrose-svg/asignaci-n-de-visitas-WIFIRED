@@ -83,6 +83,21 @@ export const PRIORIDADES = ['Alta', 'Media', 'Baja'];
 /** Rango para ordenar: Alta primero */
 export function prioRank(p) { return p === 'Alta' ? 0 : p === 'Baja' ? 2 : 1; }
 
+/** Normaliza un teléfono chileno a formato internacional para tel:/WhatsApp */
+export function normalizaFono(phone) {
+  let d = (phone || '').split(/[/,]/)[0].replace(/\D/g, '');
+  if (!d) return '';
+  if (d.startsWith('56')) return d;
+  if (d.length === 9 && d.startsWith('9')) return '56' + d;
+  if (d.length === 8) return '569' + d;
+  return d.length >= 8 ? '56' + d : '';
+}
+export function telLink(phone) { const n = normalizaFono(phone); return n ? 'tel:+' + n : ''; }
+export function waLink(phone, msg) {
+  const n = normalizaFono(phone);
+  return n ? `https://wa.me/${n}${msg ? '?text=' + encodeURIComponent(msg) : ''}` : '';
+}
+
 export function debounce(fn, ms = 220) {
   let t;
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };

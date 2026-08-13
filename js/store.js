@@ -160,6 +160,22 @@ export async function deleteTecnico(id) {
   catch (e) { state.tecnicos = prev; emit(); toast(e.message, 'info'); }
 }
 
+// ---------- Auto-actualización (multi-usuario) ----------
+function signature() {
+  return state.visitas.map((v) => v._uid + v.estado + v.tecnico + v.fecha + v.prioridad + (v.reagenda_solicitada ? '1' : '0') + (v.evidencias ? v.evidencias.length : 0)).join('|')
+    + '#' + state.tecnicos.map((t) => t.id + (t.activo ? '1' : '0') + t.display).join('|');
+}
+/** Refresca datos desde el servidor; re-renderiza sólo si algo cambió */
+export async function refresh() {
+  if (!navigator.onLine || queue.length) return;
+  let data;
+  try { data = await rawApi('GET', '/bootstrap'); } catch (e) { return; }
+  const before = signature();
+  state.visitas = data.visitas; state.tecnicos = data.tecnicos; state.config = data.config;
+  me = data.me || me; persistent = data.persistent !== false;
+  if (signature() !== before) emit(); else saveCache();
+}
+
 // ---------- Reconexión ----------
 window.addEventListener('online', () => { flushQueue(); emit(); });
 window.addEventListener('offline', () => emit());

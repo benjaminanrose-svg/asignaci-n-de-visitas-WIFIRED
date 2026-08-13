@@ -1,7 +1,7 @@
 // ============================================================
 // WIFIRED · App — router + arranque + auth por rol
 // ============================================================
-import { initStore, subscribe, currentUser, isPersistent } from './store.js';
+import { initStore, subscribe, currentUser, isPersistent, refresh } from './store.js';
 import { visitFormModal } from './form.js';
 import { renderPanel } from './views/panel.js';
 import { renderAgenda } from './views/agenda.js';
@@ -106,6 +106,13 @@ async function startApp() {
     if (!location.hash) location.hash = '#/panel';
   }
   render();
+
+  // Auto-actualización suave: no interrumpe si hay un modal abierto o edición en curso
+  setInterval(() => {
+    if (document.getElementById('modal-root').children.length) return;
+    if (document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+    refresh();
+  }, 30000);
 }
 
 function boot() {

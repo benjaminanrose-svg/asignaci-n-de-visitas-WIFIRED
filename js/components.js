@@ -1,7 +1,7 @@
 // ============================================================
 // WIFIRED · Componentes de UI reutilizables + modales
 // ============================================================
-import { esc, parseTecnico, fmtDate, bloqueShort, colorFor, initials } from './util.js';
+import { esc, parseTecnico, fmtDate, bloqueShort, colorFor, initials, telLink, waLink } from './util.js';
 import { openPhoto } from './photos.js';
 
 export function evidenceGallery(v) {
@@ -100,7 +100,10 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
       ${evidenceGallery(v)}
     </div>
     <div class="modal-foot">
-      <button class="btn" data-order>🧾 Orden de trabajo</button>
+      ${v.telefono ? `<a class="btn" href="${telLink(v.telefono)}">📞 Llamar</a>
+      <a class="btn" style="color:#128c7e" target="_blank" rel="noopener" href="${waLink(v.telefono, `Hola ${v.cliente || ''}, le contactamos de WIFIRED por su visita técnica (${v.tipo || ''}).`)}">💬 WhatsApp</a>` : ''}
+      <div class="grow"></div>
+      <button class="btn" data-order>🧾 Orden</button>
       <button class="btn btn-primary" data-edit>✎ Editar / Asignar</button>
     </div>`;
   node.querySelector('[data-close]').onclick = closeModal;

@@ -2,7 +2,7 @@
 // WIFIRED · Portal del Técnico — sus visitas asignadas
 // ============================================================
 import * as store from '../store.js';
-import { esc, fmtDate, fmtDateShort, todayISO, bloqueShort, toast, prioRank } from '../util.js';
+import { esc, fmtDate, fmtDateShort, todayISO, bloqueShort, toast, prioRank, telLink, waLink } from '../util.js';
 import { statusBadge, priorityTag, openModal, closeModal } from '../components.js';
 import { createPhotoPicker, openPhoto } from '../photos.js';
 
@@ -96,7 +96,7 @@ function card(v) {
     <div class="tec-client">${esc(v.cliente || 'Sin nombre')}</div>
     <div class="tec-type">${esc(v.tipo || '—')}</div>
     ${v.direccion ? `<div class="tec-meta">📍 ${esc(v.direccion)}</div>` : ''}
-    ${v.telefono ? `<div class="tec-meta">📞 <a href="tel:${esc(tel)}">${esc(v.telefono)}</a></div>` : ''}
+    ${v.telefono ? `<div class="tec-meta">📞 <a href="${telLink(v.telefono)}">${esc(v.telefono)}</a> · <a href="${waLink(v.telefono, `Hola ${v.cliente || ''}, le contactamos de WIFIRED por su visita técnica.`)}" target="_blank" rel="noopener" style="color:#128c7e">WhatsApp</a></div>` : ''}
     ${v.detalle ? `<div class="tec-note">📝 ${esc(v.detalle)}</div>` : ''}
     ${pedida ? `<div class="tec-req">⏳ Reagenda solicitada — a la espera de nueva fecha por coordinación</div>` : ''}
     ${nFotos ? `<button class="tec-fotos" data-act="ver-fotos" data-uid="${esc(v._uid)}">📷 ${nFotos} foto${nFotos === 1 ? '' : 's'} de evidencia</button>` : ''}

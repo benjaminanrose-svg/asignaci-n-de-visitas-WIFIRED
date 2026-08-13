@@ -7,6 +7,20 @@ import { statusBadge, priorityTag, techAvatar, clientAvatar, visitDetailModal, w
 import { visitFormModal } from '../form.js';
 
 const local = { estado: '', tecnico: '', bloque: '', tipo: '', reagenda: false };
+let lastRows = [];
+
+function exportCSV(rows) {
+  const cols = ['OT', 'Estado', 'Prioridad', 'Tipo', 'Fecha', 'Bloque', 'Cliente', 'RUT', 'Teléfono', 'Dirección', 'Técnico', 'Detalle', 'Asignado por'];
+  const cell = (s) => `"${String(s == null ? '' : s).replace(/"/g, '""')}"`;
+  const lines = [cols.map(cell).join(',')];
+  rows.forEach((v) => lines.push([v.id, v.estado, v.prioridad, v.tipo, v.fecha, v.bloque, v.cliente, v.rut, v.telefono, v.direccion, v.tecnico, v.detalle, v.asignado_por].map(cell).join(',')));
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `visitas_wifired_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 export function renderVisitas(root, ctx) {
   const search = (ctx && ctx.search) || '';
@@ -19,6 +33,7 @@ export function renderVisitas(root, ctx) {
       <select class="select" data-f="tipo">${optAll('Todos los tipos', store.tipos(), local.tipo)}</select>
       <button class="btn btn-sm ${local.reagenda ? 'btn-primary' : ''}" data-reagenda>⏳ Solicitudes de reagenda</button>
       <div class="grow"></div>
+      <button class="btn btn-sm" data-export>⭳ Exportar</button>
       <button class="btn btn-sm" data-clear>Limpiar filtros</button>
       <button class="btn btn-primary btn-sm" data-new>＋ Nueva visita</button>
     </div>
@@ -29,6 +44,7 @@ export function renderVisitas(root, ctx) {
   root.querySelectorAll('[data-f]').forEach((sel) => {
     sel.onchange = () => { local[sel.dataset.f] = sel.value; paint(); };
   });
+  root.querySelector('[data-export]').onclick = () => exportCSV(lastRows);
   root.querySelector('[data-reagenda]').onclick = () => { local.reagenda = !local.reagenda; renderVisitas(root, ctx); };
   root.querySelector('[data-clear]').onclick = () => {
     local.estado = local.tecnico = local.bloque = local.tipo = '';
@@ -52,6 +68,7 @@ export function renderVisitas(root, ctx) {
         [v.id, v.cliente, v.rut, v.telefono, v.direccion, v.tipo, v.tecnico, v.detalle]
           .some((f) => (f || '').toLowerCase().includes(search)));
     }
+    lastRows = rows;
 
     if (!rows.length) {
       host.innerHTML = `<div class="empty-state"><div class="es-ico">🔍</div><p>No se encontraron visitas con estos criterios.</p></div>`;
