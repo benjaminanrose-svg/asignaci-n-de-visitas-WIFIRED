@@ -50,14 +50,14 @@ const TECH_PASS = process.env.TECH_PASS || 'wifired';
 
 /** Genera usuarios semilla: 1 coordinador + 1 por técnico */
 function seedUsers(tecnicos) {
-  const users = [{ id: 1, username: ADMIN_USER, pass: hashPassword(ADMIN_PASS), rol: 'coordinador', nombre: 'Coordinación', tecnico_id: null }];
+  const users = [{ id: 1, username: ADMIN_USER, pass: hashPassword(ADMIN_PASS), pass_plain: ADMIN_PASS, rol: 'coordinador', nombre: 'Coordinación', tecnico_id: null }];
   const taken = new Set([ADMIN_USER]);
   let seq = 1;
   tecnicos.forEach((t) => {
     let u = slugUser(t.nombre || t.rol); let base = u, i = 2;
     while (taken.has(u)) u = `${base}${i++}`;
     taken.add(u);
-    users.push({ id: ++seq, username: u, pass: hashPassword(TECH_PASS), rol: 'tecnico', nombre: displayTecnico(t.rol, t.nombre), tecnico_id: t.id });
+    users.push({ id: ++seq, username: u, pass: hashPassword(TECH_PASS), pass_plain: TECH_PASS, rol: 'tecnico', nombre: displayTecnico(t.rol, t.nombre), tecnico_id: t.id });
   });
   return users;
 }
@@ -76,10 +76,12 @@ function memoryStore() {
     VISIT_FIELDS.forEach((f) => (o[f] = v[f] || ''));
     return o;
   }
-  const outT = (t) => ({ ...t, display: displayTecnico(t.rol, t.nombre) });
-  const outV = (v) => { const o = { _uid: String(v.id), id: v.ot, ...pick(v) }; o.prioridad = o.prioridad || 'Media'; o.evidencias = parseEv(o.evidencias); return o; };
   let users = seedUsers(tecnicos);
   let uSeq = users.length;
+  const credsOf = (tid) => { const u = users.find((x) => x.tecnico_id == tid); return { username: u ? u.username : '', password: u ? (u.pass_plain || '') : '' }; };
+  const outT = (t) => ({ ...t, display: displayTecnico(t.rol, t.nombre), ...credsOf(t.id) });
+  const outV = (v) => { const o = { _uid: String(v.id), id: v.ot, ...pick(v) }; o.prioridad = o.prioridad || 'Media'; o.evidencias = parseEv(o.evidencias); return o; };
+  const uniqUser = (base, exceptId) => { let u = base || 'tecnico', b = u, i = 2; while (users.some((x) => x.username === u && x.id !== exceptId)) u = `${b}${i++}`; return u; };
 
   return {
     async init() {},
@@ -91,14 +93,20 @@ function memoryStore() {
     async addTecnico(d) {
       const t = { id: ++tSeq, rol: d.rol || 'Técnico', nombre: (d.nombre || '').trim(), telefono: d.telefono || '', activo: d.activo !== false };
       tecnicos.push(t);
-      let u = slugUser(t.nombre || t.rol), base = u, i = 2;
-      while (users.some((x) => x.username === u)) u = `${base}${i++}`;
-      users.push({ id: ++uSeq, username: u, pass: hashPassword(TECH_PASS), rol: 'tecnico', nombre: displayTecnico(t.rol, t.nombre), tecnico_id: t.id });
+      const username = uniqUser((d.username || '').trim().toLowerCase() || slugUser(t.nombre || t.rol));
+      const pass_plain = (d.password || '').trim() || TECH_PASS;
+      users.push({ id: ++uSeq, username, pass: hashPassword(pass_plain), pass_plain, rol: 'tecnico', nombre: displayTecnico(t.rol, t.nombre), tecnico_id: t.id });
       return outT(t);
     },
     async updateTecnico(id, patch) {
       const t = tecnicos.find((x) => x.id == id); if (!t) return null;
       ['rol', 'nombre', 'telefono', 'activo'].forEach((k) => { if (k in patch) t[k] = patch[k]; });
+      const u = users.find((x) => x.tecnico_id == id);
+      if (u) {
+        u.nombre = displayTecnico(t.rol, t.nombre);
+        if (patch.username != null && patch.username.trim()) u.username = uniqUser(patch.username.trim().toLowerCase(), u.id);
+        if (patch.password != null && patch.password.trim()) { u.pass_plain = patch.password.trim(); u.pass = hashPassword(u.pass_plain); }
+      }
       return outT(t);
     },
     async deleteTecnico(id) { tecnicos = tecnicos.filter((x) => x.id != id); },
@@ -137,6 +145,11 @@ function pgStore(url) {
     email: r.email || '', firma_cliente: r.firma_cliente || '', firma_tecnico: r.firma_tecnico || '', orden_enviada: r.orden_enviada || '',
   });
   const outU = (r) => r ? { id: r.id, username: r.username, pass: r.pass, rol: r.rol, nombre: r.nombre, tecnico_id: r.tecnico_id } : null;
+  async function credsOf(tid) {
+    const { rows } = await pool.query('SELECT username, pass_plain FROM usuarios WHERE tecnico_id=$1', [tid]);
+    return rows[0] ? { username: rows[0].username, password: rows[0].pass_plain || '' } : { username: '', password: '' };
+  }
+  async function enrich(t) { return { ...outT(t), ...(await credsOf(t.id)) }; }
 
   return {
     async init() {
@@ -182,10 +195,12 @@ function pgStore(url) {
           id SERIAL PRIMARY KEY,
           username TEXT UNIQUE NOT NULL,
           pass TEXT NOT NULL,
+          pass_plain TEXT DEFAULT '',
           rol TEXT NOT NULL DEFAULT 'tecnico',
           nombre TEXT DEFAULT '',
           tecnico_id INTEGER
         );`);
+      await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pass_plain TEXT DEFAULT '';`);
 
       // Reset opcional de técnicos (poner RESET_TECNICOS=1 una vez y redeploy)
       if (process.env.RESET_TECNICOS === '1') {
@@ -206,47 +221,61 @@ function pgStore(url) {
       // Usuarios: 1 coordinador + 1 por técnico
       const uc = await pool.query('SELECT COUNT(*)::int AS n FROM usuarios');
       if (uc.rows[0].n === 0) {
-        await pool.query('INSERT INTO usuarios (username, pass, rol, nombre) VALUES ($1,$2,$3,$4)',
-          [ADMIN_USER, hashPassword(ADMIN_PASS), 'coordinador', 'Coordinación']);
+        await pool.query('INSERT INTO usuarios (username, pass, pass_plain, rol, nombre) VALUES ($1,$2,$3,$4,$5)',
+          [ADMIN_USER, hashPassword(ADMIN_PASS), ADMIN_PASS, 'coordinador', 'Coordinación']);
         const { rows: techs } = await pool.query('SELECT * FROM tecnicos ORDER BY id ASC');
         const taken = new Set([ADMIN_USER]);
         for (const t of techs) {
           let u = slugUser(t.nombre || t.rol), base = u, i = 2;
           while (taken.has(u)) u = `${base}${i++}`;
           taken.add(u);
-          await pool.query('INSERT INTO usuarios (username, pass, rol, nombre, tecnico_id) VALUES ($1,$2,$3,$4,$5)',
-            [u, hashPassword(TECH_PASS), 'tecnico', displayTecnico(t.rol, t.nombre), t.id]);
+          await pool.query('INSERT INTO usuarios (username, pass, pass_plain, rol, nombre, tecnico_id) VALUES ($1,$2,$3,$4,$5,$6)',
+            [u, hashPassword(TECH_PASS), TECH_PASS, 'tecnico', displayTecnico(t.rol, t.nombre), t.id]);
         }
       }
     },
     async getConfig() { return CONFIG; },
     async getUserByUsername(u) { const { rows } = await pool.query('SELECT * FROM usuarios WHERE username=$1', [u]); return outU(rows[0]); },
     async getUserById(id) { const { rows } = await pool.query('SELECT * FROM usuarios WHERE id=$1', [id]); return outU(rows[0]); },
-    async getTecnicoById(id) { const { rows } = await pool.query('SELECT * FROM tecnicos WHERE id=$1', [id]); return rows[0] ? outT(rows[0]) : null; },
+    async getTecnicoById(id) { const { rows } = await pool.query('SELECT * FROM tecnicos WHERE id=$1', [id]); return rows[0] ? enrich(rows[0]) : null; },
     async listTecnicos() {
       const { rows } = await pool.query('SELECT * FROM tecnicos ORDER BY activo DESC, id ASC');
-      return rows.map(outT);
+      return Promise.all(rows.map(enrich));
     },
     async addTecnico(d) {
       const { rows } = await pool.query(
         'INSERT INTO tecnicos (rol, nombre, telefono, activo) VALUES ($1,$2,$3,$4) RETURNING *',
         [d.rol || 'Técnico', (d.nombre || '').trim(), d.telefono || '', d.activo !== false]);
       const t = rows[0];
-      let u = slugUser(t.nombre || t.rol), base = u, i = 2;
+      let u = (d.username || '').trim().toLowerCase() || slugUser(t.nombre || t.rol);
+      let base = u, i = 2;
       while ((await pool.query('SELECT 1 FROM usuarios WHERE username=$1', [u])).rowCount) u = `${base}${i++}`;
-      await pool.query('INSERT INTO usuarios (username, pass, rol, nombre, tecnico_id) VALUES ($1,$2,$3,$4,$5)',
-        [u, hashPassword(TECH_PASS), 'tecnico', displayTecnico(t.rol, t.nombre), t.id]);
-      return outT(t);
+      const plain = (d.password || '').trim() || TECH_PASS;
+      await pool.query('INSERT INTO usuarios (username, pass, pass_plain, rol, nombre, tecnico_id) VALUES ($1,$2,$3,$4,$5,$6)',
+        [u, hashPassword(plain), plain, 'tecnico', displayTecnico(t.rol, t.nombre), t.id]);
+      return enrich(t);
     },
     async updateTecnico(id, patch) {
       const cols = [], vals = []; let i = 1;
       ['rol', 'nombre', 'telefono', 'activo'].forEach((k) => {
         if (k in patch) { cols.push(`${k}=$${i++}`); vals.push(patch[k]); }
       });
-      if (!cols.length) return null;
-      vals.push(id);
-      const { rows } = await pool.query(`UPDATE tecnicos SET ${cols.join(', ')} WHERE id=$${i} RETURNING *`, vals);
-      return rows[0] ? outT(rows[0]) : null;
+      let t;
+      if (cols.length) { vals.push(id); const { rows } = await pool.query(`UPDATE tecnicos SET ${cols.join(', ')} WHERE id=$${i} RETURNING *`, vals); t = rows[0]; }
+      else { const { rows } = await pool.query('SELECT * FROM tecnicos WHERE id=$1', [id]); t = rows[0]; }
+      if (!t) return null;
+      // sincronizar usuario vinculado
+      await pool.query('UPDATE usuarios SET nombre=$1 WHERE tecnico_id=$2', [displayTecnico(t.rol, t.nombre), id]);
+      if (patch.username != null && String(patch.username).trim()) {
+        let u = String(patch.username).trim().toLowerCase(), base = u, k = 2;
+        while ((await pool.query('SELECT 1 FROM usuarios WHERE username=$1 AND tecnico_id<>$2', [u, id])).rowCount) u = `${base}${k++}`;
+        await pool.query('UPDATE usuarios SET username=$1 WHERE tecnico_id=$2', [u, id]);
+      }
+      if (patch.password != null && String(patch.password).trim()) {
+        const plain = String(patch.password).trim();
+        await pool.query('UPDATE usuarios SET pass=$1, pass_plain=$2 WHERE tecnico_id=$3', [hashPassword(plain), plain, id]);
+      }
+      return enrich(t);
     },
     async deleteTecnico(id) { await pool.query('DELETE FROM tecnicos WHERE id=$1', [id]); },
     async listVisitas() {

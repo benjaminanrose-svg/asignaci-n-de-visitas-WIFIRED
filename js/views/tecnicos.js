@@ -2,7 +2,7 @@
 // WIFIRED · Vista Técnicos (administración + carga de trabajo)
 // ============================================================
 import * as store from '../store.js';
-import { esc, parseTecnico } from '../util.js';
+import { esc, parseTecnico, toast } from '../util.js';
 import { techFormModal } from '../techform.js';
 
 export function renderTecnicos(root) {
@@ -25,6 +25,11 @@ export function renderTecnicos(root) {
           <div class="cell-sub">${esc(tec.rol)}${tec.telefono ? ' · ' + esc(tec.telefono) : ''}</div>
         </div>
         ${inactivo ? '<span class="tag">Inactivo</span>' : ''}
+      </div>
+      <div class="tech-creds">
+        <div class="tc-row"><span class="tc-k">👤 Usuario</span><span class="tc-v">${esc(tec.username || '—')}</span></div>
+        <div class="tc-row"><span class="tc-k">🔑 Clave</span><span class="tc-v">${esc(tec.password || '—')}</span></div>
+        <button class="tc-copy" data-copy="Usuario: ${esc(tec.username || '')}  Clave: ${esc(tec.password || '')}" title="Copiar acceso">⧉ Copiar</button>
       </div>
       <div class="tstats">
         <div class="tstat"><strong>${mine.length}</strong><span>ASIGNADAS</span></div>
@@ -55,6 +60,12 @@ export function renderTecnicos(root) {
     <div class="grid tech-grid">${cards}${sinCard}</div>`;
 
   root.querySelector('[data-new]').onclick = () => techFormModal();
+  root.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = (e) => {
+    e.stopPropagation();
+    const txt = b.dataset.copy;
+    if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast('Acceso copiado')).catch(() => toast('No se pudo copiar', 'info'));
+    else toast('No se pudo copiar', 'info');
+  }));
   root.querySelectorAll('[data-edit]').forEach((el) => {
     el.onclick = () => {
       const tec = list.find((t) => t.id == el.dataset.edit);

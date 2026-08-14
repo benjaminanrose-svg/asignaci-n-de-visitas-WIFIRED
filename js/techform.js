@@ -40,6 +40,21 @@ export function techFormModal(existing = null) {
               Activo (disponible para asignación)
             </label>
           </div>
+
+          <div class="field full" style="border-top:1px solid var(--border-2); padding-top:14px; margin-top:2px">
+            <label style="font-size:13.5px; font-weight:700; color:var(--text)">🔑 Acceso del técnico (para iniciar sesión)</label>
+          </div>
+          <div class="field">
+            <label>Usuario</label>
+            <input class="input" name="username" value="${esc(t.username || '')}" placeholder="${isNew ? 'se genera del nombre' : ''}" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label>Contraseña</label>
+            <input class="input" name="password" value="${esc(t.password || '')}" placeholder="${isNew ? 'wifired (por defecto)' : ''}" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="field full">
+            <span class="muted-sm">Comparte estos datos con el técnico. En blanco: el usuario se genera del nombre y la clave por defecto es <b>wifired</b>.</span>
+          </div>
         </div>
       </form>
     </div>
@@ -60,6 +75,8 @@ export function techFormModal(existing = null) {
       nombre: (fd.get('nombre') || '').trim(),
       telefono: (fd.get('telefono') || '').trim(),
       activo: fd.get('activo') === 'on',
+      username: (fd.get('username') || '').trim(),
+      password: (fd.get('password') || '').trim(),
     };
     try {
       if (isNew) { await store.addTecnico(data); toast('Técnico creado'); }
