@@ -3,7 +3,7 @@
 // Precachea toda la app al instalar (funciona sin internet desde
 // la primera apertura) y actualiza en segundo plano cuando hay red.
 // ============================================================
-const CACHE = 'wifired-v3';
+const CACHE = 'wifired-v4';
 
 const ASSETS = [
   '/', '/index.html', '/manifest.webmanifest',
@@ -69,9 +69,14 @@ self.addEventListener('push', (e) => {
     body: d.body || '',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
-    vibrate: [80, 40, 80],
+    vibrate: [200, 100, 200, 100, 200],
     data: { url: d.url || '/' },
-    tag: 'wifired-visita',
+    // Etiqueta única por aviso: así cada notificación suena y vibra
+    // (una etiqueta repetida se actualiza en silencio en Android/iOS).
+    tag: 'wifired-' + Date.now(),
+    renotify: true,        // vuelve a alertar aunque se agrupe
+    requireInteraction: true, // no se descarta sola hasta que el técnico la vea
+    silent: false,
   }));
 });
 
