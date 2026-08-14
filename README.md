@@ -180,3 +180,16 @@ El sistema ahora tiene inicio de sesión con dos roles:
 
 > Sin ninguna de estas variables, todo funciona igual pero **no se envía el correo** (se avisa en
 > pantalla y la orden queda firmada y guardada para imprimir/reenviar).
+
+## App móvil (PWA) y notificaciones push
+
+La web es una **PWA instalable**: en el celular, abrir la URL → menú del navegador →
+**"Agregar a pantalla de inicio"**. Queda con ícono propio y pantalla completa, como una app.
+
+- **Notificaciones push**: el técnico entra a su portal y toca **"Activar"** en el aviso de
+  notificaciones (requiere aceptar el permiso). Desde ahí recibe un aviso en el celular cuando la
+  coordinación le **asigna** o **reagenda** una visita, aunque la app esté cerrada.
+- Las claves VAPID se generan solas y se guardan en la base de datos (requiere PostgreSQL para
+  que persistan entre deploys).
+- **iOS**: las notificaciones push sólo funcionan si la PWA está **instalada** (Agregar a pantalla
+  de inicio) y con iOS 16.4 o superior. En Android funcionan también desde el navegador.

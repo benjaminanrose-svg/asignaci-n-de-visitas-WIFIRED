@@ -13,6 +13,7 @@ import { renderTecnicos } from './views/tecnicos.js';
 import { renderTecnico } from './views/tecnico.js';
 import { renderLogin, clearLogin } from './views/login.js';
 import { isAuth, logout } from './auth.js';
+import { registerSW } from './push.js';
 import { debounce, initials, esc, parseTecnico, toast } from './util.js';
 
 const ROUTES = {
@@ -169,6 +170,7 @@ async function startApp() {
 }
 
 function boot() {
+  registerSW();
   if (!isAuth()) {
     document.getElementById('app').style.display = 'none';
     renderLogin(() => startApp());

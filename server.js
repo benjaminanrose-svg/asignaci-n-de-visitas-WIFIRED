@@ -6,6 +6,20 @@ const path = require('path');
 const { getStore } = require('./db.js');
 const { verifyPassword, signToken, verifyToken } = require('./server-auth.js');
 const { sendOrden, mailConfigured } = require('./mailer.js');
+const { publicKey, saveSubscription, notifyTecnicoById } = require('./push.js');
+
+/** Notifica al técnico asignado a una visita (push) */
+async function notifyAssign(v, kind) {
+  try {
+    if (!v || !v.tecnico) return;
+    const s = await getStore();
+    const t = (await s.listTecnicos()).find((x) => x.display === v.tecnico);
+    if (!t) return;
+    const titulo = kind === 'reagenda' ? 'Visita reagendada' : 'Nueva visita asignada';
+    const cuerpo = `${v.cliente || 'Cliente'} · ${v.tipo || ''}${v.fecha ? ' · ' + v.fecha : ''}`;
+    notifyTecnicoById(t.id, { title: titulo, body: cuerpo, url: '/' }).catch(() => {});
+  } catch (e) {}
+}
 
 const COMPANY = {
   nombre: 'TELECOMUNICACIONES WIFIRED LTDA',
@@ -85,7 +99,9 @@ api.post('/visitas', auth, soloCoordinador, wrap(async (req, res) => {
   if (!req.body || !req.body.cliente) return res.status(400).json({ error: 'El nombre del cliente es obligatorio' });
   const data = { ...req.body };
   if (data.tecnico) data.asignado_por = req.user.nombre;
-  res.status(201).json(await s.addVisita(data));
+  const nueva = await s.addVisita(data);
+  if (nueva.tecnico) notifyAssign(nueva, 'asignar');
+  res.status(201).json(nueva);
 }));
 
 api.put('/visitas/:id', auth, wrap(async (req, res) => {
@@ -119,6 +135,11 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
       v = await s.updateVisita(req.params.id, { orden_enviada: new Date().toISOString() });
     }
   }
+  // Aviso push al técnico cuando la coordinación asigna o reagenda
+  if (req.user.rol !== 'tecnico') {
+    if ('tecnico' in body && body.tecnico) notifyAssign(v, 'asignar');
+    else if ('fecha' in body && v.tecnico) notifyAssign(v, 'reagenda');
+  }
   res.json({ ...v, _email: email_result });
 }));
 
@@ -150,6 +171,13 @@ api.put('/tecnicos/:id', auth, soloCoordinador, wrap(async (req, res) => {
 }));
 api.delete('/tecnicos/:id', auth, soloCoordinador, wrap(async (req, res) => {
   await (await getStore()).deleteTecnico(req.params.id); res.json({ ok: true });
+}));
+
+// --- Notificaciones push ---
+api.get('/push/config', auth, wrap(async (req, res) => res.json({ publicKey: await publicKey() })));
+api.post('/push/subscribe', auth, wrap(async (req, res) => {
+  await saveSubscription(req.user.id, req.body && req.body.subscription);
+  res.json({ ok: true });
 }));
 
 api.get('/health', (req, res) => res.json({ ok: true }));

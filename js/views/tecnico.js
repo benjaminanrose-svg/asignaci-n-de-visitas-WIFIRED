@@ -6,6 +6,7 @@ import { esc, fmtDate, fmtDateShort, todayISO, bloqueShort, toast, prioRank, tel
 import { statusBadge, priorityTag, openModal, closeModal } from '../components.js';
 import { createPhotoPicker, openPhoto } from '../photos.js';
 import { createSignaturePad } from '../signature.js';
+import { pushSupported, notifPermission, enablePush } from '../push.js';
 
 /** Une evidencias existentes con las nuevas fotos y devuelve JSON */
 function evJSON(v, photos, tipo) {
@@ -45,8 +46,14 @@ export function renderTecnico(root) {
   if (!online) syncBar = `<div class="sync-bar off">📴 Sin conexión — ${pend} cambio(s) se enviarán al reconectar</div>`;
   else if (pend > 0) syncBar = `<div class="sync-bar syncing">⟳ Sincronizando ${pend} cambio(s)…</div>`;
 
+  const showNotif = pushSupported() && notifPermission() !== 'granted';
+  const notifBar = showNotif
+    ? `<div class="notif-prompt"><span>🔔 Activa las notificaciones para enterarte cuando te asignen una visita.</span><button class="btn btn-sm btn-primary" data-enable-notif>Activar</button></div>`
+    : '';
+
   root.innerHTML = `
     ${syncBar}
+    ${notifBar}
     <div class="tec-hero">
       <div>
         <div class="tec-hello">Hola, ${esc((user.nombre || '').replace(/^(Técnico|Ingeniero|Soporte de Emergencia|Soporte|Planta Externa)\s*/, '') || user.nombre)} 👋</div>
@@ -65,6 +72,12 @@ export function renderTecnico(root) {
       ${list.length ? list.map(card).join('') : `<div class="empty-state"><div class="es-ico">✓</div><p>No tienes visitas en esta sección.</p></div>`}
     </div>`;
 
+  const notifBtn = root.querySelector('[data-enable-notif]');
+  if (notifBtn) notifBtn.onclick = async () => {
+    notifBtn.disabled = true; notifBtn.textContent = '…';
+    try { await enablePush(); toast('Notificaciones activadas 🔔'); renderTecnico(root); }
+    catch (e) { toast(e.message, 'info'); notifBtn.disabled = false; notifBtn.textContent = 'Activar'; }
+  };
   root.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { local.filtro = b.dataset.tab; renderTecnico(root); }));
   root.querySelectorAll('[data-act]').forEach((b) => (b.onclick = (e) => {
     e.stopPropagation();

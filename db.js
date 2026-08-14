@@ -78,6 +78,8 @@ function memoryStore() {
   }
   let users = seedUsers(tecnicos);
   let uSeq = users.length;
+  const settings = {};
+  let pushSubs = []; // { userId, endpoint, sub }
   const credsOf = (tid) => { const u = users.find((x) => x.tecnico_id == tid); return { username: u ? u.username : '', password: u ? (u.pass_plain || '') : '' }; };
   const outT = (t) => ({ ...t, display: displayTecnico(t.rol, t.nombre), ...credsOf(t.id) });
   const outV = (v) => { const o = { _uid: String(v.id), id: v.ot, ...pick(v) }; o.prioridad = o.prioridad || 'Media'; o.evidencias = parseEv(o.evidencias); return o; };
@@ -123,6 +125,11 @@ function memoryStore() {
       return outV(v);
     },
     async deleteVisita(id) { visitas = visitas.filter((x) => x.id != id); },
+    async getSetting(k) { return settings[k] ?? null; },
+    async setSetting(k, v) { settings[k] = v; },
+    async savePushSub(userId, sub) { pushSubs = pushSubs.filter((s) => s.endpoint !== sub.endpoint); pushSubs.push({ userId, endpoint: sub.endpoint, sub }); },
+    async listPushSubsByTecnicoId(tid) { const u = users.find((x) => x.tecnico_id == tid); return u ? pushSubs.filter((s) => s.userId === u.id).map((s) => s.sub) : []; },
+    async removePushSubByEndpoint(ep) { pushSubs = pushSubs.filter((s) => s.endpoint !== ep); },
   };
 }
 
@@ -201,6 +208,8 @@ function pgStore(url) {
           tecnico_id INTEGER
         );`);
       await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pass_plain TEXT DEFAULT '';`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS push_subs (id SERIAL PRIMARY KEY, user_id INTEGER, endpoint TEXT UNIQUE, sub TEXT);`);
 
       // Reset opcional de técnicos (poner RESET_TECNICOS=1 una vez y redeploy)
       if (process.env.RESET_TECNICOS === '1') {
@@ -278,6 +287,11 @@ function pgStore(url) {
       return enrich(t);
     },
     async deleteTecnico(id) { await pool.query('DELETE FROM tecnicos WHERE id=$1', [id]); },
+    async getSetting(k) { const { rows } = await pool.query('SELECT value FROM settings WHERE key=$1', [k]); return rows[0] ? rows[0].value : null; },
+    async setSetting(k, v) { await pool.query('INSERT INTO settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=$2', [k, v]); },
+    async savePushSub(userId, sub) { await pool.query('INSERT INTO push_subs (user_id,endpoint,sub) VALUES ($1,$2,$3) ON CONFLICT (endpoint) DO UPDATE SET sub=$3, user_id=$1', [userId, sub.endpoint, JSON.stringify(sub)]); },
+    async listPushSubsByTecnicoId(tid) { const { rows } = await pool.query('SELECT ps.sub FROM push_subs ps JOIN usuarios u ON u.id=ps.user_id WHERE u.tecnico_id=$1', [tid]); return rows.map((r) => { try { return JSON.parse(r.sub); } catch (e) { return null; } }).filter(Boolean); },
+    async removePushSubByEndpoint(ep) { await pool.query('DELETE FROM push_subs WHERE endpoint=$1', [ep]); },
     async listVisitas() {
       const { rows } = await pool.query('SELECT * FROM visitas ORDER BY id DESC');
       return rows.map(outV);
