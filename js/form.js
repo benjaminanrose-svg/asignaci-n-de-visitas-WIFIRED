@@ -64,7 +64,7 @@ export function visitFormModal(existing = null, prefill = {}) {
           </div>
           <div class="field">
             <label>Prioridad</label>
-            <select class="select" name="prioridad">${opt(['Alta', 'Media', 'Baja'], v.prioridad || 'Media')}</select>
+            <select class="select" name="prioridad">${opt(store.prioridades(), v.prioridad || 'Media')}</select>
           </div>
           <div class="field full">
             <label>Detalle / problema</label>

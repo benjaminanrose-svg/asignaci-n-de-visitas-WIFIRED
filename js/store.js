@@ -15,7 +15,13 @@ const COMPANY = {
 const CACHE = 'wifired_cache';
 const QUEUE = 'wifired_queue';
 
-let state = { visitas: [], tecnicos: [], config: { bloques: [], tipos: [], estados: [] } };
+/** Aplica la empresa desde la config (si viene) sobre los datos por defecto */
+function applyCompany() {
+  const e = state.config && state.config.empresa;
+  company = e ? { ...COMPANY, ...e, fonos: Array.isArray(e.fonos) && e.fonos.length ? e.fonos : COMPANY.fonos } : { ...COMPANY };
+}
+
+let state = { visitas: [], tecnicos: [], config: { bloques: [], tipos: [], estados: [], prioridades: ['Alta', 'Media', 'Baja'], evidencia_email: '', empresa: null } };
 let me = null;
 let persistent = true;
 let queue = load(QUEUE, []);
@@ -54,12 +60,13 @@ export async function initStore() {
     const data = await rawApi('GET', '/bootstrap');
     state.visitas = data.visitas; state.tecnicos = data.tecnicos; state.config = data.config; me = data.me || null;
     persistent = data.persistent !== false;
+    applyCompany();
     saveCache();
     flushQueue();
   } catch (e) {
     if (e.auth) throw e;
     const c = load(CACHE, null); // sin conexión: usar caché
-    if (c) { state.visitas = c.visitas; state.tecnicos = c.tecnicos; state.config = c.config; me = c.me; }
+    if (c) { state.visitas = c.visitas; state.tecnicos = c.tecnicos; state.config = c.config; me = c.me; applyCompany(); }
     else throw e;
   }
   return state;
@@ -70,7 +77,7 @@ function emit() { saveCache(); listeners.forEach((fn) => fn(state)); }
 
 // ---------- Getters ----------
 export function getState() { return state; }
-export const company = COMPANY;
+export let company = { ...COMPANY };
 export function visitas() { return state.visitas; }
 export function byUid(uid) { return state.visitas.find((v) => v._uid === uid); }
 export function tecnicosList() { return state.tecnicos; }
@@ -78,6 +85,8 @@ export function tecnicos() { return state.tecnicos.filter((t) => t.activo).map((
 export function tipos() { return state.config.tipos; }
 export function bloques() { return state.config.bloques; }
 export function estados() { return state.config.estados; }
+export function prioridades() { return (state.config.prioridades && state.config.prioridades.length) ? state.config.prioridades : ['Alta', 'Media', 'Baja']; }
+export function configFull() { return state.config; }
 
 // ---------- Cola offline ----------
 function enqueue(op) {
@@ -169,6 +178,13 @@ export async function deleteTecnico(id) {
   catch (e) { state.tecnicos = prev; emit(); toast(e.message, 'info'); }
 }
 
+// ---------- Configuración ----------
+export async function saveConfig(patch) {
+  const nueva = await rawApi('PUT', '/config', patch);
+  state.config = nueva; applyCompany(); emit();
+  return nueva;
+}
+
 // ---------- Auto-actualización (multi-usuario) ----------
 function signature() {
   return state.visitas.map((v) => v._uid + v.estado + v.tecnico + v.fecha + v.prioridad + (v.reagenda_solicitada ? '1' : '0') + (v.evidencias ? v.evidencias.length : 0)).join('|')
@@ -182,6 +198,7 @@ export async function refresh() {
   const before = signature();
   state.visitas = data.visitas; state.tecnicos = data.tecnicos; state.config = data.config;
   me = data.me || me; persistent = data.persistent !== false;
+  applyCompany();
   if (signature() !== before) emit(); else saveCache();
 }
 

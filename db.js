@@ -9,11 +9,47 @@ const path = require('path');
 
 const SEED = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'seed.json'), 'utf8'));
 
-const CONFIG = {
+// Configuración por defecto (semilla). La coordinación puede editarla desde
+// el panel; los cambios se guardan en la tabla settings (clave 'config') y se
+// fusionan sobre estos valores base.
+const DEFAULT_CONFIG = {
   bloques: SEED.bloques,
   tipos: SEED.tipos,
   estados: SEED.estados,
+  prioridades: ['Alta', 'Media', 'Baja'],
+  evidencia_email: '',
+  empresa: {
+    nombre: 'TELECOMUNICACIONES WIFIRED LTDA',
+    direccion: 'Av. Libertad, esquina Silva Chávez #701, Melipilla',
+    fonos: ['569 89798503', '569 99967675'],
+    email: 'Soporte@wifired.cl',
+    autoriza: 'Martin Ballesteros Escarate',
+  },
 };
+const CONFIG = DEFAULT_CONFIG; // compat
+
+/** Fusiona la config guardada (settings.config) sobre los valores por defecto */
+async function loadConfig(getSetting) {
+  let stored = {};
+  try { const raw = await getSetting('config'); if (raw) stored = JSON.parse(raw) || {}; } catch (e) {}
+  const arr = (v, d) => (Array.isArray(v) && v.length ? v.map((x) => String(x).trim()).filter(Boolean) : d);
+  return {
+    bloques: arr(stored.bloques, DEFAULT_CONFIG.bloques),
+    tipos: arr(stored.tipos, DEFAULT_CONFIG.tipos),
+    estados: arr(stored.estados, DEFAULT_CONFIG.estados),
+    prioridades: arr(stored.prioridades, DEFAULT_CONFIG.prioridades),
+    evidencia_email: typeof stored.evidencia_email === 'string' ? stored.evidencia_email.trim() : '',
+    empresa: { ...DEFAULT_CONFIG.empresa, ...(stored.empresa && typeof stored.empresa === 'object' ? stored.empresa : {}) },
+  };
+}
+/** Guarda un parche de configuración (fusiona sobre lo actual) */
+async function saveConfigWith(getSetting, setSetting, patch) {
+  const cur = await loadConfig(getSetting);
+  const next = { ...cur, ...(patch || {}) };
+  if (patch && patch.empresa) next.empresa = { ...cur.empresa, ...patch.empresa };
+  await setSetting('config', JSON.stringify(next));
+  return next;
+}
 
 const ROLES = ['Técnico', 'Ingeniero', 'Soporte de Emergencia', 'Soporte', 'Planta Externa'];
 
@@ -87,7 +123,8 @@ function memoryStore() {
 
   return {
     async init() {},
-    async getConfig() { return CONFIG; },
+    async getConfig() { return loadConfig(async (k) => settings[k] ?? null); },
+    async saveConfig(patch) { return saveConfigWith(async (k) => settings[k] ?? null, async (k, v) => { settings[k] = v; }, patch); },
     async getUserByUsername(u) { return users.find((x) => x.username === u) || null; },
     async getUserById(id) { return users.find((x) => x.id == id) || null; },
     async getTecnicoById(id) { const t = tecnicos.find((x) => x.id == id); return t ? outT(t) : null; },
@@ -243,7 +280,14 @@ function pgStore(url) {
         }
       }
     },
-    async getConfig() { return CONFIG; },
+    async getConfig() {
+      return loadConfig(async (k) => { const { rows } = await pool.query('SELECT value FROM settings WHERE key=$1', [k]); return rows[0] ? rows[0].value : null; });
+    },
+    async saveConfig(patch) {
+      const gs = async (k) => { const { rows } = await pool.query('SELECT value FROM settings WHERE key=$1', [k]); return rows[0] ? rows[0].value : null; };
+      const ss = async (k, v) => { await pool.query('INSERT INTO settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=$2', [k, v]); };
+      return saveConfigWith(gs, ss, patch);
+    },
     async getUserByUsername(u) { const { rows } = await pool.query('SELECT * FROM usuarios WHERE username=$1', [u]); return outU(rows[0]); },
     async getUserById(id) { const { rows } = await pool.query('SELECT * FROM usuarios WHERE id=$1', [id]); return outU(rows[0]); },
     async getTecnicoById(id) { const { rows } = await pool.query('SELECT * FROM tecnicos WHERE id=$1', [id]); return rows[0] ? enrich(rows[0]) : null; },

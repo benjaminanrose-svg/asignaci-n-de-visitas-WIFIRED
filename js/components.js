@@ -174,6 +174,7 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
     <div class="modal-foot">
       ${v.telefono ? `<a class="btn" href="${telLink(v.telefono)}">📞 Llamar</a>
       <a class="btn" style="color:#128c7e" target="_blank" rel="noopener" href="${waLink(v.telefono, `Hola ${v.cliente || ''}, le contactamos de WIFIRED por su visita técnica (${v.tipo || ''}).`)}">💬 WhatsApp</a>` : ''}
+      ${store.isCoordinador() ? '<button class="btn btn-danger" data-delete title="Eliminar visita">🗑</button>' : ''}
       <div class="grow"></div>
       <button class="btn" data-order>🧾 Orden</button>
       <button class="btn ${v.reagenda_solicitada ? 'btn-primary' : ''}" data-reagendar>↻ Reagendar</button>
@@ -183,6 +184,13 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
   node.querySelector('[data-edit]').onclick = () => { closeModal(); onEdit && onEdit(v); };
   node.querySelector('[data-order]').onclick = () => { closeModal(); onOrder && onOrder(v); };
   node.querySelector('[data-reagendar]').onclick = () => { closeModal(); reagendarModal(v); };
+  const delBtn = node.querySelector('[data-delete]');
+  if (delBtn) delBtn.onclick = async () => {
+    if (!confirm(`¿Eliminar la visita ${v.id} de ${v.cliente || 'este cliente'}? Esta acción no se puede deshacer.`)) return;
+    await store.deleteVisita(v._uid);
+    toast('Visita eliminada', 'info');
+    closeModal();
+  };
   const dlEv = node.querySelector('[data-download-ev]');
   if (dlEv) dlEv.onclick = () => downloadEvidence(v);
   openModal(node, 'md');

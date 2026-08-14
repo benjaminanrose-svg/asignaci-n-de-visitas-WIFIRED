@@ -10,6 +10,7 @@ import { renderAgenda } from './views/agenda.js';
 import { renderCalendario } from './views/calendario.js';
 import { renderVisitas } from './views/visitas.js';
 import { renderTecnicos } from './views/tecnicos.js';
+import { renderConfig } from './views/config.js';
 import { renderTecnico } from './views/tecnico.js';
 import { renderLogin, clearLogin } from './views/login.js';
 import { isAuth, logout } from './auth.js';
@@ -22,6 +23,7 @@ const ROUTES = {
   calendario: { title: 'Calendario',          render: renderCalendario },
   visitas:    { title: 'Registro de visitas', render: renderVisitas },
   tecnicos:   { title: 'Técnicos',            render: renderTecnicos },
+  config:     { title: 'Configuración',       render: renderConfig },
 };
 const REACTIVE = ['panel', 'agenda', 'calendario', 'visitas', 'tecnicos', 'mis-visitas'];
 

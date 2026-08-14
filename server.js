@@ -5,8 +5,13 @@ const express = require('express');
 const path = require('path');
 const { getStore } = require('./db.js');
 const { verifyPassword, signToken, verifyToken } = require('./server-auth.js');
-const { sendOrden, mailConfigured } = require('./mailer.js');
+const { sendOrden, sendEvidencia, mailConfigured } = require('./mailer.js');
 const { publicKey, saveSubscription, notifyTecnicoById } = require('./push.js');
+
+/** Datos de empresa desde la configuración (con respaldo al valor por defecto) */
+async function companyInfo() {
+  try { const c = await (await getStore()).getConfig(); return c.empresa || COMPANY; } catch (e) { return COMPANY; }
+}
 
 /** Notifica al técnico asignado a una visita (push) */
 async function notifyAssign(v, kind) {
@@ -130,10 +135,18 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
   // Al completar: enviar la orden firmada al correo del cliente (si hay correo)
   let email_result = null;
   if (patch.estado === 'Completada' && v.email && !v.orden_enviada) {
-    email_result = await sendOrden(v, COMPANY);
+    email_result = await sendOrden(v, await companyInfo());
     if (email_result.ok) {
       v = await s.updateVisita(req.params.id, { orden_enviada: new Date().toISOString() });
     }
+  }
+
+  // Copia de evidencia al correo de archivo cuando el técnico cierra/pide reagenda
+  if (req.user.rol === 'tecnico' && (patch.estado === 'Completada' || patch.estado === 'Cancelada' || patch.reagenda_solicitada)) {
+    const vEv = v;
+    s.getConfig().then((cfg) => {
+      if (cfg.evidencia_email) sendEvidencia(vEv, cfg.empresa || COMPANY, cfg.evidencia_email).catch(() => {});
+    }).catch(() => {});
   }
   // Aviso push al técnico cuando la coordinación asigna o reagenda
   if (req.user.rol !== 'tecnico') {
@@ -148,9 +161,17 @@ api.post('/visitas/:id/enviar-orden', auth, soloCoordinador, wrap(async (req, re
   const s = await getStore();
   const v = (await s.listVisitas()).find((x) => x._uid === String(req.params.id));
   if (!v) return res.status(404).json({ error: 'Visita no encontrada' });
-  const r = await sendOrden(v, COMPANY);
+  const r = await sendOrden(v, await companyInfo());
   if (r.ok) await s.updateVisita(req.params.id, { orden_enviada: new Date().toISOString() });
   res.json(r);
+}));
+
+// --- Configuración (sólo coordinación edita) ---
+api.get('/config', auth, wrap(async (req, res) => res.json(await (await getStore()).getConfig())));
+api.put('/config', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.saveConfig !== 'function') return res.status(400).json({ error: 'Configuración no editable en este modo' });
+  res.json(await s.saveConfig(req.body || {}));
 }));
 
 api.delete('/visitas/:id', auth, soloCoordinador, wrap(async (req, res) => {

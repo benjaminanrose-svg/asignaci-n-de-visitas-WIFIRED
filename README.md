@@ -98,7 +98,10 @@ El sistema ya tiene backend (Express) con **PostgreSQL**. Para activarlo en Rail
 | **Agenda / Asignación** | Tablero visual por día. Se **arrastra** una visita desde "Por asignar" hacia el técnico, o se reorganiza por bloque horario. Navegación por fecha. |
 | **Visitas** | Registro completo con búsqueda y filtros por estado, técnico, bloque y tipo. |
 | **Técnicos** | Carga y desempeño de cada técnico. |
+| **Configuración** | La coordinación edita los **tipos de servicio, bloques horarios, estados y prioridades** que aparecen al agendar, los **datos de la empresa** para la orden de trabajo, y el **correo que recibe copia de la evidencia**. Todo se guarda en la base de datos. |
 | **Orden de trabajo** | Ficha imprimible (copia cliente / técnico) desde cualquier visita, con el formato de WIFIRED. |
+
+> **Evidencia por correo:** cuando un técnico completa, cancela o solicita reagenda, se envía automáticamente una copia (nota + fotos) al correo definido en **Configuración → Correo para recibir la evidencia**, para que quede archivada. Después la evidencia se limpia como siempre al reagendar o cerrar. Requiere el correo del servidor configurado (Brevo/Resend).
 
 ### Mejoras respecto al Excel
 - Asignación por **arrastrar y soltar** en lugar de copiar/pegar celdas.
