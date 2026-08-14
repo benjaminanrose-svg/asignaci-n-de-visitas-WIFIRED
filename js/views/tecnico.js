@@ -46,7 +46,7 @@ export function renderTecnico(root) {
   if (!online) syncBar = `<div class="sync-bar off">📴 Sin conexión — ${pend} cambio(s) se enviarán al reconectar</div>`;
   else if (pend > 0) syncBar = `<div class="sync-bar syncing">⟳ Sincronizando ${pend} cambio(s)…</div>`;
 
-  const showNotif = pushSupported() && notifPermission() !== 'granted';
+  const showNotif = online && pushSupported() && notifPermission() !== 'granted';
   const notifBar = showNotif
     ? `<div class="notif-prompt"><span>🔔 Activa las notificaciones para enterarte cuando te asignen una visita.</span><button class="btn btn-sm btn-primary" data-enable-notif>Activar</button></div>`
     : '';

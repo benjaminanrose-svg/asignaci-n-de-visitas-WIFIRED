@@ -8,7 +8,9 @@ async function api(method, url, body) {
   const tk = getToken();
   if (tk) opt.headers.Authorization = 'Bearer ' + tk;
   if (body) opt.body = JSON.stringify(body);
-  const res = await fetch('/api' + url, opt);
+  let res;
+  try { res = await fetch('/api' + url, opt); }
+  catch (e) { throw new Error('Necesitas conexión a internet para activar las notificaciones'); }
   if (!res.ok) throw new Error('Error de servidor');
   return res.json();
 }
