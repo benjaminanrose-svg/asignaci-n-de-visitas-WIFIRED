@@ -25,3 +25,62 @@ self.addEventListener('notificationclick', (e) => {
     if (self.clients.openWindow) return self.clients.openWindow(url);
   }));
 });
+
+// ===== ESTRATEGIA CACHE-FIRST PARA OFFLINE =====
+self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+
+  // API: Network first, fallback to cache
+  if (url.pathname.startsWith('/api/')) {
+    e.respondWith(
+      fetch(e.request)
+        .then((res) => {
+          if (res.ok) {
+            caches.open('wifired-data-v1').then((cache) => {
+              cache.put(e.request, res.clone());
+            });
+          }
+          return res;
+        })
+        .catch(() => caches.match(e.request))
+    );
+  }
+  // Archivos estáticos: Cache first
+  else {
+    e.respondWith(
+      caches.match(e.request)
+        .then((res) => res || fetch(e.request))
+        .catch(() => new Response('Offline', { status: 503 }))
+    );
+  }
+});
+
+// ===== SINCRONIZACIÓN EN SEGUNDO PLANO =====
+self.addEventListener('sync', (e) => {
+  if (e.tag === 'sync-wifired-data') {
+    e.waitUntil(syncDataInBackground());
+  }
+});
+
+async function syncDataInBackground() {
+  try {
+    const endpoints = ['/api/visitas', '/api/tecnicos'];
+    const cache = await caches.open('wifired-data-v1');
+    for (const endpoint of endpoints) {
+      try {
+        const res = await fetch(endpoint);
+        if (res.ok) {
+          await cache.put(endpoint, res.clone());
+        }
+      } catch (e) {}
+    }
+  } catch (e) {}
+}
+
+self.addEventListener('install', () => {
+  if (self.registration.periodicSync) {
+    self.registration.periodicSync.register('sync-wifired-data', {
+      minInterval: 30 * 60 * 1000
+    }).catch(() => {});
+  }
+});

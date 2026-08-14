@@ -117,6 +117,23 @@ function setupUserChip() {
   chip.querySelector('#btn-logout').onclick = logout;
 }
 
+function setupOnlineOfflineListeners() {
+  window.addEventListener('online', () => {
+    console.log('✓ Conexión restaurada');
+    toast('📡 Conexión restaurada', 'success');
+    setTimeout(() => refresh(), 2000);
+  });
+
+  window.addEventListener('offline', () => {
+    console.log('✗ Sin conexión');
+    toast('📵 Sin conexión - usando datos locales', 'warning');
+  });
+
+  if (!navigator.onLine) {
+    toast('📵 Sin conexión - usando datos cacheados', 'warning');
+  }
+}
+
 async function startApp() {
   clearLogin();
   document.getElementById('app').style.display = '';
@@ -159,6 +176,7 @@ async function startApp() {
     }, 200));
     if (!location.hash) location.hash = '#/panel';
   }
+  setupOnlineOfflineListeners();
   render();
 
   // Auto-actualización suave: no interrumpe si hay un modal abierto o edición en curso

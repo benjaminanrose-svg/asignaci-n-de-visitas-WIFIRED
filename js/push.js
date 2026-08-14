@@ -25,7 +25,19 @@ function urlBase64ToUint8Array(base64String) {
 /** Registra el service worker (para instalación y push) */
 export async function registerSW() {
   if (!('serviceWorker' in navigator)) return;
-  try { await navigator.serviceWorker.register('/sw.js'); } catch (e) { /* ignore */ }
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    requestBackgroundSync(reg);
+  } catch (e) { /* ignore */ }
+}
+
+async function requestBackgroundSync(reg) {
+  if (!reg.periodicSync) return;
+  try {
+    await reg.periodicSync.register('sync-wifired-data', {
+      minInterval: 30 * 60 * 1000
+    });
+  } catch (e) {}
 }
 
 export function pushSupported() {
