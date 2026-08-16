@@ -235,6 +235,22 @@ async function sendEvidencia(v, company, toEmail) {
   });
 }
 
+/** Envía al cliente el código (PIN) para validar el cierre de su visita */
+async function sendPin(v, toEmail, pin) {
+  if (!toEmail) return { ok: false, reason: 'El cliente no tiene correo registrado' };
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111;font-size:14px;max-width:520px;margin:auto">
+    <p>Estimado/a ${esc(v.cliente || '')},</p>
+    <p>El técnico de <b>WIFIRED</b> está finalizando su visita <b>${esc(v.id)}</b>${v.tipo ? ` (${esc(v.tipo)})` : ''}.</p>
+    <p>Para confirmar y validar el trabajo realizado, entregue este código al técnico:</p>
+    <div style="text-align:center;margin:22px 0">
+      <div style="display:inline-block;font-size:34px;letter-spacing:10px;font-weight:800;color:#0b3d91;background:#eef3ff;border:1px solid #c9d8ff;border-radius:12px;padding:14px 26px">${esc(pin)}</div>
+    </div>
+    <p style="color:#555;font-size:12.5px">Si usted no solicitó esta validación o el técnico no se encuentra presente, no entregue el código y comuníquese con WIFIRED.</p>
+    <p style="color:#555">Saludos,<br><b>WIFIRED</b> — Telecomunicaciones</p>
+  </div>`;
+  return sendGeneric({ to: toEmail, subject: `Código de validación de su visita ${v.id} — WIFIRED`, html });
+}
+
 /** Envía la orden firmada (PDF) al correo del cliente. Devuelve {ok, reason?} */
 async function sendOrden(v, company) {
   const p = provider();
@@ -255,4 +271,4 @@ async function sendOrden(v, company) {
   }
 }
 
-module.exports = { sendOrden, sendEvidencia, mailConfigured };
+module.exports = { sendOrden, sendEvidencia, sendPin, mailConfigured };

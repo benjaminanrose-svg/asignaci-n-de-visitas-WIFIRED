@@ -3,6 +3,7 @@
 // ============================================================
 import { esc, parseTecnico, fmtDate, bloqueShort, colorFor, initials, telLink, waLink, todayISO, toast } from './util.js';
 import { openPhoto } from './photos.js';
+import { downloadZip, dataUriToBytes } from './zip.js';
 import * as store from './store.js';
 
 /** Reagendar (coordinación): nueva fecha, resuelve la solicitud, conserva evidencia */
@@ -27,13 +28,16 @@ export function reagendarModal(v) {
   const dl = node.querySelector('[data-download-ev]');
   if (dl) dl.onclick = () => downloadEvidence(v);
   node.querySelector('[data-save]').onclick = () => {
-    if ((v.evidencias || []).length && !confirm('Al reagendar se eliminará la evidencia de esta visita. Descárgala antes si la necesitas. ¿Continuar?')) return;
+    if ((v.evidencias || []).length && !confirm('Al reagendar se limpiará la evidencia activa (queda guardada en el historial). ¿Continuar?')) return;
+    const fecha = node.querySelector('[name=fecha]').value;
+    const bloque = node.querySelector('[name=bloque]').value;
+    const tecnico = node.querySelector('[name=tecnico]').value;
+    const autor = (store.currentUser() && store.currentUser().nombre) || 'Coordinación';
+    const hist = JSON.stringify((v.historial || []).concat([{ ts: Date.now(), autor, tipo: 'reagendada', detalle: `Nueva fecha: ${fecha} ${bloque}${tecnico ? ' · ' + tecnico : ''}` }]));
     store.updateVisita(v._uid, {
-      fecha: node.querySelector('[name=fecha]').value,
-      bloque: node.querySelector('[name=bloque]').value,
-      tecnico: node.querySelector('[name=tecnico]').value,
+      fecha, bloque, tecnico,
       estado: node.querySelector('[name=estado]').value,
-      reagenda_solicitada: '', reagenda_motivo: '', evidencias: '[]', // limpia por completo
+      reagenda_solicitada: '', reagenda_motivo: '', evidencias: '[]', historial: hist, // limpia evidencia activa; el historial se conserva
     });
     toast('Visita reagendada'); closeModal();
   };
@@ -81,6 +85,93 @@ export function downloadEvidence(v) {
   a.download = `evidencia_${v.id}.html`;
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+// ---------------- Historial completo de la visita ----------------
+const HIST_META = {
+  creada: { ico: '➕', label: 'Creada' },
+  asignada: { ico: '👤', label: 'Asignada' },
+  reagendada: { ico: '📅', label: 'Reagendada por coordinación' },
+  reagenda: { ico: '↻', label: 'Reagenda solicitada por el técnico' },
+  nota: { ico: '📝', label: 'Nota del técnico' },
+  cancelada: { ico: '✕', label: 'Cancelada' },
+  completada: { ico: '✓', label: 'Completada' },
+  validacion_pendiente: { ico: '⏳', label: 'Enviada a coordinación para autorizar' },
+  autorizada: { ico: '🔓', label: 'Autorizada por coordinación' },
+};
+function histFecha(ts) { try { return new Date(ts).toLocaleString('es-CL'); } catch (e) { return ''; } }
+
+/** Bloque HTML con la línea de tiempo de la visita */
+export function historialBlock(v) {
+  const h = Array.isArray(v.historial) ? v.historial : [];
+  const nEv = h.reduce((n, e) => n + ((e.fotos || []).length) + (e.firma_cliente ? 1 : 0) + (e.firma_tecnico ? 1 : 0), 0);
+  const tieneAlgo = h.length || (v.evidencias || []).length;
+  return `<div class="hist-block">
+    <div class="hist-head">
+      <span class="ev-title">🕓 Historial de la visita · ${h.length} evento${h.length === 1 ? '' : 's'}</span>
+      ${tieneAlgo ? '<button class="btn btn-sm" data-zip>⭳ Descargar todo (ZIP)</button>' : ''}
+    </div>
+    ${h.length ? `<div class="timeline">${h.slice().reverse().map((e) => {
+      const m = HIST_META[e.tipo] || { ico: '•', label: e.tipo || 'Evento' };
+      const nf = (e.fotos || []).length;
+      const nota = e.detalle || e.motivo || '';
+      return `<div class="tl-item">
+        <span class="tl-ico">${m.ico}</span>
+        <div class="tl-body">
+          <div class="tl-top"><b>${esc(m.label)}</b><span class="muted-sm">${esc(histFecha(e.ts))}</span></div>
+          ${e.autor ? `<div class="muted-sm">${esc(parseTecnico(e.autor).name || e.autor)}</div>` : ''}
+          ${nota ? `<div class="tl-note">${esc(nota)}</div>` : ''}
+          <div class="tl-tags">${nf ? `<span class="tag">📷 ${nf} foto${nf === 1 ? '' : 's'}</span>` : ''}${e.firma_cliente || e.firma_tecnico ? '<span class="tag">✍ firmas</span>' : ''}</div>
+        </div>
+      </div>`;
+    }).join('')}</div>` : '<p class="muted-sm" style="padding:8px 0">Sin eventos registrados todavía.</p>'}
+  </div>`;
+}
+
+/** Empaqueta todo el historial (fotos, firmas, documentos) en un ZIP */
+export function downloadHistorialZip(v) {
+  const files = [];
+  const pad = (n) => String(n).padStart(2, '0');
+  const h = Array.isArray(v.historial) ? v.historial : [];
+  const addImg = (folder, name, uri) => {
+    const b = dataUriToBytes(uri); if (!b) return;
+    files.push({ name: `${folder}/${name}.${b.ext}`, data: b.bytes });
+  };
+  h.forEach((e, i) => {
+    const folder = `${pad(i + 1)}_${(e.tipo || 'evento')}`;
+    (e.fotos || []).forEach((u, j) => addImg(folder, `foto_${pad(j + 1)}`, u));
+    if (e.firma_cliente) addImg(folder, 'firma_cliente', e.firma_cliente);
+    if (e.firma_tecnico) addImg(folder, 'firma_tecnico', e.firma_tecnico);
+  });
+  // Respaldo: fotos sueltas de la visita que no estén en el historial
+  if (!h.length) (v.evidencias || []).forEach((e, j) => addImg('evidencia', `foto_${pad(j + 1)}`, e.url));
+  // Documento resumen legible
+  files.push({ name: 'resumen.html', data: resumenHistorialHTML(v) });
+  downloadZip(`historial_${v.id}.zip`, files);
+}
+
+function resumenHistorialHTML(v) {
+  const h = Array.isArray(v.historial) ? v.historial : [];
+  const row = (k, val) => `<div><b>${esc(k)}:</b> ${esc(val || '—')}</div>`;
+  const eventos = h.map((e, i) => {
+    const m = HIST_META[e.tipo] || { label: e.tipo };
+    return `<div style="margin:14px 0;padding:10px 12px;border:1px solid #e2e2e2;border-radius:8px">
+      <div style="font-weight:700">${i + 1}. ${esc(m.label)} <span style="color:#888;font-weight:400;font-size:12px">· ${esc(histFecha(e.ts))}</span></div>
+      ${e.autor ? `<div style="color:#666;font-size:12px">${esc(e.autor)}</div>` : ''}
+      ${(e.detalle || e.motivo) ? `<div style="white-space:pre-wrap;margin-top:6px">${esc(e.detalle || e.motivo)}</div>` : ''}
+      <div style="color:#888;font-size:12px;margin-top:6px">${(e.fotos || []).length} foto(s) · carpeta ${String(i + 1).padStart(2, '0')}_${esc(e.tipo || 'evento')}/</div>
+    </div>`;
+  }).join('');
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Historial ${esc(v.id)}</title></head>
+    <body style="font-family:Arial,Helvetica,sans-serif;max-width:820px;margin:26px auto;padding:0 18px;color:#111">
+      <h1 style="font-size:20px;margin:0 0 4px">WIFIRED · Historial de visita</h1>
+      <div style="color:#666;font-size:12px;margin-bottom:18px">Generado el ${new Date().toLocaleString('es-CL')}</div>
+      ${row('Orden', v.id)} ${row('Cliente', v.cliente)} ${row('Técnico', parseTecnico(v.tecnico).name)}
+      ${row('Estado', v.estado)} ${row('Nodo', v.nodo)} ${row('Dirección', v.direccion)}
+      <h2 style="font-size:14px;margin:22px 0 4px">Eventos (${h.length})</h2>
+      ${eventos || '<p>Sin eventos registrados.</p>'}
+    </body></html>`;
+  return new TextEncoder().encode(html);
 }
 
 export function statusBadge(estado) {
@@ -157,11 +248,15 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
     </div>
     <div class="modal-body">
       ${v.reagenda_solicitada ? `<div class="req-banner">⏳ <strong>Solicitud de reagenda del técnico</strong><p>${esc(v.reagenda_motivo || 'Sin motivo indicado')}</p><span>Resuélvela con el botón “↻ Reagendar”.</span></div>` : ''}
+      ${v.validada === 'pendiente' ? `<div class="req-banner">🔓 <strong>Pendiente de autorización</strong><p>El técnico no pudo validar con el código del cliente. Revisa la evidencia y autoriza el cierre.</p><button class="btn btn-sm btn-primary" data-autorizar style="margin-top:8px">✓ Autorizar y completar</button></div>` : ''}
+      ${v.validada === 'pin' ? '<div class="ok-banner" style="background:var(--surface-2);border:1px solid var(--border-2);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:12.5px">✅ Validada por el cliente con código</div>' : ''}
+      ${v.validada === 'coordinacion' ? '<div class="ok-banner" style="background:var(--surface-2);border:1px solid var(--border-2);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:12.5px">✅ Autorizada por coordinación</div>' : ''}
       <div class="detail-list">
         <div class="detail-row"><span class="dl-k">Prioridad</span><span class="dl-v">${priorityTag(v.prioridad)}</span></div>
         <div class="detail-row"><span class="dl-k">Tipo de visita</span><span class="dl-v">${esc(v.tipo || '—')}</span></div>
         <div class="detail-row"><span class="dl-k">Fecha</span><span class="dl-v">${fmtDate(v.fecha, true)}</span></div>
         <div class="detail-row"><span class="dl-k">Bloque horario</span><span class="dl-v">${esc(v.bloque || '—')}</span></div>
+        ${v.nodo ? `<div class="detail-row"><span class="dl-k">Nodo</span><span class="dl-v">📡 ${esc(v.nodo)}</span></div>` : ''}
         <div class="detail-row"><span class="dl-k">Técnico asignado</span><span class="dl-v row" style="gap:8px">${v.tecnico ? techAvatar(v.tecnico) + esc(t.name) : '<span class="muted">Sin asignar</span>'}</span></div>
         <div class="detail-row"><span class="dl-k">RUT</span><span class="dl-v">${esc(v.rut || '—')}</span></div>
         <div class="detail-row"><span class="dl-k">Teléfono</span><span class="dl-v">${esc(v.telefono || '—')}</span></div>
@@ -170,6 +265,7 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
         ${v.asignado_por ? `<div class="detail-row"><span class="dl-k">Asignado por</span><span class="dl-v">${esc(v.asignado_por)}</span></div>` : ''}
       </div>
       ${evidenceGallery(v)}
+      ${historialBlock(v)}
     </div>
     <div class="modal-foot">
       ${v.telefono ? `<a class="btn" href="${telLink(v.telefono)}">📞 Llamar</a>
@@ -193,6 +289,18 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
   };
   const dlEv = node.querySelector('[data-download-ev]');
   if (dlEv) dlEv.onclick = () => downloadEvidence(v);
+  const zipBtn = node.querySelector('[data-zip]');
+  if (zipBtn) zipBtn.onclick = () => { try { downloadHistorialZip(v); toast('Descargando historial…'); } catch (e) { toast('No se pudo generar el ZIP', 'info'); } };
+  const autBtn = node.querySelector('[data-autorizar]');
+  if (autBtn) autBtn.onclick = async () => {
+    if (!confirm(`¿Autorizar y completar la visita ${v.id} sin código del cliente? Se enviará la orden al correo si está registrado.`)) return;
+    autBtn.disabled = true; autBtn.textContent = 'Autorizando…';
+    const autor = (store.currentUser() && store.currentUser().nombre) || 'Coordinación';
+    const hist = JSON.stringify((v.historial || []).concat([{ ts: Date.now(), autor, tipo: 'autorizada', detalle: 'Cierre autorizado por coordinación sin código del cliente' }]));
+    await store.updateVisita(v._uid, { estado: 'Completada', validada: 'coordinacion', historial: hist });
+    toast('Visita autorizada y completada ✓');
+    closeModal();
+  };
   openModal(node, 'md');
 }
 

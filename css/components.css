@@ -466,3 +466,30 @@ body[data-role="tecnico"] .view { max-width:820px; margin:0 auto; width:100%; }
 .cfg-row .icon-btn { flex:0 0 auto; color:var(--st-canc-fg); }
 .cfg-footbar { display:flex; justify-content:flex-end; padding-top:4px; }
 @media (max-width:760px){ .cfg-two { grid-template-columns:1fr; } }
+
+/* ---- Panel: selector de período ---- */
+.period-bar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin: 4px 0 16px; }
+.period-lbl { font-weight:700; font-size:13px; color: var(--text-2); }
+
+/* ---- Panel: rendimiento por técnico ---- */
+.perf-row { display:flex; align-items:center; gap:14px; padding:11px 2px; border-bottom:1px solid var(--border-2); flex-wrap:wrap; }
+.perf-row:last-child { border-bottom:0; }
+.perf-tec { display:flex; align-items:center; gap:10px; min-width:190px; flex:0 0 auto; }
+.perf-tipos { display:flex; gap:6px; flex-wrap:wrap; flex:1; justify-content:flex-end; }
+.perf-tipos .tag { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (max-width:640px){ .perf-tipos { justify-content:flex-start; } }
+
+/* ---- Historial / línea de tiempo ---- */
+.hist-block { margin-top:16px; border-top:1px solid var(--border-2); padding-top:12px; }
+.hist-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+.timeline { display:flex; flex-direction:column; gap:2px; }
+.tl-item { display:flex; gap:12px; padding:10px 0; border-bottom:1px dashed var(--border-2); }
+.tl-item:last-child { border-bottom:0; }
+.tl-ico { flex:0 0 26px; width:26px; height:26px; border-radius:8px; display:grid; place-items:center; background:var(--surface-2); font-size:14px; }
+.tl-body { min-width:0; flex:1; }
+.tl-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.tl-note { white-space:pre-wrap; background:var(--surface-2); border:1px solid var(--border-2); border-radius:8px; padding:8px 10px; font-size:12.5px; margin-top:6px; }
+.tl-tags { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
+
+/* ---- Caja de validación por PIN (técnico) ---- */
+.pin-box .btn-block { margin-top:0; }

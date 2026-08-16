@@ -66,6 +66,10 @@ export function visitFormModal(existing = null, prefill = {}) {
             <label>Prioridad</label>
             <select class="select" name="prioridad">${opt(store.prioridades(), v.prioridad || 'Media')}</select>
           </div>
+          <div class="field">
+            <label>Nodo</label>
+            <select class="select" name="nodo">${opt(store.nodos(), v.nodo, 'Sin nodo')}</select>
+          </div>
           <div class="field full">
             <label>Detalle / problema</label>
             <textarea class="textarea" name="detalle" placeholder="Descripción del trabajo o falla reportada…">${esc(v.detalle || '')}</textarea>

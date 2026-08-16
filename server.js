@@ -5,7 +5,7 @@ const express = require('express');
 const path = require('path');
 const { getStore } = require('./db.js');
 const { verifyPassword, signToken, verifyToken } = require('./server-auth.js');
-const { sendOrden, sendEvidencia, mailConfigured } = require('./mailer.js');
+const { sendOrden, sendEvidencia, sendPin, mailConfigured } = require('./mailer.js');
 const { publicKey, saveSubscription, notifyTecnicoById } = require('./push.js');
 
 /** Datos de empresa desde la configuración (con respaldo al valor por defecto) */
@@ -97,7 +97,11 @@ api.get('/bootstrap', auth, wrap(async (req, res) => {
 
 // --- Visitas ---
 // El técnico completa/cancela, deja notas, SOLICITA reagenda, adjunta evidencias y firmas
-const CAMPOS_TECNICO = ['detalle', 'reagenda_solicitada', 'reagenda_motivo', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico'];
+const CAMPOS_TECNICO = ['detalle', 'reagenda_solicitada', 'reagenda_motivo', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'historial'];
+
+/** Genera un PIN aleatorio de 6 dígitos */
+function nuevoPin() { return String(Math.floor(100000 + Math.random() * 900000)); }
+const PIN_VIGENCIA_MS = 30 * 60 * 1000; // 30 minutos
 
 api.post('/visitas', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
@@ -119,18 +123,38 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
     const display = await techDisplay(req.user);
     if (!own || own.tecnico !== display) return res.status(403).json({ error: 'No puedes modificar esta visita' });
     CAMPOS_TECNICO.forEach((k) => { if (k in body) patch[k] = body[k]; });
-    // el técnico sólo puede marcar Completada o Cancelada
-    if (['Completada', 'Cancelada'].includes(body.estado)) patch.estado = body.estado;
+    // el técnico sólo puede marcar Cancelada libremente; Completada exige PIN válido
+    if (body.estado === 'Cancelada') patch.estado = 'Cancelada';
+    if (body.estado === 'Completada') {
+      // Requiere el código (PIN) que el cliente recibió por correo
+      const stored = await (s.getPin ? s.getPin(req.params.id) : Promise.resolve({ pin: '', ts: 0 }));
+      const ingresado = String(body.pin_ingresado || '').trim();
+      const tsMs = stored && stored.ts ? new Date(stored.ts).getTime() : 0;
+      const vigente = tsMs && (Date.now() - tsMs) < PIN_VIGENCIA_MS;
+      if (!stored || !stored.pin || ingresado !== stored.pin || !vigente) {
+        return res.status(403).json({ error: 'Código de validación incorrecto o vencido. Reenvía el código al cliente e inténtalo de nuevo.' });
+      }
+      patch.estado = 'Completada';
+      patch.validada = 'pin';
+    }
+    // Fallback: el cliente no puede entregar el código → queda pendiente de autorización por coordinación
+    if (body.validada === 'pendiente') patch.validada = 'pendiente';
     // al SOLICITAR reagenda, la visita pasa a Pendiente (espera nueva fecha de coordinación)
     if (patch.reagenda_solicitada) patch.estado = 'Pendiente';
   } else {
     patch = { ...body };
+    delete patch.pin_ingresado;
     if ('tecnico' in body) patch.asignado_por = body.tecnico ? req.user.nombre : '';
+    // coordinación autoriza manualmente (fallback cuando el PIN no llegó al cliente)
+    if (body.estado === 'Completada' && !body.validada) patch.validada = 'coordinacion';
     // al reagendar/editar fecha, se resuelve la solicitud pendiente
     if ('fecha' in body || 'estado' in body) { patch.reagenda_solicitada = ''; patch.reagenda_motivo = ''; }
   }
   let v = await s.updateVisita(req.params.id, patch);
   if (!v) return res.status(404).json({ error: 'Visita no encontrada' });
+
+  // Ya validada/cerrada: el código de un solo uso deja de ser válido
+  if (patch.estado === 'Completada' && s.setPin) s.setPin(req.params.id, '').catch(() => {});
 
   // Al completar: enviar la orden firmada al correo del cliente (si hay correo)
   let email_result = null;
@@ -141,8 +165,8 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
     }
   }
 
-  // Copia de evidencia al correo de archivo cuando el técnico cierra/pide reagenda
-  if (req.user.rol === 'tecnico' && (patch.estado === 'Completada' || patch.estado === 'Cancelada' || patch.reagenda_solicitada)) {
+  // Copia de evidencia al correo de archivo cuando el técnico cierra/pide reagenda/queda pendiente
+  if (req.user.rol === 'tecnico' && (patch.estado === 'Completada' || patch.estado === 'Cancelada' || patch.reagenda_solicitada || patch.validada === 'pendiente')) {
     const vEv = v;
     s.getConfig().then((cfg) => {
       if (cfg.evidencia_email) sendEvidencia(vEv, cfg.empresa || COMPANY, cfg.evidencia_email).catch(() => {});
@@ -154,6 +178,28 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
     else if ('fecha' in body && v.tecnico) notifyAssign(v, 'reagenda');
   }
   res.json({ ...v, _email: email_result });
+}));
+
+// Enviar/reenviar el código (PIN) de validación al correo del cliente
+api.post('/visitas/:id/enviar-pin', auth, wrap(async (req, res) => {
+  const s = await getStore();
+  const v = (await s.listVisitas()).find((x) => x._uid === String(req.params.id));
+  if (!v) return res.status(404).json({ error: 'Visita no encontrada' });
+  if (req.user.rol === 'tecnico') {
+    const display = await techDisplay(req.user);
+    if (v.tecnico !== display) return res.status(403).json({ error: 'No puedes validar esta visita' });
+  }
+  const email = ((req.body && req.body.email) || v.email || '').trim();
+  if (!email) return res.status(400).json({ error: 'El cliente no tiene correo para recibir el código' });
+  if (!mailConfigured()) return res.status(400).json({ error: 'Correo no configurado en el servidor (BREVO_API_KEY o RESEND_API_KEY)' });
+  const pin = nuevoPin();
+  if (!s.setPin) return res.status(400).json({ error: 'Validación por código no disponible en este modo' });
+  await s.setPin(req.params.id, pin);
+  // guardar el correo del cliente si vino nuevo
+  if (req.body && req.body.email && req.body.email !== v.email) await s.updateVisita(req.params.id, { email });
+  const r = await sendPin(v, email, pin);
+  if (!r.ok) return res.status(502).json({ error: 'No se pudo enviar el código: ' + (r.reason || '') });
+  res.json({ ok: true, email });
 }));
 
 // Reenviar la orden al cliente (coordinación)

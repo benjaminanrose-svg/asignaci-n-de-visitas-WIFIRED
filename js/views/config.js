@@ -88,6 +88,12 @@ export function renderConfig(root) {
         </div>
       </div>
 
+      <div class="card cfg-card">
+        <h3 class="cfg-title">📡 Nodos</h3>
+        <p class="muted-sm">Los nodos (zonas / puntos de red) que se pueden asignar a cada visita. Se usan para las estadísticas por nodo del panel.</p>
+        ${listEditor('nodos', cfg.nodos)}
+      </div>
+
       <div class="cfg-footbar">
         <button class="btn btn-primary" data-save>Guardar cambios</button>
       </div>
@@ -121,6 +127,7 @@ export function renderConfig(root) {
       bloques: collectList(root, 'bloques'),
       estados: collectList(root, 'estados'),
       prioridades: collectList(root, 'prioridades'),
+      nodos: collectList(root, 'nodos'),
     };
     if (!payload.tipos.length) { toast('Deja al menos un tipo de servicio', 'info'); return; }
     if (!payload.estados.length) { toast('Deja al menos un estado', 'info'); return; }

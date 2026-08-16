@@ -17,6 +17,7 @@ const DEFAULT_CONFIG = {
   tipos: SEED.tipos,
   estados: SEED.estados,
   prioridades: ['Alta', 'Media', 'Baja'],
+  nodos: [],
   evidencia_email: '',
   empresa: {
     nombre: 'TELECOMUNICACIONES WIFIRED LTDA',
@@ -38,6 +39,7 @@ async function loadConfig(getSetting) {
     tipos: arr(stored.tipos, DEFAULT_CONFIG.tipos),
     estados: arr(stored.estados, DEFAULT_CONFIG.estados),
     prioridades: arr(stored.prioridades, DEFAULT_CONFIG.prioridades),
+    nodos: arr(stored.nodos, DEFAULT_CONFIG.nodos),
     evidencia_email: typeof stored.evidencia_email === 'string' ? stored.evidencia_email.trim() : '',
     empresa: { ...DEFAULT_CONFIG.empresa, ...(stored.empresa && typeof stored.empresa === 'object' ? stored.empresa : {}) },
   };
@@ -74,9 +76,9 @@ function nextOt(existing) {
   return `OT-MEL-2026-${String(n).padStart(3, '0')}`;
 }
 
-const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por', 'reagenda_solicitada', 'reagenda_motivo', 'prioridad', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'orden_enviada'];
+const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por', 'reagenda_solicitada', 'reagenda_motivo', 'prioridad', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'orden_enviada', 'nodo', 'historial', 'validada'];
 
-/** evidencias se guarda como JSON (texto) y se expone como arreglo */
+/** evidencias / historial se guardan como JSON (texto) y se exponen como arreglo */
 function parseEv(s) { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 
 const { hashPassword, slugUser } = require('./server-auth.js');
@@ -118,7 +120,7 @@ function memoryStore() {
   let pushSubs = []; // { userId, endpoint, sub }
   const credsOf = (tid) => { const u = users.find((x) => x.tecnico_id == tid); return { username: u ? u.username : '', password: u ? (u.pass_plain || '') : '' }; };
   const outT = (t) => ({ ...t, display: displayTecnico(t.rol, t.nombre), ...credsOf(t.id) });
-  const outV = (v) => { const o = { _uid: String(v.id), id: v.ot, ...pick(v) }; o.prioridad = o.prioridad || 'Media'; o.evidencias = parseEv(o.evidencias); return o; };
+  const outV = (v) => { const o = { _uid: String(v.id), id: v.ot, ...pick(v) }; o.prioridad = o.prioridad || 'Media'; o.evidencias = parseEv(o.evidencias); o.historial = parseEv(o.historial); return o; };
   const uniqUser = (base, exceptId) => { let u = base || 'tecnico', b = u, i = 2; while (users.some((x) => x.username === u && x.id !== exceptId)) u = `${b}${i++}`; return u; };
 
   return {
@@ -162,6 +164,8 @@ function memoryStore() {
       return outV(v);
     },
     async deleteVisita(id) { visitas = visitas.filter((x) => x.id != id); },
+    async setPin(id, pin) { const v = visitas.find((x) => x.id == id); if (v) { v.pin = pin; v.pin_ts = pin ? Date.now() : 0; } },
+    async getPin(id) { const v = visitas.find((x) => x.id == id); return v ? { pin: v.pin || '', ts: v.pin_ts || 0 } : { pin: '', ts: 0 }; },
     async getSetting(k) { return settings[k] ?? null; },
     async setSetting(k, v) { settings[k] = v; },
     async savePushSub(userId, sub) { pushSubs = pushSubs.filter((s) => s.endpoint !== sub.endpoint); pushSubs.push({ userId, endpoint: sub.endpoint, sub }); },
@@ -187,6 +191,7 @@ function pgStore(url) {
     reagenda_solicitada: r.reagenda_solicitada || '', reagenda_motivo: r.reagenda_motivo || '',
     prioridad: r.prioridad || 'Media', evidencias: parseEv(r.evidencias),
     email: r.email || '', firma_cliente: r.firma_cliente || '', firma_tecnico: r.firma_tecnico || '', orden_enviada: r.orden_enviada || '',
+    nodo: r.nodo || '', historial: parseEv(r.historial), validada: r.validada || '',
   });
   const outU = (r) => r ? { id: r.id, username: r.username, pass: r.pass, rol: r.rol, nombre: r.nombre, tecnico_id: r.tecnico_id } : null;
   async function credsOf(tid) {
@@ -234,6 +239,11 @@ function pgStore(url) {
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS firma_cliente TEXT DEFAULT '';`);
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS firma_tecnico TEXT DEFAULT '';`);
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS orden_enviada TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS nodo TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS historial TEXT DEFAULT '[]';`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS validada TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS pin TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS pin_ts TIMESTAMPTZ;`);
       await pool.query(`
         CREATE TABLE IF NOT EXISTS usuarios (
           id SERIAL PRIMARY KEY,
@@ -344,10 +354,10 @@ function pgStore(url) {
       const { rows: ex } = await pool.query('SELECT ot FROM visitas');
       const ot = nextOt(ex.map((r) => r.ot));
       const { rows } = await pool.query(
-        `INSERT INTO visitas (ot,estado,tipo,fecha,bloque,cliente,rut,telefono,direccion,gps,detalle,tecnico,asignado_por,prioridad,email)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+        `INSERT INTO visitas (ot,estado,tipo,fecha,bloque,cliente,rut,telefono,direccion,gps,detalle,tecnico,asignado_por,prioridad,email,nodo)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
         [ot, d.estado || 'Pendiente', d.tipo || '', d.fecha || '', d.bloque || '', d.cliente || '', d.rut || '',
-         d.telefono || '', d.direccion || '', d.gps || '', d.detalle || '', d.tecnico || '', d.asignado_por || '', d.prioridad || 'Media', d.email || '']);
+         d.telefono || '', d.direccion || '', d.gps || '', d.detalle || '', d.tecnico || '', d.asignado_por || '', d.prioridad || 'Media', d.email || '', d.nodo || '']);
       return outV(rows[0]);
     },
     async updateVisita(id, patch) {
@@ -360,6 +370,8 @@ function pgStore(url) {
       return rows[0] ? outV(rows[0]) : null;
     },
     async deleteVisita(id) { await pool.query('DELETE FROM visitas WHERE id=$1', [id]); },
+    async setPin(id, pin) { await pool.query(`UPDATE visitas SET pin=$1, pin_ts = CASE WHEN $1 = '' THEN NULL ELSE now() END WHERE id=$2`, [pin, id]); },
+    async getPin(id) { const { rows } = await pool.query('SELECT pin, pin_ts FROM visitas WHERE id=$1', [id]); return rows[0] ? { pin: rows[0].pin || '', ts: rows[0].pin_ts || 0 } : { pin: '', ts: 0 }; },
   };
 }
 

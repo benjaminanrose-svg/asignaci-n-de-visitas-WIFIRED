@@ -58,7 +58,7 @@ function render() {
 // ---------- Notificaciones de reagenda (coordinación) ----------
 let prevReqCount = null;
 function updateBell() {
-  const reqs = store.visitas().filter((v) => v.reagenda_solicitada);
+  const reqs = store.visitas().filter((v) => v.reagenda_solicitada || v.validada === 'pendiente');
   let bell = document.getElementById('notif-bell');
   if (!bell) {
     bell = document.createElement('button');
@@ -80,20 +80,24 @@ function updateBell() {
 }
 
 function reqPanel() {
-  const reqs = store.visitas().filter((v) => v.reagenda_solicitada);
+  const reqs = store.visitas().filter((v) => v.reagenda_solicitada || v.validada === 'pendiente');
   const node = document.createElement('div');
   node.innerHTML = `
-    <div class="modal-head"><h3>Solicitudes de reagenda (${reqs.length})</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-head"><h3>Pendientes de coordinación (${reqs.length})</h3><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body">
-      ${reqs.length ? reqs.map((v) => `
+      ${reqs.length ? reqs.map((v) => {
+        const esVal = v.validada === 'pendiente';
+        const sub = esVal ? '🔓 Esperando autorización (sin código del cliente)' : ('↻ ' + (v.reagenda_motivo || 'Sin motivo'));
+        return `
         <div class="day-row" style="cursor:default">
           <span class="grow" data-open="${esc(v._uid)}" style="min-width:0; cursor:pointer">
             <span class="cell-strong truncate" style="display:block">${esc(v.cliente || 'Sin nombre')}</span>
-            <span class="cell-sub truncate" style="display:block">${esc(parseTecnico(v.tecnico).short)} · ${esc(v.reagenda_motivo || 'Sin motivo')}</span>
+            <span class="cell-sub truncate" style="display:block">${esc(parseTecnico(v.tecnico).short)} · ${esc(sub)}</span>
           </span>
           ${(v.evidencias || []).length ? `<button class="btn btn-sm" data-dl="${esc(v._uid)}" title="Descargar evidencia">⭳</button>` : ''}
-          <button class="btn btn-sm btn-primary" data-open="${esc(v._uid)}">Reagendar</button>
-        </div>`).join('') : '<p class="muted" style="padding:10px 0">No hay solicitudes pendientes. 🎉</p>'}
+          <button class="btn btn-sm btn-primary" data-open="${esc(v._uid)}">${esVal ? 'Revisar' : 'Reagendar'}</button>
+        </div>`;
+      }).join('') : '<p class="muted" style="padding:10px 0">No hay pendientes. 🎉</p>'}
     </div>`;
   node.querySelector('[data-close]').onclick = closeModal;
   node.querySelectorAll('[data-dl]').forEach((b) => (b.onclick = () => { const v = store.byUid(b.dataset.dl); if (v) downloadEvidence(v); }));

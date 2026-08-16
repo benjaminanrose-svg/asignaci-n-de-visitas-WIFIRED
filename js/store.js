@@ -21,7 +21,7 @@ function applyCompany() {
   company = e ? { ...COMPANY, ...e, fonos: Array.isArray(e.fonos) && e.fonos.length ? e.fonos : COMPANY.fonos } : { ...COMPANY };
 }
 
-let state = { visitas: [], tecnicos: [], config: { bloques: [], tipos: [], estados: [], prioridades: ['Alta', 'Media', 'Baja'], evidencia_email: '', empresa: null } };
+let state = { visitas: [], tecnicos: [], config: { bloques: [], tipos: [], estados: [], prioridades: ['Alta', 'Media', 'Baja'], nodos: [], evidencia_email: '', empresa: null } };
 let me = null;
 let persistent = true;
 let queue = load(QUEUE, []);
@@ -86,6 +86,7 @@ export function tipos() { return state.config.tipos; }
 export function bloques() { return state.config.bloques; }
 export function estados() { return state.config.estados; }
 export function prioridades() { return (state.config.prioridades && state.config.prioridades.length) ? state.config.prioridades : ['Alta', 'Media', 'Baja']; }
+export function nodos() { return state.config.nodos || []; }
 export function configFull() { return state.config; }
 
 // ---------- Cola offline ----------
@@ -148,6 +149,24 @@ export async function addVisita(data) {
 
 export async function enviarOrden(uid) {
   return rawApi('POST', '/visitas/' + uid + '/enviar-orden');
+}
+
+/** Envía el código (PIN) de validación al correo del cliente */
+export async function enviarPin(uid, email) {
+  return rawApi('POST', '/visitas/' + uid + '/enviar-pin', email ? { email } : undefined);
+}
+
+/** Completa una visita validando con el PIN (requiere conexión; no se encola) */
+export async function validarYCompletar(uid, patch) {
+  const idx = state.visitas.findIndex((v) => v._uid === uid);
+  const updated = await rawApi('PUT', '/visitas/' + uid, patch); // lanza si el código es inválido
+  if (updated._email) {
+    if (updated._email.ok) toast('Orden enviada al cliente por correo ✉️');
+    else toast('Visita completada. Correo no enviado: ' + updated._email.reason, 'info');
+    delete updated._email;
+  }
+  if (idx >= 0) state.visitas[idx] = updated; emit();
+  return updated;
 }
 
 export async function deleteVisita(uid) {
