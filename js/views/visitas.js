@@ -1,5 +1,9 @@
 // ============================================================
-// WIFIRED · Vista Registro de Visitas (tabla + filtros)
+// WIFIRED · Vista Historial de Visitas (solo lectura)
+// Historial completo con filtros y búsqueda. Cada visita se abre
+// en modo solo lectura para consultar su detalle y descargar la
+// orden de trabajo (OT) y el ZIP con toda la evidencia. Las
+// acciones operativas (crear, editar, reagendar) viven en Agenda.
 // ============================================================
 import * as store from '../store.js';
 import { esc, parseTecnico, fmtDateShort, bloqueShort, prioRank } from '../util.js';

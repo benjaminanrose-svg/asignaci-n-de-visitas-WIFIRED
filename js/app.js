@@ -21,7 +21,7 @@ const ROUTES = {
   panel:      { title: 'Panel de control',    render: renderPanel },
   agenda:     { title: 'Agenda / Asignación', render: renderAgenda },
   calendario: { title: 'Calendario',          render: renderCalendario },
-  visitas:    { title: 'Registro de visitas', render: renderVisitas },
+  visitas:    { title: 'Historial de visitas', render: renderVisitas },
   tecnicos:   { title: 'Técnicos',            render: renderTecnicos },
   config:     { title: 'Configuración',       render: renderConfig },
 };
