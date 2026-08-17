@@ -137,17 +137,64 @@ export function downloadHistorialZip(v) {
     const b = dataUriToBytes(uri); if (!b) return;
     files.push({ name: `${folder}/${name}.${b.ext}`, data: b.bytes });
   };
+  const enc = new TextEncoder();
   h.forEach((e, i) => {
     const folder = `${pad(i + 1)}_${(e.tipo || 'evento')}`;
     (e.fotos || []).forEach((u, j) => addImg(folder, `foto_${pad(j + 1)}`, u));
     if (e.firma_cliente) addImg(folder, 'firma_cliente', e.firma_cliente);
     if (e.firma_tecnico) addImg(folder, 'firma_tecnico', e.firma_tecnico);
+    // Documento de evidencia completo del evento (con la nota del técnico y fotos incrustadas)
+    files.push({ name: `${folder}/evidencia.html`, data: enc.encode(eventoEvidenciaHTML(v, e, i)) });
   });
-  // Respaldo: fotos sueltas de la visita que no estén en el historial
-  if (!h.length) (v.evidencias || []).forEach((e, j) => addImg('evidencia', `foto_${pad(j + 1)}`, e.url));
-  // Documento resumen legible
+  // Respaldo: visita sin historial → fotos + un documento de evidencia general
+  if (!h.length) {
+    (v.evidencias || []).forEach((e, j) => addImg('evidencia', `foto_${pad(j + 1)}`, e.url));
+    files.push({ name: 'evidencia/evidencia.html', data: enc.encode(evidenciaHTMLDoc({
+      titulo: 'Evidencia de visita', v,
+      nota: v.reagenda_motivo || v.detalle || '',
+      fotos: (v.evidencias || []).map((e) => e.url),
+      firmaC: v.firma_cliente, firmaT: v.firma_tecnico,
+    })) });
+  }
+  // Índice general legible
   files.push({ name: 'resumen.html', data: resumenHistorialHTML(v) });
   downloadZip(`historial_${v.id}.zip`, files);
+}
+
+/** Documento de evidencia autocontenido (metadatos + nota + fotos + firmas incrustadas) */
+function evidenciaHTMLDoc({ titulo, v, nota, fotos, firmaC, firmaT, evento }) {
+  const t = parseTecnico(v.tecnico);
+  const row = (k, val) => `<div><b>${esc(k)}:</b> ${esc(val || '—')}</div>`;
+  const imgs = (fotos || []).filter(Boolean);
+  const firma = (src, cap) => src ? `<figure style="margin:0 18px 8px 0;display:inline-block;text-align:center"><img style="max-width:230px;border:1px solid #ccc;border-radius:8px;background:#fff" src="${src}"><figcaption style="font-size:11px;color:#777;margin-top:4px">${esc(cap)}</figcaption></figure>` : '';
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(titulo)} ${esc(v.id)}</title></head>
+    <body style="font-family:Arial,Helvetica,sans-serif;max-width:820px;margin:26px auto;padding:0 18px;color:#111">
+      <h1 style="font-size:20px;margin:0 0 4px">WIFIRED · ${esc(titulo)}</h1>
+      <div style="color:#666;font-size:12px;margin-bottom:18px">Generado el ${new Date().toLocaleString('es-CL')}${evento ? ' · ' + esc(evento) : ''}</div>
+      <div style="font-size:13px;line-height:1.7">
+        ${row('Orden', v.id)} ${row('Cliente', v.cliente)} ${row('Técnico', t.name)}
+        ${row('Estado', v.estado)} ${row('Fecha', (v.fecha || '') + ' ' + (v.bloque || ''))}
+        ${v.nodo ? row('Nodo', v.nodo) : ''} ${row('Dirección', v.direccion)}
+      </div>
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:26px 0 8px;border-bottom:1px solid #e2e2e2;padding-bottom:5px">Nota del técnico</h2>
+      <div style="white-space:pre-wrap;background:#f6f7f9;border:1px solid #eee;padding:12px 14px;border-radius:8px;font-size:13px">${esc(nota || 'Sin observaciones')}</div>
+      ${(firmaC || firmaT) ? `<h2 style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:26px 0 8px;border-bottom:1px solid #e2e2e2;padding-bottom:5px">Firmas</h2>${firma(firmaC, 'Firma del cliente')}${firma(firmaT, 'Firma del técnico')}` : ''}
+      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:26px 0 8px;border-bottom:1px solid #e2e2e2;padding-bottom:5px">Fotografías (${imgs.length})</h2>
+      ${imgs.length ? imgs.map((u, i) => `<figure style="margin:0 0 16px"><figcaption style="font-size:11px;color:#777;margin-bottom:4px">Foto ${i + 1}</figcaption><img style="max-width:100%;border:1px solid #ccc;border-radius:8px" src="${u}"></figure>`).join('') : '<p>Sin fotografías.</p>'}
+    </body></html>`;
+}
+
+/** Documento de evidencia para un evento del historial */
+function eventoEvidenciaHTML(v, e, i) {
+  const m = HIST_META[e.tipo] || { label: e.tipo || 'Evento' };
+  return evidenciaHTMLDoc({
+    titulo: 'Evidencia · ' + m.label,
+    v,
+    nota: e.detalle || e.motivo || '',
+    fotos: e.fotos || [],
+    firmaC: e.firma_cliente, firmaT: e.firma_tecnico,
+    evento: `${i + 1}. ${m.label} · ${histFecha(e.ts)}${e.autor ? ' · ' + parseTecnico(e.autor).name : ''}`,
+  });
 }
 
 function resumenHistorialHTML(v) {
@@ -159,7 +206,7 @@ function resumenHistorialHTML(v) {
       <div style="font-weight:700">${i + 1}. ${esc(m.label)} <span style="color:#888;font-weight:400;font-size:12px">· ${esc(histFecha(e.ts))}</span></div>
       ${e.autor ? `<div style="color:#666;font-size:12px">${esc(e.autor)}</div>` : ''}
       ${(e.detalle || e.motivo) ? `<div style="white-space:pre-wrap;margin-top:6px">${esc(e.detalle || e.motivo)}</div>` : ''}
-      <div style="color:#888;font-size:12px;margin-top:6px">${(e.fotos || []).length} foto(s) · carpeta ${String(i + 1).padStart(2, '0')}_${esc(e.tipo || 'evento')}/</div>
+      <div style="color:#888;font-size:12px;margin-top:6px">${(e.fotos || []).length} foto(s) · ver <b>${String(i + 1).padStart(2, '0')}_${esc(e.tipo || 'evento')}/evidencia.html</b></div>
     </div>`;
   }).join('');
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Historial ${esc(v.id)}</title></head>
