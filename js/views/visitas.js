@@ -4,9 +4,8 @@
 import * as store from '../store.js';
 import { esc, parseTecnico, fmtDateShort, bloqueShort, prioRank } from '../util.js';
 import { statusBadge, priorityTag, techAvatar, clientAvatar, visitDetailModal, workOrderModal } from '../components.js';
-import { visitFormModal } from '../form.js';
 
-const local = { estado: '', tecnico: '', bloque: '', tipo: '', reagenda: false };
+const local = { estado: '', tecnico: '', bloque: '', tipo: '' };
 let lastRows = [];
 
 function exportCSV(rows) {
@@ -26,16 +25,15 @@ export function renderVisitas(root, ctx) {
   const search = (ctx && ctx.search) || '';
 
   root.innerHTML = `
+    <div class="hist-intro muted-sm">📚 Historial completo de visitas — abre una para ver su detalle, descargar la orden de trabajo (OT) y el ZIP con toda la evidencia.</div>
     <div class="filters">
       <select class="select" data-f="estado">${optAll('Todos los estados', store.estados(), local.estado)}</select>
       <select class="select" data-f="tecnico">${optAll('Todos los técnicos', store.tecnicos(), local.tecnico, true)}</select>
       <select class="select" data-f="bloque">${optAll('Todos los bloques', store.bloques(), local.bloque)}</select>
       <select class="select" data-f="tipo">${optAll('Todos los tipos', store.tipos(), local.tipo)}</select>
-      <button class="btn btn-sm ${local.reagenda ? 'btn-primary' : ''}" data-reagenda>⏳ Solicitudes de reagenda</button>
       <div class="grow"></div>
       <button class="btn btn-sm" data-export>⭳ Exportar</button>
       <button class="btn btn-sm" data-clear>Limpiar filtros</button>
-      <button class="btn btn-primary btn-sm" data-new>＋ Nueva visita</button>
     </div>
     <div class="card">
       <div id="table-host"></div>
@@ -45,13 +43,10 @@ export function renderVisitas(root, ctx) {
     sel.onchange = () => { local[sel.dataset.f] = sel.value; paint(); };
   });
   root.querySelector('[data-export]').onclick = () => exportCSV(lastRows);
-  root.querySelector('[data-reagenda]').onclick = () => { local.reagenda = !local.reagenda; renderVisitas(root, ctx); };
   root.querySelector('[data-clear]').onclick = () => {
     local.estado = local.tecnico = local.bloque = local.tipo = '';
-    local.reagenda = false;
     renderVisitas(root, ctx);
   };
-  root.querySelector('[data-new]').onclick = () => visitFormModal();
 
   const host = root.querySelector('#table-host');
 
@@ -61,7 +56,6 @@ export function renderVisitas(root, ctx) {
     if (local.tecnico) rows = rows.filter((v) => (local.tecnico === '__none__' ? !v.tecnico : v.tecnico === local.tecnico));
     if (local.bloque) rows = rows.filter((v) => v.bloque === local.bloque);
     if (local.tipo) rows = rows.filter((v) => v.tipo === local.tipo);
-    if (local.reagenda) rows = rows.filter((v) => v.reagenda_solicitada);
     rows = rows.slice().sort((a, b) => prioRank(a.prioridad) - prioRank(b.prioridad)); // prioridad primero
     if (search) {
       rows = rows.filter((v) =>
@@ -98,7 +92,7 @@ export function renderVisitas(root, ctx) {
         const v = store.byUid(tr.dataset.uid);
         if (!v) return;
         if (e.target.closest('[data-ot]')) { workOrderModal(v, store.company); return; }
-        visitDetailModal(v, { onEdit: (x) => visitFormModal(x), onOrder: (x) => workOrderModal(x, store.company) });
+        visitDetailModal(v, { onOrder: (x) => workOrderModal(x, store.company), readOnly: true });
       };
     });
   }

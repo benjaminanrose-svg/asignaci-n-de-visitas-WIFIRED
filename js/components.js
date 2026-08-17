@@ -284,7 +284,7 @@ export function closeModal() {
 }
 
 // ---------------- Detalle de visita ----------------
-export function visitDetailModal(v, { onEdit, onOrder } = {}) {
+export function visitDetailModal(v, { onEdit, onOrder, readOnly = false } = {}) {
   const t = parseTecnico(v.tecnico);
   const node = document.createElement('div');
   node.innerHTML = `
@@ -299,8 +299,8 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
       <button class="icon-btn" data-close>✕</button>
     </div>
     <div class="modal-body">
-      ${v.reagenda_solicitada ? `<div class="req-banner">⏳ <strong>Solicitud de reagenda del técnico</strong><p>${esc(v.reagenda_motivo || 'Sin motivo indicado')}</p><span>Resuélvela con el botón “↻ Reagendar”.</span></div>` : ''}
-      ${v.validada === 'pendiente' ? `<div class="req-banner">🔓 <strong>Pendiente de autorización</strong><p>El técnico no pudo validar con el código del cliente. Revisa la evidencia y autoriza el cierre.</p><button class="btn btn-sm btn-primary" data-autorizar style="margin-top:8px">✓ Autorizar y completar</button></div>` : ''}
+      ${v.reagenda_solicitada ? `<div class="req-banner">⏳ <strong>Solicitud de reagenda del técnico</strong><p>${esc(v.reagenda_motivo || 'Sin motivo indicado')}</p>${readOnly ? '' : '<span>Resuélvela con el botón “↻ Reagendar”.</span>'}</div>` : ''}
+      ${v.validada === 'pendiente' ? `<div class="req-banner">🔓 <strong>Pendiente de autorización</strong><p>El técnico no pudo validar con el código del cliente.${readOnly ? '' : ' Revisa la evidencia y autoriza el cierre.'}</p>${readOnly ? '' : '<button class="btn btn-sm btn-primary" data-autorizar style="margin-top:8px">✓ Autorizar y completar</button>'}</div>` : ''}
       ${v.validada === 'pin' ? '<div class="ok-banner" style="background:var(--surface-2);border:1px solid var(--border-2);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:12.5px">✅ Validada por el cliente con código</div>' : ''}
       ${v.validada === 'coordinacion' ? '<div class="ok-banner" style="background:var(--surface-2);border:1px solid var(--border-2);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:12.5px">✅ Autorizada por coordinación</div>' : ''}
       <div class="detail-list">
@@ -320,18 +320,21 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
       ${historialBlock(v)}
     </div>
     <div class="modal-foot">
-      ${v.telefono ? `<a class="btn" href="${telLink(v.telefono)}">📞 Llamar</a>
+      ${readOnly ? `<span class="muted-sm">Historial de la visita</span><div class="grow"></div><button class="btn btn-primary" data-order>🧾 Orden</button>`
+      : `${v.telefono ? `<a class="btn" href="${telLink(v.telefono)}">📞 Llamar</a>
       <a class="btn" style="color:#128c7e" target="_blank" rel="noopener" href="${waLink(v.telefono, `Hola ${v.cliente || ''}, le contactamos de WIFIRED por su visita técnica (${v.tipo || ''}).`)}">💬 WhatsApp</a>` : ''}
       ${store.isCoordinador() ? '<button class="btn btn-danger" data-delete title="Eliminar visita">🗑</button>' : ''}
       <div class="grow"></div>
       <button class="btn" data-order>🧾 Orden</button>
       <button class="btn ${v.reagenda_solicitada ? 'btn-primary' : ''}" data-reagendar>↻ Reagendar</button>
-      <button class="btn ${v.reagenda_solicitada ? '' : 'btn-primary'}" data-edit>✎ Editar</button>
+      <button class="btn ${v.reagenda_solicitada ? '' : 'btn-primary'}" data-edit>✎ Editar</button>`}
     </div>`;
   node.querySelector('[data-close]').onclick = closeModal;
-  node.querySelector('[data-edit]').onclick = () => { closeModal(); onEdit && onEdit(v); };
+  const editBtn = node.querySelector('[data-edit]');
+  if (editBtn) editBtn.onclick = () => { closeModal(); onEdit && onEdit(v); };
   node.querySelector('[data-order]').onclick = () => { closeModal(); onOrder && onOrder(v); };
-  node.querySelector('[data-reagendar]').onclick = () => { closeModal(); reagendarModal(v); };
+  const reagBtn = node.querySelector('[data-reagendar]');
+  if (reagBtn) reagBtn.onclick = () => { closeModal(); reagendarModal(v); };
   const delBtn = node.querySelector('[data-delete]');
   if (delBtn) delBtn.onclick = async () => {
     if (!confirm(`¿Eliminar la visita ${v.id} de ${v.cliente || 'este cliente'}? Esta acción no se puede deshacer.`)) return;

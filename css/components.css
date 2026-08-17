@@ -145,6 +145,7 @@ table.data tbody tr:hover { background: var(--surface-2); }
   padding: 9px 12px; font-size: 13.5px; outline: none; transition: border .15s, box-shadow .15s; color: var(--text);
 }
 .select:focus, .input:focus, .textarea:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px rgba(37,99,235,.14); }
+.hist-intro { margin-bottom: 12px; padding: 10px 14px; background: var(--surface-2); border: 1px solid var(--border-2); border-radius: 10px; }
 .input.input-bad { border-color: #ef4444; }
 .input.input-bad:focus { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.16); }
 .textarea { width: 100%; resize: vertical; min-height: 76px; font-family: inherit; }
