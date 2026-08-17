@@ -177,9 +177,24 @@ function memoryStore() {
 // ============================================================
 //  Store PostgreSQL
 // ============================================================
+// ¿La conexión necesita SSL? Las bases internas (Railway interno, Coolify u
+// otro servidor propio, IP privada, localhost) NO usan SSL; las bases públicas
+// remotas sí. Se puede forzar con DATABASE_SSL=true / DATABASE_SSL=false.
+function needsSsl(url) {
+  if (process.env.DATABASE_SSL === 'true') return true;
+  if (process.env.DATABASE_SSL === 'false') return false;
+  let host = '';
+  try { host = new URL(url).hostname; } catch (e) { return false; }
+  if (/^(localhost|127\.0\.0\.1|::1)$/.test(host)) return false;
+  if (host === 'railway.internal' || host.endsWith('.railway.internal')) return false;
+  if (!host.includes('.')) return false; // nombre de servicio Docker (Coolify, etc.)
+  if (/^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false; // IP privada
+  return true;
+}
+
 function pgStore(url) {
   const { Pool } = require('pg');
-  const ssl = /railway\.internal|localhost|127\.0\.0\.1/.test(url) ? false : { rejectUnauthorized: false };
+  const ssl = needsSsl(url) ? { rejectUnauthorized: false } : false;
   const pool = new Pool({ connectionString: url, ssl });
 
   const outT = (r) => ({ id: r.id, rol: r.rol, nombre: r.nombre, telefono: r.telefono || '', activo: r.activo, display: displayTecnico(r.rol, r.nombre) });
