@@ -5,7 +5,7 @@
 // de trabajo y el correo que recibe copia de la evidencia.
 // ============================================================
 import * as store from '../store.js';
-import { esc, toast } from '../util.js';
+import { esc, toast, bindField, validaEmail } from '../util.js';
 
 /** Editor de lista simple: filas con input + botón eliminar, y "＋ Agregar" */
 function listEditor(key, items) {
@@ -111,8 +111,16 @@ export function renderConfig(root) {
   }));
   root.querySelectorAll('[data-remove]').forEach((b) => (b.onclick = () => b.closest('[data-row]').remove()));
 
+  // Validación de correos
+  bindField(root.querySelector('[data-evemail]'), { validate: validaEmail, msg: 'Correo inválido' });
+  bindField(root.querySelector('[data-emp="email"]'), { validate: validaEmail, msg: 'Correo inválido' });
+
   // Guardar
   const doSave = async (btn) => {
+    const evEmail = (root.querySelector('[data-evemail]').value || '').trim();
+    const empEmail = (root.querySelector('[data-emp="email"]').value || '').trim();
+    if (evEmail && !validaEmail(evEmail)) { toast('El correo de archivo de evidencia no es válido', 'info'); return; }
+    if (empEmail && !validaEmail(empEmail)) { toast('El correo de contacto de la empresa no es válido', 'info'); return; }
     const empFonos = (root.querySelector('[data-emp="fonos"]').value || '').split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
     const payload = {
       evidencia_email: (root.querySelector('[data-evemail]').value || '').trim(),

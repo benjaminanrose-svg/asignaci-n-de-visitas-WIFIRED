@@ -98,6 +98,78 @@ export function waLink(phone, msg) {
   return n ? `https://wa.me/${n}${msg ? '?text=' + encodeURIComponent(msg) : ''}` : '';
 }
 
+// ============================================================
+// Validación de datos (Chile): RUT, teléfono y correo
+// ============================================================
+
+/** Deja solo dígitos y la K del RUT, en mayúscula */
+export function limpiaRut(r) { return (r || '').replace(/[^0-9kK]/g, '').toUpperCase(); }
+
+/** Valida un RUT chileno con dígito verificador (módulo 11) */
+export function validaRut(r) {
+  const s = limpiaRut(r);
+  if (s.length < 2) return false;
+  const cuerpo = s.slice(0, -1), dv = s.slice(-1);
+  if (!/^\d+$/.test(cuerpo)) return false;
+  let suma = 0, mul = 2;
+  for (let i = cuerpo.length - 1; i >= 0; i--) {
+    suma += parseInt(cuerpo[i], 10) * mul;
+    mul = mul === 7 ? 2 : mul + 1;
+  }
+  const res = 11 - (suma % 11);
+  const dvCalc = res === 11 ? '0' : res === 10 ? 'K' : String(res);
+  return dv === dvCalc;
+}
+
+/** Formatea un RUT como 12.345.678-9 */
+export function formatRut(r) {
+  const s = limpiaRut(r);
+  if (s.length < 2) return s;
+  const cuerpo = s.slice(0, -1), dv = s.slice(-1);
+  return cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv;
+}
+
+/** Valida un teléfono chileno (9 dígitos: móvil 9xxxxxxxx o fijo con código de área) */
+export function validaFono(f) {
+  let d = (f || '').replace(/\D/g, '');
+  if (d.startsWith('56')) d = d.slice(2);
+  return d.length === 9;
+}
+
+/** Formatea un teléfono chileno como 9 1234 5678 */
+export function formatFono(f) {
+  let d = (f || '').replace(/\D/g, '');
+  if (d.startsWith('56') && d.length > 9) d = d.slice(2);
+  if (d.length === 9) return `${d[0]} ${d.slice(1, 5)} ${d.slice(5)}`;
+  return (f || '').trim();
+}
+
+/** Valida un correo electrónico */
+export function validaEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test((e || '').trim()); }
+
+/**
+ * Enlaza validación en vivo a un <input>.
+ * Marca el campo como inválido (integra con form.reportValidity) y formatea al salir.
+ * @param {HTMLInputElement} input
+ * @param {{validate:(v:string)=>boolean, format?:(v:string)=>string, msg?:string, required?:boolean}} opt
+ */
+export function bindField(input, { validate, format, msg = 'Dato inválido', required = false } = {}) {
+  if (!input) return;
+  const run = () => {
+    const val = input.value.trim();
+    if (!val) { input.setCustomValidity(required ? (msg || 'Campo obligatorio') : ''); input.classList.remove('input-bad'); return; }
+    const ok = validate ? validate(val) : true;
+    input.setCustomValidity(ok ? '' : msg);
+    input.classList.toggle('input-bad', !ok);
+  };
+  input.addEventListener('input', run);
+  input.addEventListener('blur', () => {
+    if (format && input.value.trim()) input.value = format(input.value);
+    run();
+  });
+  run();
+}
+
 export function debounce(fn, ms = 220) {
   let t;
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };

@@ -2,7 +2,7 @@
 // WIFIRED · Portal del Técnico — sus visitas asignadas
 // ============================================================
 import * as store from '../store.js';
-import { esc, fmtDate, fmtDateShort, todayISO, bloqueShort, toast, prioRank, telLink, waLink } from '../util.js';
+import { esc, fmtDate, fmtDateShort, todayISO, bloqueShort, toast, prioRank, telLink, waLink, bindField, validaEmail } from '../util.js';
 import { statusBadge, priorityTag, openModal, closeModal } from '../components.js';
 import { createPhotoPicker, openPhoto } from '../photos.js';
 import { createSignaturePad } from '../signature.js';
@@ -181,6 +181,7 @@ function completarModal(uid) {
   const emailEl = node.querySelector('[name=email]');
   const pinArea = node.querySelector('[data-pin-area]');
   const sendBtn = node.querySelector('[data-send-pin]');
+  bindField(emailEl, { validate: validaEmail, msg: 'Correo inválido' });
 
   // Reúne el parche común (evidencia, firmas, nota, historial)
   const buildPatch = (extra, tipo) => {
@@ -200,6 +201,7 @@ function completarModal(uid) {
   const enviarPin = async (btn) => {
     const email = (emailEl.value || '').trim();
     if (!email) { toast('Escribe el correo del cliente para enviarle el código', 'info'); emailEl.focus(); return; }
+    if (!validaEmail(email)) { toast('El correo del cliente no es válido', 'info'); emailEl.focus(); return; }
     btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Enviando…';
     try {
       await store.enviarPin(uid, email);

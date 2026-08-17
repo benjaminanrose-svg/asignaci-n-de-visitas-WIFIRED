@@ -1,7 +1,7 @@
 // ============================================================
 // WIFIRED · Formulario de técnico (crear / editar)
 // ============================================================
-import { esc, toast } from './util.js';
+import { esc, toast, bindField, validaFono, formatFono } from './util.js';
 import { openModal, closeModal } from './components.js';
 import * as store from './store.js';
 
@@ -27,7 +27,7 @@ export function techFormModal(existing = null) {
           </div>
           <div class="field">
             <label>Teléfono</label>
-            <input class="input" name="telefono" value="${esc(t.telefono || '')}" placeholder="9 1234 5678" />
+            <input class="input" name="telefono" value="${esc(t.telefono || '')}" placeholder="9 1234 5678" inputmode="tel" autocomplete="off" />
           </div>
           <div class="field full">
             <label>Nombre completo</label>
@@ -65,6 +65,8 @@ export function techFormModal(existing = null) {
     </div>`;
 
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+
+  bindField(node.querySelector('[name=telefono]'), { validate: validaFono, format: formatFono, msg: 'Teléfono inválido (debe tener 9 dígitos)' });
 
   node.querySelector('[data-save]').onclick = async () => {
     const form = node.querySelector('#tech-form');

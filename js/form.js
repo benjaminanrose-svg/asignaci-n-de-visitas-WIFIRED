@@ -1,7 +1,7 @@
 // ============================================================
 // WIFIRED · Formulario de visita (crear / editar / asignar)
 // ============================================================
-import { esc, todayISO, toast } from './util.js';
+import { esc, todayISO, toast, bindField, validaRut, formatRut, validaFono, formatFono, validaEmail } from './util.js';
 import { openModal, closeModal } from './components.js';
 import * as store from './store.js';
 
@@ -28,15 +28,15 @@ export function visitFormModal(existing = null, prefill = {}) {
           </div>
           <div class="field">
             <label>RUT</label>
-            <input class="input" name="rut" value="${esc(v.rut || '')}" placeholder="12.345.678-9" />
+            <input class="input" name="rut" value="${esc(v.rut || '')}" placeholder="12.345.678-9" inputmode="text" autocomplete="off" />
           </div>
           <div class="field">
             <label>Teléfono</label>
-            <input class="input" name="telefono" value="${esc(v.telefono || '')}" placeholder="9 1234 5678" />
+            <input class="input" name="telefono" value="${esc(v.telefono || '')}" placeholder="9 1234 5678" inputmode="tel" autocomplete="off" />
           </div>
           <div class="field">
             <label>Correo del cliente</label>
-            <input class="input" type="email" name="email" value="${esc(v.email || '')}" placeholder="cliente@correo.com" />
+            <input class="input" type="email" name="email" value="${esc(v.email || '')}" placeholder="cliente@correo.com" autocomplete="off" />
           </div>
           <div class="field full">
             <label>Dirección</label>
@@ -84,6 +84,12 @@ export function visitFormModal(existing = null, prefill = {}) {
     </div>`;
 
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+
+  // Validación en vivo (RUT chileno, teléfono y correo). Los campos son opcionales:
+  // solo se valida cuando el usuario escribe algo.
+  bindField(node.querySelector('[name=rut]'), { validate: validaRut, format: formatRut, msg: 'RUT inválido (revisa el dígito verificador)' });
+  bindField(node.querySelector('[name=telefono]'), { validate: validaFono, format: formatFono, msg: 'Teléfono inválido (debe tener 9 dígitos)' });
+  bindField(node.querySelector('[name=email]'), { validate: validaEmail, msg: 'Correo inválido' });
 
   node.querySelector('[data-save]').onclick = async () => {
     const form = node.querySelector('#visit-form');
