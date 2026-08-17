@@ -271,4 +271,4 @@ async function sendOrden(v, company) {
   }
 }
 
-module.exports = { sendOrden, sendEvidencia, sendPin, mailConfigured };
+module.exports = { sendOrden, sendEvidencia, sendPin, ordenPDF, mailConfigured };

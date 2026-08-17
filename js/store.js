@@ -156,6 +156,14 @@ export async function enviarPin(uid, email) {
   return rawApi('POST', '/visitas/' + uid + '/enviar-pin', email ? { email } : undefined);
 }
 
+/** Descarga la orden de trabajo en PDF (la misma que se envía al cliente/soporte). Devuelve Uint8Array */
+export async function ordenPdfBytes(uid) {
+  const tk = getToken();
+  const res = await fetch('/api/visitas/' + uid + '/orden.pdf', { headers: tk ? { Authorization: 'Bearer ' + tk } : {} });
+  if (!res.ok) { let m = 'No se pudo generar la OT'; try { m = (await res.json()).error || m; } catch (e) {} throw new Error(m); }
+  return new Uint8Array(await res.arrayBuffer());
+}
+
 /** Completa una visita validando con el PIN (requiere conexión; no se encola) */
 export async function validarYCompletar(uid, patch) {
   const idx = state.visitas.findIndex((v) => v._uid === uid);

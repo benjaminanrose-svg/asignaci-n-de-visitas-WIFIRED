@@ -5,7 +5,7 @@ const express = require('express');
 const path = require('path');
 const { getStore } = require('./db.js');
 const { verifyPassword, signToken, verifyToken } = require('./server-auth.js');
-const { sendOrden, sendEvidencia, sendPin, mailConfigured } = require('./mailer.js');
+const { sendOrden, sendEvidencia, sendPin, ordenPDF, mailConfigured } = require('./mailer.js');
 const { publicKey, saveSubscription, notifyTecnicoById } = require('./push.js');
 
 /** Datos de empresa desde la configuración (con respaldo al valor por defecto) */
@@ -180,6 +180,21 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
   res.json({ ...v, _email: email_result });
 }));
 
+// Descargar la orden de trabajo en PDF (la misma que se envía al cliente/soporte)
+api.get('/visitas/:id/orden.pdf', auth, wrap(async (req, res) => {
+  const s = await getStore();
+  const v = (await s.listVisitas()).find((x) => x._uid === String(req.params.id));
+  if (!v) return res.status(404).json({ error: 'Visita no encontrada' });
+  if (req.user.rol === 'tecnico') {
+    const display = await techDisplay(req.user);
+    if (v.tecnico !== display) return res.status(403).json({ error: 'No puedes ver esta orden' });
+  }
+  const pdf = await ordenPDF(v, await companyInfo());
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="orden_${v.id}.pdf"`);
+  res.send(pdf);
+}));
+
 // Enviar/reenviar el código (PIN) de validación al correo del cliente
 api.post('/visitas/:id/enviar-pin', auth, wrap(async (req, res) => {
   const s = await getStore();
@@ -198,7 +213,11 @@ api.post('/visitas/:id/enviar-pin', auth, wrap(async (req, res) => {
   // guardar el correo del cliente si vino nuevo
   if (req.body && req.body.email && req.body.email !== v.email) await s.updateVisita(req.params.id, { email });
   const r = await sendPin(v, email, pin);
-  if (!r.ok) return res.status(502).json({ error: 'No se pudo enviar el código: ' + (r.reason || '') });
+  if (!r.ok) {
+    console.warn(`[PIN] FALLÓ envío a ${email} · visita ${v.id} · ${new Date().toISOString()} · ${r.reason || ''}`);
+    return res.status(502).json({ error: 'No se pudo enviar el código: ' + (r.reason || '') });
+  }
+  console.log(`[PIN] enviado a ${email} · visita ${v.id} · solicitado por ${req.user.rol} · ${new Date().toISOString()}`);
   res.json({ ok: true, email });
 }));
 

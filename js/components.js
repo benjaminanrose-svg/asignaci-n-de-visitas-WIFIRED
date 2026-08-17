@@ -128,8 +128,8 @@ export function historialBlock(v) {
   </div>`;
 }
 
-/** Empaqueta todo el historial (fotos, firmas, documentos) en un ZIP */
-export function downloadHistorialZip(v) {
+/** Empaqueta todo el historial (fotos, firmas, documentos, OT en PDF) en un ZIP */
+export async function downloadHistorialZip(v) {
   const files = [];
   const pad = (n) => String(n).padStart(2, '0');
   const h = Array.isArray(v.historial) ? v.historial : [];
@@ -156,6 +156,11 @@ export function downloadHistorialZip(v) {
       firmaC: v.firma_cliente, firmaT: v.firma_tecnico,
     })) });
   }
+  // Orden de trabajo en PDF (la misma que se envía al cliente/soporte). Requiere conexión.
+  try {
+    const pdf = await store.ordenPdfBytes(v._uid);
+    if (pdf && pdf.length) files.push({ name: `orden_de_trabajo_${v.id}.pdf`, data: pdf });
+  } catch (e) { /* sin conexión o error: se omite la OT del ZIP */ }
   // Índice general legible
   files.push({ name: 'resumen.html', data: resumenHistorialHTML(v) });
   downloadZip(`historial_${v.id}.zip`, files);
@@ -337,7 +342,11 @@ export function visitDetailModal(v, { onEdit, onOrder } = {}) {
   const dlEv = node.querySelector('[data-download-ev]');
   if (dlEv) dlEv.onclick = () => downloadEvidence(v);
   const zipBtn = node.querySelector('[data-zip]');
-  if (zipBtn) zipBtn.onclick = () => { try { downloadHistorialZip(v); toast('Descargando historial…'); } catch (e) { toast('No se pudo generar el ZIP', 'info'); } };
+  if (zipBtn) zipBtn.onclick = async () => {
+    zipBtn.disabled = true; const orig = zipBtn.textContent; zipBtn.textContent = 'Generando…';
+    try { await downloadHistorialZip(v); } catch (e) { toast('No se pudo generar el ZIP', 'info'); }
+    zipBtn.disabled = false; zipBtn.textContent = orig;
+  };
   const autBtn = node.querySelector('[data-autorizar]');
   if (autBtn) autBtn.onclick = async () => {
     if (!confirm(`¿Autorizar y completar la visita ${v.id} sin código del cliente? Se enviará la orden al correo si está registrado.`)) return;
@@ -360,6 +369,7 @@ export function workOrderModal(v, company) {
       <h3>Orden de trabajo · ${esc(v.id)}</h3>
       <div class="row">
         ${v.email ? `<button class="btn btn-primary btn-sm" data-send>✉️ Enviar al cliente</button>` : ''}
+        <button class="btn btn-sm" data-pdf>⭳ Descargar PDF</button>
         <button class="btn btn-sm" data-print>🖨 Imprimir</button>
         <button class="icon-btn" data-close>✕</button>
       </div>
@@ -401,6 +411,18 @@ export function workOrderModal(v, company) {
     </div>`;
   node.querySelector('[data-close]').onclick = closeModal;
   node.querySelector('[data-print]').onclick = () => window.print();
+  const pdfBtn = node.querySelector('[data-pdf]');
+  if (pdfBtn) pdfBtn.onclick = async () => {
+    pdfBtn.disabled = true; const orig = pdfBtn.textContent; pdfBtn.textContent = 'Generando…';
+    try {
+      const bytes = await store.ordenPdfBytes(v._uid);
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = `orden_${v.id}.pdf`; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    } catch (e) { toast(e.message || 'No se pudo descargar la OT', 'info'); }
+    pdfBtn.disabled = false; pdfBtn.textContent = orig;
+  };
   const send = node.querySelector('[data-send]');
   if (send) send.onclick = async () => {
     send.disabled = true; send.textContent = 'Enviando…';
