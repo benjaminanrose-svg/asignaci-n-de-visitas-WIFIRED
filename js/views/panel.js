@@ -14,7 +14,7 @@ const STATUS_COLORS = {
 };
 
 // Estado de la vista (persiste entre re-render reactivos)
-const pstate = { periodo: 'todo' };
+const pstate = { periodo: 'todo', perfOpen: true, openTecs: new Set() };
 const PERIODOS = [
   ['hoy', 'Hoy'], ['semana', 'Semana'], ['mes', 'Mes'], ['anio', 'Año'], ['todo', 'Todo'],
 ];
@@ -174,6 +174,13 @@ export function renderPanel(root) {
 
   // selector de período
   root.querySelectorAll('[data-per]').forEach((b) => (b.onclick = () => { pstate.periodo = b.dataset.per; renderPanel(root); }));
+  // recordar plegado/expandido del rendimiento por técnico (persiste al refrescar datos)
+  const perfCard = root.querySelector('[data-perfcard]');
+  if (perfCard) perfCard.addEventListener('toggle', () => { pstate.perfOpen = perfCard.open; });
+  root.querySelectorAll('details[data-tec]').forEach((d) => d.addEventListener('toggle', () => {
+    const k = d.getAttribute('data-tec');
+    if (d.open) pstate.openTecs.add(k); else pstate.openTecs.delete(k);
+  }));
   // filas de próximas visitas
   root.querySelectorAll('[data-open]').forEach((el) => {
     el.onclick = () => {
@@ -183,7 +190,7 @@ export function renderPanel(root) {
   });
 }
 
-// ---------- Rendimiento por técnico (total, completadas, por tipo) ----------
+// ---------- Rendimiento por técnico (colapsable, con avance por técnico) ----------
 function rendimientoTecnicos(vs) {
   const map = {};
   vs.forEach((v) => {
@@ -194,21 +201,52 @@ function rendimientoTecnicos(vs) {
     if (v.tipo) g.tipos[v.tipo] = (g.tipos[v.tipo] || 0) + 1;
   });
   const rows = Object.entries(map)
-    .map(([k, g]) => ({ k, ...g, name: parseTecnico(k).short }))
+    .map(([k, g]) => ({ k, ...g, name: parseTecnico(k).short, rate: g.total ? Math.round((g.comp / g.total) * 100) : 0 }))
     .sort((a, b) => b.comp - a.comp || b.total - a.total);
-  return `
-    <div class="section card">
-      <div class="card-head"><h3>Rendimiento por técnico</h3><span class="muted-sm">${esc(periodoLabel())} · trabajos realizados y por tipo</span></div>
-      <div class="card-pad">
-        ${rows.length ? rows.map((r) => {
-          const tipos = Object.entries(r.tipos).sort((a, b) => b[1] - a[1]);
-          return `<div class="perf-row">
-            <div class="perf-tec">${techAvatar(r.k)}<div style="min-width:0"><div class="cell-strong truncate">${esc(r.name)}</div><div class="cell-sub">${r.comp} completada${r.comp === 1 ? '' : 's'} · ${r.total} en total</div></div></div>
-            <div class="perf-tipos">${tipos.map(([t, n]) => `<span class="tag" title="${esc(t)}">${esc(t)} · <b>${n}</b></span>`).join('') || '<span class="muted-sm">—</span>'}</div>
-          </div>`;
-        }).join('') : '<p class="muted" style="padding:12px 0">Sin visitas asignadas en este período.</p>'}
+
+  const totComp = rows.reduce((s, r) => s + r.comp, 0);
+
+  const items = rows.length ? rows.map((r) => {
+    const tipos = Object.entries(r.tipos).sort((a, b) => b[1] - a[1]);
+    const maxT = Math.max(1, ...tipos.map(([, n]) => n));
+    const isOpen = pstate.openTecs.has(r.k);
+    return `<details class="perf-item" data-tec="${esc(r.k)}"${isOpen ? ' open' : ''}>
+      <summary class="perf-sum">
+        <span class="perf-ava">${techAvatar(r.k)}</span>
+        <span class="perf-id">
+          <span class="cell-strong truncate">${esc(r.name)}</span>
+          <span class="cell-sub">${r.comp} de ${r.total} completada${r.total === 1 ? '' : 's'}</span>
+        </span>
+        <span class="perf-meter" title="${r.rate}% completadas">
+          <span class="perf-meter-track"><span class="perf-meter-fill" style="width:${r.rate}%"></span></span>
+          <span class="perf-rate">${r.rate}%</span>
+        </span>
+        <span class="perf-chev" aria-hidden="true">⌄</span>
+      </summary>
+      <div class="perf-body">
+        ${tipos.length ? `<div class="perf-breakdown">${tipos.map(([t, n]) => `
+          <div class="mini-bar">
+            <span class="mb-label" title="${esc(t)}">${esc(t)}</span>
+            <span class="mb-track"><span class="mb-fill" style="width:${(n / maxT) * 100}%"></span></span>
+            <span class="mb-val">${n}</span>
+          </div>`).join('')}</div>` : '<p class="muted-sm" style="padding:4px 2px">Sin tipos registrados en este período.</p>'}
       </div>
-    </div>`;
+    </details>`;
+  }).join('') : '<p class="muted" style="padding:12px 0">Sin visitas asignadas en este período.</p>';
+
+  return `
+    <details class="section card perf-card" data-perfcard${pstate.perfOpen !== false ? ' open' : ''}>
+      <summary class="card-head perf-head">
+        <h3>Rendimiento por técnico</h3>
+        <span class="perf-head-meta">
+          <span class="muted-sm">${esc(periodoLabel())} · ${rows.length} técnico${rows.length === 1 ? '' : 's'} · ${totComp} completada${totComp === 1 ? '' : 's'}</span>
+          <span class="perf-chev" aria-hidden="true">⌄</span>
+        </span>
+      </summary>
+      <div class="card-pad perf-list">
+        ${items}
+      </div>
+    </details>`;
 }
 
 // ---------- Estadísticas por nodo ----------
