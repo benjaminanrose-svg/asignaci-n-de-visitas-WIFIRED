@@ -21,7 +21,7 @@ function applyCompany() {
   company = e ? { ...COMPANY, ...e, fonos: Array.isArray(e.fonos) && e.fonos.length ? e.fonos : COMPANY.fonos } : { ...COMPANY };
 }
 
-let state = { visitas: [], tecnicos: [], config: { bloques: [], tipos: [], estados: [], prioridades: ['Alta', 'Media', 'Baja'], nodos: [], evidencia_email: '', empresa: null } };
+let state = { visitas: [], tecnicos: [], config: { bloques: [], tipos: [], estados: [], prioridades: ['Alta', 'Media', 'Baja'], nodos: [], empresa: null } };
 let me = null;
 let persistent = true;
 let queue = load(QUEUE, []);

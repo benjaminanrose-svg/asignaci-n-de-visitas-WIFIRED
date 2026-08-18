@@ -196,45 +196,6 @@ async function sendGeneric({ to, subject, html, attachment }) {
   } catch (e) { return { ok: false, reason: 'Envío: ' + e.message }; }
 }
 
-/** Documento HTML autocontenido con la nota y las fotos de la visita */
-function evidenciaHTML(v, company) {
-  const ev = Array.isArray(v.evidencias) ? v.evidencias : [];
-  const nota = v.reagenda_motivo || v.detalle || '';
-  const row = (k, val) => `<div style="font-size:13px;margin:3px 0"><b>${esc(k)}:</b> ${esc(val || '—')}</div>`;
-  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Evidencia ${esc(v.id)}</title></head>
-    <body style="font-family:Arial,Helvetica,sans-serif;max-width:820px;margin:26px auto;padding:0 18px;color:#111">
-      <h1 style="font-size:20px;margin:0 0 4px">WIFIRED · Evidencia de visita</h1>
-      <div style="color:#666;font-size:12px;margin-bottom:18px">${esc(company && company.nombre || 'WIFIRED')} · Generado el ${new Date().toLocaleString('es-CL')}</div>
-      ${row('Orden', v.id)} ${row('Cliente', v.cliente)} ${row('Técnico', v.tecnico)}
-      ${row('Estado', v.estado)} ${row('Fecha', (v.fecha || '') + ' ' + (v.bloque || ''))} ${row('Dirección', v.direccion)}
-      ${v.reagenda_solicitada ? row('Motivo de reagenda', v.reagenda_motivo) : ''}
-      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:26px 0 8px;border-bottom:1px solid #e2e2e2;padding-bottom:5px">Nota del técnico</h2>
-      <div style="white-space:pre-wrap;background:#f6f7f9;border:1px solid #eee;padding:12px 14px;border-radius:8px;font-size:13px">${esc(nota || 'Sin observaciones')}</div>
-      <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:26px 0 8px;border-bottom:1px solid #e2e2e2;padding-bottom:5px">Fotografías (${ev.length})</h2>
-      ${ev.length ? ev.map((e, i) => `<figure style="margin:0 0 16px"><figcaption style="font-size:11px;color:#777;margin-bottom:4px">Foto ${i + 1}${e.tipo ? ' · ' + esc(e.tipo) : ''}</figcaption><img style="max-width:100%;border:1px solid #ccc;border-radius:8px" src="${e.url}"></figure>`).join('') : '<p>Sin fotografías.</p>'}
-    </body></html>`;
-}
-
-/** Envía una copia de la evidencia (nota + fotos) a un correo de archivo */
-async function sendEvidencia(v, company, toEmail) {
-  if (!toEmail) return { ok: false, reason: 'Sin correo de evidencia configurado' };
-  const html = evidenciaHTML(v, company);
-  const b64 = Buffer.from(html, 'utf8').toString('base64');
-  const n = (Array.isArray(v.evidencias) ? v.evidencias.length : 0);
-  const resumen = `<div style="font-family:Arial,sans-serif;color:#111;font-size:14px">
-    <p>Nueva evidencia registrada por el técnico.</p>
-    <p><b>Orden:</b> ${esc(v.id)}<br><b>Cliente:</b> ${esc(v.cliente || '—')}<br>
-    <b>Técnico:</b> ${esc(v.tecnico || '—')}<br><b>Estado:</b> ${esc(v.estado || '—')}<br>
-    <b>Fotos:</b> ${n}</p>
-    <p style="color:#555">Se adjunta el archivo con la nota y las fotografías.</p></div>`;
-  return sendGeneric({
-    to: toEmail,
-    subject: `Evidencia ${v.id} — ${v.cliente || 'Cliente'} (${v.estado || ''})`,
-    html: resumen,
-    attachment: { filename: `evidencia_${v.id}.html`, content: b64 },
-  });
-}
-
 /** Envía al cliente el código (PIN) para validar el cierre de su visita */
 async function sendPin(v, toEmail, pin) {
   if (!toEmail) return { ok: false, reason: 'El cliente no tiene correo registrado' };
@@ -271,4 +232,4 @@ async function sendOrden(v, company) {
   }
 }
 
-module.exports = { sendOrden, sendEvidencia, sendPin, ordenPDF, mailConfigured };
+module.exports = { sendOrden, sendPin, ordenPDF, mailConfigured };

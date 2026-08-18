@@ -4,7 +4,7 @@
 import { initStore, subscribe, currentUser, isPersistent, refresh } from './store.js';
 import * as store from './store.js';
 import { visitFormModal } from './form.js';
-import { visitDetailModal, workOrderModal, openModal, closeModal, downloadEvidence } from './components.js';
+import { visitDetailModal, workOrderModal, openModal, closeModal, downloadHistorialZip } from './components.js';
 import { renderPanel } from './views/panel.js';
 import { renderAgenda } from './views/agenda.js';
 import { renderCalendario } from './views/calendario.js';
@@ -94,13 +94,13 @@ function reqPanel() {
             <span class="cell-strong truncate" style="display:block">${esc(v.cliente || 'Sin nombre')}</span>
             <span class="cell-sub truncate" style="display:block">${esc(parseTecnico(v.tecnico).short)} · ${esc(sub)}</span>
           </span>
-          ${(v.evidencias || []).length ? `<button class="btn btn-sm" data-dl="${esc(v._uid)}" title="Descargar evidencia">⭳</button>` : ''}
+          ${(v.evidencias || []).length ? `<button class="btn btn-sm" data-dl="${esc(v._uid)}" title="Descargar historial (ZIP)">⭳</button>` : ''}
           <button class="btn btn-sm btn-primary" data-open="${esc(v._uid)}">${esVal ? 'Revisar' : 'Reagendar'}</button>
         </div>`;
       }).join('') : '<p class="muted" style="padding:10px 0">No hay pendientes. 🎉</p>'}
     </div>`;
   node.querySelector('[data-close]').onclick = closeModal;
-  node.querySelectorAll('[data-dl]').forEach((b) => (b.onclick = () => { const v = store.byUid(b.dataset.dl); if (v) downloadEvidence(v); }));
+  node.querySelectorAll('[data-dl]').forEach((b) => (b.onclick = async () => { const v = store.byUid(b.dataset.dl); if (v) { try { await downloadHistorialZip(v); } catch (e) { toast('No se pudo generar el ZIP', 'info'); } } }));
   node.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => {
     const v = store.byUid(b.dataset.open);
     closeModal();

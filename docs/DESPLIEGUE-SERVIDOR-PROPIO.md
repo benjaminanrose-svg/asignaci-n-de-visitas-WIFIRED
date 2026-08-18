@@ -213,8 +213,7 @@ chmod +x /root/backup-wifired.sh
 - [ ] Instalar la PWA en un celular ("Agregar a pantalla de inicio").
 - [ ] El técnico **activa notificaciones** y recibe un push al asignarle una visita.
 - [ ] Completar una visita **envía la orden por correo** al cliente.
-- [ ] Completar/cancelar/reagendar **envía la copia de evidencia** al correo configurado
-      (⚙ Configuración → Correo para recibir la evidencia).
+- [ ] Desde el detalle de una visita se puede **descargar el ZIP** con toda la evidencia y la orden en PDF.
 - [ ] Un `git push` a la rama configurada dispara un **redeploy automático**.
 - [ ] El **respaldo diario** genera un archivo en `/root/backups`.
 

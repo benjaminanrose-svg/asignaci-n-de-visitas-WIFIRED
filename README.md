@@ -100,12 +100,10 @@ El sistema ya tiene backend (Express) con **PostgreSQL**. Para activarlo en Rail
 | **Agenda / Asignación** | Tablero visual por día. Se **arrastra** una visita desde "Por asignar" hacia el técnico, o se reorganiza por bloque horario. Navegación por fecha. |
 | **Visitas** | Registro completo con búsqueda y filtros por estado, técnico, bloque y tipo. |
 | **Técnicos** | Carga y desempeño de cada técnico. |
-| **Configuración** | La coordinación edita los **tipos de servicio, bloques horarios, estados, prioridades y nodos** que aparecen al agendar, los **datos de la empresa** para la orden de trabajo, y el **correo que recibe copia de la evidencia**. Todo se guarda en la base de datos. |
+| **Configuración** | La coordinación edita los **tipos de servicio, bloques horarios, estados, prioridades y nodos** que aparecen al agendar, y los **datos de la empresa** para la orden de trabajo. Todo se guarda en la base de datos. |
 | **Orden de trabajo** | Ficha imprimible (copia cliente / técnico) desde cualquier visita, con el formato de WIFIRED. |
 
-> **Evidencia por correo:** cuando un técnico completa, cancela o solicita reagenda, se envía automáticamente una copia (nota + fotos) al correo definido en **Configuración → Correo para recibir la evidencia**, para que quede archivada. Después la evidencia se limpia como siempre al reagendar o cerrar. Requiere el correo del servidor configurado (Brevo/Resend).
-
-> **Historial completo + ZIP:** cada visita guarda una **línea de tiempo** con todos sus eventos (reagendas, notas, cancelación, cierre) y su evidencia (fotos y firmas de cada evento). Desde el detalle de la visita, coordinación puede **descargar un ZIP** con toda la evidencia organizada por evento (`⭳ Descargar todo (ZIP)`). El historial se conserva aunque la evidencia activa se limpie al reagendar.
+> **Historial completo + ZIP:** cada visita guarda una **línea de tiempo** con todos sus eventos (reagendas, notas, cancelación, cierre) y su evidencia (fotos y firmas de cada evento). Desde el detalle de la visita, coordinación puede **descargar un ZIP** con toda la evidencia organizada por evento y la orden de trabajo en PDF (`⭳ Descargar todo (ZIP)`). El historial se conserva íntegro dentro del sistema.
 
 > **Validación con código (PIN):** al **Completar** una visita, el técnico envía un **código de 6 dígitos al correo del cliente**; el cliente se lo dicta y el técnico lo ingresa para poder cerrar la visita (doble firma + validación del cliente). El código es de un solo uso y vence a los 30 minutos. Si el cliente no puede entregarlo, el técnico envía la visita a **coordinación**, que puede **autorizar el cierre** manualmente desde el detalle. Requiere el correo del servidor configurado (Brevo/Resend).
 

@@ -18,7 +18,6 @@ const DEFAULT_CONFIG = {
   estados: SEED.estados,
   prioridades: ['Alta', 'Media', 'Baja'],
   nodos: [],
-  evidencia_email: '',
   empresa: {
     nombre: 'TELECOMUNICACIONES WIFIRED LTDA',
     direccion: 'Av. Libertad, esquina Silva Chávez #701, Melipilla',
@@ -40,7 +39,6 @@ async function loadConfig(getSetting) {
     estados: arr(stored.estados, DEFAULT_CONFIG.estados),
     prioridades: arr(stored.prioridades, DEFAULT_CONFIG.prioridades),
     nodos: arr(stored.nodos, DEFAULT_CONFIG.nodos),
-    evidencia_email: typeof stored.evidencia_email === 'string' ? stored.evidencia_email.trim() : '',
     empresa: { ...DEFAULT_CONFIG.empresa, ...(stored.empresa && typeof stored.empresa === 'object' ? stored.empresa : {}) },
   };
 }

@@ -5,7 +5,7 @@ const express = require('express');
 const path = require('path');
 const { getStore } = require('./db.js');
 const { verifyPassword, signToken, verifyToken } = require('./server-auth.js');
-const { sendOrden, sendEvidencia, sendPin, ordenPDF, mailConfigured } = require('./mailer.js');
+const { sendOrden, sendPin, ordenPDF, mailConfigured } = require('./mailer.js');
 const { publicKey, saveSubscription, notifyTecnicoById } = require('./push.js');
 
 /** Datos de empresa desde la configuración (con respaldo al valor por defecto) */
@@ -165,13 +165,6 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
     }
   }
 
-  // Copia de evidencia al correo de archivo cuando el técnico cierra/pide reagenda/queda pendiente
-  if (req.user.rol === 'tecnico' && (patch.estado === 'Completada' || patch.estado === 'Cancelada' || patch.reagenda_solicitada || patch.validada === 'pendiente')) {
-    const vEv = v;
-    s.getConfig().then((cfg) => {
-      if (cfg.evidencia_email) sendEvidencia(vEv, cfg.empresa || COMPANY, cfg.evidencia_email).catch(() => {});
-    }).catch(() => {});
-  }
   // Aviso push al técnico cuando la coordinación asigna o reagenda
   if (req.user.rol !== 'tecnico') {
     if ('tecnico' in body && body.tecnico) notifyAssign(v, 'asignar');

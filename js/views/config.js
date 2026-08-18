@@ -1,8 +1,8 @@
 // ============================================================
 // WIFIRED · Vista Configuración (sólo coordinación)
 // Edita las listas del formulario de visitas (tipos, bloques,
-// estados, prioridades), los datos de la empresa para la orden
-// de trabajo y el correo que recibe copia de la evidencia.
+// estados, prioridades, nodos) y los datos de la empresa para
+// la orden de trabajo.
 // ============================================================
 import * as store from '../store.js';
 import { esc, toast, bindField, validaEmail } from '../util.js';
@@ -43,16 +43,6 @@ export function renderConfig(root) {
     </div>
 
     <div class="cfg-wrap">
-      <div class="card cfg-card">
-        <h3 class="cfg-title">📧 Correo para recibir la evidencia</h3>
-        <p class="muted-sm">Cuando un técnico completa, cancela o pide reagenda, se enviará una copia de la nota y las fotos a este correo para que quede archivada. Luego la evidencia se limpia como siempre.</p>
-        <div class="field" style="margin-top:10px">
-          <label>Correo de archivo de evidencia</label>
-          <input class="input" type="email" data-evemail value="${esc(cfg.evidencia_email || '')}" placeholder="archivo@wifired.cl">
-        </div>
-        <p class="muted-sm" style="margin-top:8px">Requiere tener el correo configurado en el servidor (Brevo/Resend). Si lo dejas vacío, no se envía nada.</p>
-      </div>
-
       <div class="card cfg-card">
         <h3 class="cfg-title">🧾 Datos de la empresa (orden de trabajo)</h3>
         <div class="form-grid">
@@ -112,18 +102,14 @@ export function renderConfig(root) {
   root.querySelectorAll('[data-remove]').forEach((b) => (b.onclick = () => b.closest('[data-row]').remove()));
 
   // Validación de correos
-  bindField(root.querySelector('[data-evemail]'), { validate: validaEmail, msg: 'Correo inválido' });
   bindField(root.querySelector('[data-emp="email"]'), { validate: validaEmail, msg: 'Correo inválido' });
 
   // Guardar
   const doSave = async (btn) => {
-    const evEmail = (root.querySelector('[data-evemail]').value || '').trim();
     const empEmail = (root.querySelector('[data-emp="email"]').value || '').trim();
-    if (evEmail && !validaEmail(evEmail)) { toast('El correo de archivo de evidencia no es válido', 'info'); return; }
     if (empEmail && !validaEmail(empEmail)) { toast('El correo de contacto de la empresa no es válido', 'info'); return; }
     const empFonos = (root.querySelector('[data-emp="fonos"]').value || '').split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
     const payload = {
-      evidencia_email: (root.querySelector('[data-evemail]').value || '').trim(),
       empresa: {
         nombre: root.querySelector('[data-emp="nombre"]').value.trim(),
         direccion: root.querySelector('[data-emp="direccion"]').value.trim(),
