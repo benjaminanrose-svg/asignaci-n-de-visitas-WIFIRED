@@ -1,0 +1,17 @@
+{
+  "name": "wifired-whatsapp-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bot de WhatsApp de WIFIRED: atiende clientes con un menú y crea tickets en la app.",
+  "main": "whatsapp-bot.js",
+  "scripts": {
+    "start": "node whatsapp-bot.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.26.0"
+  }
+}

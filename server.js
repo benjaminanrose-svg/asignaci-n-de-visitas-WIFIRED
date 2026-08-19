@@ -415,6 +415,26 @@ api.delete('/tickets/:id', auth, soloCoordinador, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Endpoint del bot de WhatsApp: crea tickets con una clave propia (no JWT).
+// El bot corre en el mismo servidor y llega por http://localhost:PORT.
+function requireBotKey(req, res, next) {
+  const key = process.env.BOT_API_KEY;
+  if (!key) return res.status(503).json({ error: 'Bot no configurado (falta BOT_API_KEY)' });
+  if ((req.headers['x-bot-key'] || '') !== key) return res.status(401).json({ error: 'Clave de bot inválida' });
+  next();
+}
+api.post('/bot/ticket', requireBotKey, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.addTicket !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  const b = req.body || {};
+  b.canal = 'whatsapp';
+  if (!b.estado) b.estado = 'Nuevo';
+  if (b.categoria === 'Contratación' && !b.factibilidad) b.factibilidad = 'pendiente';
+  const t = await s.addTicket(b);
+  console.log(`[BOT] ticket ${t.num} creado · ${t.categoria} · ${b.telefono || ''}`);
+  res.status(201).json(t);
+}));
+
 // --- Técnicos (sólo coordinación administra) ---
 api.get('/tecnicos', auth, wrap(async (req, res) => res.json(await (await getStore()).listTecnicos())));
 api.post('/tecnicos', auth, soloCoordinador, wrap(async (req, res) => {
