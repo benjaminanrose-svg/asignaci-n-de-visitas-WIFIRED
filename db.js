@@ -182,6 +182,7 @@ function memoryStore() {
       return outV(v);
     },
     async deleteVisita(id) { visitas = visitas.filter((x) => x.id != id); },
+    async deleteAllVisitas() { const n = visitas.length; visitas = []; return n; },
     async setPin(id, pin) { const v = visitas.find((x) => x.id == id); if (v) { v.pin = pin; v.pin_ts = pin ? Date.now() : 0; } },
     async getPin(id) { const v = visitas.find((x) => x.id == id); return v ? { pin: v.pin || '', ts: v.pin_ts || 0 } : { pin: '', ts: 0 }; },
     async getSetting(k) { return settings[k] ?? null; },
@@ -420,6 +421,7 @@ function pgStore(url) {
       return rows[0] ? outV(rows[0]) : null;
     },
     async deleteVisita(id) { await pool.query('DELETE FROM visitas WHERE id=$1', [id]); },
+    async deleteAllVisitas() { const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM visitas'); await pool.query('DELETE FROM visitas'); return rows[0] ? rows[0].n : 0; },
     async setPin(id, pin) { await pool.query(`UPDATE visitas SET pin=$1, pin_ts = CASE WHEN $1 = '' THEN NULL ELSE now() END WHERE id=$2`, [pin, id]); },
     async getPin(id) { const { rows } = await pool.query('SELECT pin, pin_ts FROM visitas WHERE id=$1', [id]); return rows[0] ? { pin: rows[0].pin || '', ts: rows[0].pin_ts || 0 } : { pin: '', ts: 0 }; },
   };

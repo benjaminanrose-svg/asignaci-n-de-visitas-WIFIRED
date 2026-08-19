@@ -159,6 +159,13 @@ export async function enviarPin(uid, email) {
 /** Obtiene un respaldo completo de los registros (sólo coordinación) */
 export async function getBackup() { return rawApi('GET', '/backup'); }
 
+/** Vacía TODO el historial de visitas (irreversible, sólo coordinación) */
+export async function limpiarHistorial() {
+  const r = await rawApi('POST', '/visitas/limpiar-todo', { confirmar: 'BORRAR TODO' });
+  state.visitas = []; emit();
+  return r;
+}
+
 /** Descarga la orden de trabajo en PDF (la misma que se envía al cliente/soporte). Devuelve Uint8Array */
 export async function ordenPdfBytes(uid) {
   const tk = getToken();

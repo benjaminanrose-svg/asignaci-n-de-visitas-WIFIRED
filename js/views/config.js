@@ -6,6 +6,7 @@
 // ============================================================
 import * as store from '../store.js';
 import { esc, toast, bindField, validaEmail } from '../util.js';
+import { openModal, closeModal } from '../components.js';
 
 /** Editor de lista simple: filas con input + botón eliminar, y "＋ Agregar" */
 function listEditor(key, items) {
@@ -24,6 +25,66 @@ function listEditor(key, items) {
 function collectList(root, key) {
   return Array.from(root.querySelectorAll(`[data-list="${key}"] [data-item]`))
     .map((i) => i.value.trim()).filter(Boolean);
+}
+
+/** Descarga un respaldo completo como archivo JSON. Lanza si falla. */
+async function downloadBackup() {
+  const data = await store.getBackup();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `respaldo_wifired_${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/** Flujo seguro para vaciar el historial: respaldo automático → confirmación escrita → borrado */
+async function wipeFlow(root) {
+  const total = store.visitas().length;
+  if (!total) { toast('El historial ya está vacío.', 'info'); return; }
+
+  // 1) Respaldo automático de seguridad antes de borrar nada
+  toast('Descargando respaldo de seguridad…');
+  try {
+    await downloadBackup();
+  } catch (err) {
+    toast('No se pudo descargar el respaldo. Se canceló el borrado por seguridad.', 'info');
+    return;
+  }
+
+  // 2) Confirmación escrita
+  const node = document.createElement('div');
+  node.innerHTML = `
+    <div class="modal-head"><h3>🧹 Vaciar historial de visitas</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-body">
+      <p>Estás a punto de borrar <b>${total} visita${total === 1 ? '' : 's'}</b>. Esto <b>no se puede deshacer</b>.</p>
+      <p class="muted-sm">✅ Se acaba de descargar un respaldo de seguridad en tu dispositivo.<br>👥 Tus <b>técnicos</b> y tu <b>configuración</b> NO se borran.</p>
+      <p style="margin-top:14px">Para confirmar, escribe <b>BORRAR TODO</b> en el recuadro:</p>
+      <input class="input" data-confirm placeholder="BORRAR TODO" autocomplete="off" style="margin-top:6px">
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-close>Cancelar</button>
+      <div class="grow"></div>
+      <button class="btn btn-danger" data-do disabled>🗑 Borrar definitivamente</button>
+    </div>`;
+  node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+  const input = node.querySelector('[data-confirm]');
+  const doBtn = node.querySelector('[data-do]');
+  input.oninput = () => { doBtn.disabled = input.value.trim().toUpperCase() !== 'BORRAR TODO'; };
+  doBtn.onclick = async () => {
+    doBtn.disabled = true; doBtn.textContent = 'Borrando…';
+    try {
+      const r = await store.limpiarHistorial();
+      closeModal();
+      toast(`Historial vaciado ✓ (${r && r.borradas != null ? r.borradas : total} visitas borradas)`);
+      renderConfig(root);
+    } catch (err) {
+      toast(err.message || 'No se pudo vaciar el historial', 'info');
+      doBtn.disabled = false; doBtn.textContent = '🗑 Borrar definitivamente';
+    }
+  };
+  openModal(node, 'sm', { dismissable: false });
+  setTimeout(() => input.focus(), 50);
 }
 
 export function renderConfig(root) {
@@ -100,6 +161,12 @@ export function renderConfig(root) {
         <button class="btn" data-backup style="margin-top:10px">⭳ Descargar respaldo completo ahora</button>
       </div>
 
+      <div class="card cfg-card cfg-danger">
+        <h3 class="cfg-title">🧹 Empezar de cero (vaciar historial)</h3>
+        <p class="muted-sm">Borra <b>todas</b> las visitas para arrancar con las asignaciones reales. <b>No borra</b> tus técnicos ni tu configuración. Antes de borrar, el sistema descarga solo un respaldo de todo por seguridad. <b style="color:var(--danger,#ef4444)">Esta acción no se puede deshacer.</b></p>
+        <button class="btn btn-danger" data-wipe style="margin-top:10px">🗑 Vaciar historial de visitas…</button>
+      </div>
+
       <div class="cfg-footbar">
         <button class="btn btn-primary" data-save>Guardar cambios</button>
       </div>
@@ -124,17 +191,14 @@ export function renderConfig(root) {
   root.querySelector('[data-backup]').onclick = async (e) => {
     const btn = e.currentTarget; btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Generando…';
     try {
-      const data = await store.getBackup();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `respaldo_wifired_${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      await downloadBackup();
       toast('Respaldo descargado ✓');
     } catch (err) { toast(err.message || 'No se pudo generar el respaldo', 'info'); }
     btn.disabled = false; btn.textContent = orig;
   };
+
+  // Vaciar historial (empezar de cero) — con respaldo previo y confirmación escrita
+  root.querySelector('[data-wipe]').onclick = () => wipeFlow(root);
 
   // Guardar
   const doSave = async (btn) => {

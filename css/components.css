@@ -255,6 +255,9 @@ table.data tbody tr:hover { background: var(--surface-2); }
 .tech-card .tstat strong { display:block; font-size: 20px; font-weight: 800; }
 .tech-card .tstat span { font-size: 10.5px; color: var(--text-3); font-weight:600; }
 
+/* ---------- Danger zone (config) ---------- */
+.cfg-danger { border-color: color-mix(in srgb, var(--st-canc-dot) 45%, var(--border)); border-left: 4px solid var(--st-canc-dot); background: color-mix(in srgb, var(--st-canc-dot) 5%, var(--surface)); }
+
 /* ---------- Clients ---------- */
 .cli-grid { display:grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); margin-top: 4px; }
 .cli-card { padding: 16px; text-align:left; cursor:pointer; border-left: 4px solid var(--brand-500); transition: box-shadow .15s, transform .1s; display:block; width:100%; }

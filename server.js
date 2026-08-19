@@ -374,6 +374,17 @@ api.get('/backup', auth, soloCoordinador, wrap(async (req, res) => {
   res.send(JSON.stringify(data, null, 2));
 }));
 
+// Vaciar TODO el historial de visitas (sólo coordinación). Irreversible:
+// exige la frase de confirmación exacta en el cuerpo para evitar accidentes.
+// No toca técnicos ni configuración; sólo borra las visitas.
+api.post('/visitas/limpiar-todo', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.deleteAllVisitas !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  if (!req.body || req.body.confirmar !== 'BORRAR TODO') return res.status(400).json({ error: 'Confirmación requerida' });
+  const n = await s.deleteAllVisitas();
+  res.json({ ok: true, borradas: n });
+}));
+
 api.delete('/visitas/:id', auth, soloCoordinador, wrap(async (req, res) => {
   await (await getStore()).deleteVisita(req.params.id); res.json({ ok: true });
 }));
