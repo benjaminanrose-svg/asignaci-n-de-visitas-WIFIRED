@@ -153,14 +153,34 @@ export function validaEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test((e 
  * @param {HTMLInputElement} input
  * @param {{validate:(v:string)=>boolean, format?:(v:string)=>string, msg?:string, required?:boolean}} opt
  */
-export function bindField(input, { validate, format, msg = 'Dato inválido', required = false } = {}) {
+export function bindField(input, { validate, format, msg = 'Dato inválido', required = false, okMsg = '' } = {}) {
   if (!input) return;
+  // Mensaje en vivo justo debajo del campo (rojo si es inválido, verde si es válido)
+  let hint = input.parentNode && input.parentNode.querySelector(':scope > .field-hint');
+  if (!hint && input.parentNode) {
+    hint = document.createElement('div');
+    hint.className = 'field-hint';
+    hint.style.display = 'none';
+    input.insertAdjacentElement('afterend', hint);
+  }
+  const setHint = (state, text) => {
+    if (!hint) return;
+    hint.textContent = text || '';
+    hint.className = 'field-hint' + (state ? ' ' + state : '');
+    hint.style.display = text ? '' : 'none';
+  };
   const run = () => {
     const val = input.value.trim();
-    if (!val) { input.setCustomValidity(required ? (msg || 'Campo obligatorio') : ''); input.classList.remove('input-bad'); return; }
+    if (!val) {
+      input.setCustomValidity(required ? (msg || 'Campo obligatorio') : '');
+      input.classList.remove('input-bad', 'input-ok');
+      setHint('', ''); return;
+    }
     const ok = validate ? validate(val) : true;
     input.setCustomValidity(ok ? '' : msg);
     input.classList.toggle('input-bad', !ok);
+    input.classList.toggle('input-ok', ok);
+    setHint(ok ? 'ok' : 'bad', ok ? okMsg : msg);
   };
   input.addEventListener('input', run);
   input.addEventListener('blur', () => {

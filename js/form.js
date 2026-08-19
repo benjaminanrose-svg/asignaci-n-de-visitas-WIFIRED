@@ -87,9 +87,9 @@ export function visitFormModal(existing = null, prefill = {}) {
 
   // Validación en vivo (RUT chileno, teléfono y correo). Los campos son opcionales:
   // solo se valida cuando el usuario escribe algo.
-  bindField(node.querySelector('[name=rut]'), { validate: validaRut, format: formatRut, msg: 'RUT inválido (revisa el dígito verificador)' });
-  bindField(node.querySelector('[name=telefono]'), { validate: validaFono, format: formatFono, msg: 'Teléfono inválido (debe tener 9 dígitos)' });
-  bindField(node.querySelector('[name=email]'), { validate: validaEmail, msg: 'Correo inválido' });
+  bindField(node.querySelector('[name=rut]'), { validate: validaRut, format: formatRut, msg: '⚠ RUT inválido o inexistente (revisa el dígito verificador)', okMsg: '✓ RUT válido' });
+  bindField(node.querySelector('[name=telefono]'), { validate: validaFono, format: formatFono, msg: '⚠ Teléfono inválido (debe tener 9 dígitos)', okMsg: '✓ Teléfono válido' });
+  bindField(node.querySelector('[name=email]'), { validate: validaEmail, msg: '⚠ Correo inválido', okMsg: '✓ Correo válido' });
 
   node.querySelector('[data-save]').onclick = async () => {
     const form = node.querySelector('#visit-form');
@@ -118,5 +118,5 @@ export function visitFormModal(existing = null, prefill = {}) {
     }
   };
 
-  openModal(node, 'md');
+  openModal(node, 'md', { dismissable: false });
 }

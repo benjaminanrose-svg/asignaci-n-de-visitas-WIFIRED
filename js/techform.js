@@ -96,5 +96,5 @@ export function techFormModal(existing = null) {
     }
   };
 
-  openModal(node, 'md');
+  openModal(node, 'md', { dismissable: false });
 }

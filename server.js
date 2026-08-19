@@ -95,6 +95,14 @@ api.get('/bootstrap', auth, wrap(async (req, res) => {
   res.json({ visitas, tecnicos, config, me, persistent, mail });
 }));
 
+// --- Revisión ligera: firma corta para saber si hubo cambios (sin transferir fotos) ---
+api.get('/rev', auth, wrap(async (req, res) => {
+  const s = await getStore();
+  const forTec = req.user.rol === 'tecnico' ? await techDisplay(req.user) : null;
+  const rev = await s.revSignature(forTec);
+  res.json({ rev });
+}));
+
 // --- Visitas ---
 // El técnico completa/cancela, deja notas, SOLICITA reagenda, adjunta evidencias y firmas
 const CAMPOS_TECNICO = ['detalle', 'reagenda_solicitada', 'reagenda_motivo', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'historial'];

@@ -19,7 +19,8 @@ export function reagendarModal(v) {
         <div class="field"><label>Nueva fecha</label><input class="input" type="date" name="fecha" value="${esc(v.fecha || todayISO())}"></div>
         <div class="field"><label>Bloque horario</label><select class="select" name="bloque">${store.bloques().map((b) => `<option ${b === v.bloque ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select></div>
         <div class="field"><label>Técnico</label><select class="select" name="tecnico"><option value="">Sin asignar</option>${store.tecnicos().map((t) => `<option ${t === v.tecnico ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
-        <div class="field"><label>Estado</label><select class="select" name="estado">${['Programada', 'Pendiente', 'Reprogramada'].map((s) => `<option ${s === 'Programada' ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div>
+        <div class="field"><label>Estado</label><select class="select" name="estado">${['Reprogramada', 'Programada', 'Pendiente'].map((s) => `<option ${s === 'Reprogramada' ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div>
+        <div class="field full"><label>Nota / motivo de la reprogramación *</label><textarea class="textarea" name="nota" required placeholder="Ej: reprogramada a pedido del cliente, nueva coordinación de fecha…">${esc(v.reagenda_motivo || '')}</textarea></div>
       </div>
     </div>
     <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-save>Confirmar nueva fecha</button></div>`;
@@ -34,8 +35,12 @@ export function reagendarModal(v) {
     const fecha = node.querySelector('[name=fecha]').value;
     const bloque = node.querySelector('[name=bloque]').value;
     const tecnico = node.querySelector('[name=tecnico]').value;
+    const notaEl = node.querySelector('[name=nota]');
+    const nota = (notaEl.value || '').trim();
+    if (!nota) { toast('Deja una nota o motivo de la reprogramación', 'info'); notaEl.focus(); return; }
     const autor = (store.currentUser() && store.currentUser().nombre) || 'Coordinación';
-    const hist = JSON.stringify((v.historial || []).concat([{ ts: Date.now(), autor, tipo: 'reagendada', detalle: `Nueva fecha: ${fecha} ${bloque}${tecnico ? ' · ' + tecnico : ''}` }]));
+    const detalle = `Nueva fecha: ${fecha} ${bloque}${tecnico ? ' · ' + tecnico : ''} — ${nota}`;
+    const hist = JSON.stringify((v.historial || []).concat([{ ts: Date.now(), autor, tipo: 'reagendada', detalle, motivo: nota }]));
     store.updateVisita(v._uid, {
       fecha, bloque, tecnico,
       estado: node.querySelector('[name=estado]').value,
@@ -43,7 +48,7 @@ export function reagendarModal(v) {
     });
     toast('Visita reagendada'); closeModal();
   };
-  openModal(node, 'md');
+  openModal(node, 'md', { dismissable: false });
 }
 
 // ---------------- Historial completo de la visita ----------------
@@ -222,20 +227,35 @@ export function visitCard(v) {
 }
 
 // ---------------- Modal system ----------------
-export function openModal(node, size = 'md') {
+// dismissable:true  → tocar fuera o Escape cierra (para modales de sólo lectura).
+// dismissable:false → los formularios NO se cierran por accidente: hay que usar
+//                     “Cancelar” o la ✕, así nunca se pierde lo que se escribió.
+export function openModal(node, size = 'md', { dismissable = true } = {}) {
   const root = document.getElementById('modal-root');
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
+  overlay.dataset.dismissable = dismissable ? '1' : '0';
   const modal = document.createElement('div');
   modal.className = `modal ${size}`;
   modal.appendChild(node);
   overlay.appendChild(modal);
-  overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) closeModal(); });
+  overlay.addEventListener('mousedown', (e) => {
+    if (e.target !== overlay) return;
+    if (dismissable) { closeModal(); return; }
+    // Formulario con datos: no cerrar; dar un aviso claro y una pequeña sacudida
+    modal.classList.remove('modal-nudge'); void modal.offsetWidth; modal.classList.add('modal-nudge');
+    toast('Usa “Cancelar” o la ✕ para cerrar (así no pierdes lo que escribiste)', 'info');
+  });
   document.addEventListener('keydown', escClose);
   root.appendChild(overlay);
   return overlay;
 }
-function escClose(e) { if (e.key === 'Escape') closeModal(); }
+function escClose(e) {
+  if (e.key !== 'Escape') return;
+  const overlay = document.querySelector('#modal-root .modal-overlay');
+  if (overlay && overlay.dataset.dismissable === '0') return; // formularios: sólo cierran con Cancelar/✕
+  closeModal();
+}
 export function closeModal() {
   const root = document.getElementById('modal-root');
   root.innerHTML = '';

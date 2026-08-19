@@ -212,6 +212,12 @@ export async function saveConfig(patch) {
   return nueva;
 }
 
+// ---------- Chequeo ligero de cambios (para refrescar sólo cuando hace falta) ----------
+export async function checkRev() {
+  const r = await rawApi('GET', '/rev');
+  return r && r.rev;
+}
+
 // ---------- Auto-actualización (multi-usuario) ----------
 function signature() {
   return state.visitas.map((v) => v._uid + v.estado + v.tecnico + v.fecha + v.prioridad + (v.reagenda_solicitada ? '1' : '0') + (v.evidencias ? v.evidencias.length : 0)).join('|')

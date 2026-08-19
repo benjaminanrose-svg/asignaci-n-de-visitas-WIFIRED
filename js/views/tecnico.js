@@ -151,9 +151,9 @@ function completarModal(uid) {
       <p class="muted-sm" style="margin-bottom:14px">${esc(v.id)} · ${esc(v.cliente)} · ${esc(v.tipo)}</p>
       <div class="field"><label>Correo del cliente (recibe el código y la orden) *</label>
         <input class="input" type="email" name="email" value="${esc(v.email || '')}" placeholder="cliente@correo.com"></div>
-      <div class="field" style="margin-top:12px"><label>Observación del trabajo</label>
-        <textarea class="textarea" name="detalle" placeholder="Trabajo realizado, equipos, mediciones…">${esc(v.detalle || '')}</textarea></div>
-      <div class="field" style="margin-top:12px"><label>Evidencia fotográfica (opcional)</label><div data-photos></div></div>
+      <div class="field" style="margin-top:12px"><label>Observación del trabajo *</label>
+        <textarea class="textarea" name="detalle" required placeholder="Trabajo realizado, equipos, mediciones…">${esc(v.detalle || '')}</textarea></div>
+      <div class="field" style="margin-top:12px"><label>Evidencia fotográfica * <span class="muted-sm">(al menos una foto)</span></label><div data-photos></div></div>
       <div class="field" style="margin-top:14px"><label>Firma del cliente *</label><div data-sig-cliente></div></div>
       <div class="field" style="margin-top:6px"><label>Firma del técnico</label><div data-sig-tecnico></div></div>
 
@@ -182,6 +182,14 @@ function completarModal(uid) {
   const pinArea = node.querySelector('[data-pin-area]');
   const sendBtn = node.querySelector('[data-send-pin]');
   bindField(emailEl, { validate: validaEmail, msg: 'Correo inválido' });
+
+  // Nota y al menos una foto son obligatorias para cerrar la visita
+  const faltaNotaFoto = () => {
+    const detEl = node.querySelector('[name=detalle]');
+    if (!detEl.value.trim()) { toast('Escribe la observación del trabajo', 'info'); detEl.focus(); return true; }
+    if (!picker.getPhotos().length) { toast('Agrega al menos una foto de evidencia', 'info'); return true; }
+    return false;
+  };
 
   // Reúne el parche común (evidencia, firmas, nota, historial)
   const buildPatch = (extra, tipo) => {
@@ -216,6 +224,7 @@ function completarModal(uid) {
   node.querySelector('[data-reenviar]').onclick = (e) => enviarPin(e.currentTarget);
 
   node.querySelector('[data-validar]').onclick = async (e) => {
+    if (faltaNotaFoto()) return;
     if (sigC.isEmpty()) { toast('Falta la firma del cliente', 'info'); return; }
     const pin = (node.querySelector('[name=pin]').value || '').trim();
     if (!pin) { toast('Ingresa el código que recibió el cliente', 'info'); return; }
@@ -230,13 +239,14 @@ function completarModal(uid) {
   };
 
   node.querySelector('[data-fallback]').onclick = () => {
+    if (faltaNotaFoto()) return;
     if (sigC.isEmpty()) { toast('Toma la firma del cliente antes de enviar a coordinación', 'info'); return; }
     if (!confirm('Se enviará a coordinación para que autoricen el cierre sin código. ¿Continuar?')) return;
     store.updateVisita(uid, buildPatch({ validada: 'pendiente' }, 'validacion_pendiente'));
     toast('Enviada a coordinación para autorizar ✓'); closeModal();
   };
 
-  openModal(node, 'lg');
+  openModal(node, 'lg', { dismissable: false });
 }
 
 // ---------- Cancelar (con motivo + evidencia) ----------
@@ -249,19 +259,20 @@ function cancelarModal(uid) {
       <p class="muted-sm" style="margin-bottom:14px">${esc(v.cliente)} · ${esc(v.tipo)}</p>
       <div class="field"><label>Motivo de la cancelación *</label>
         <textarea class="textarea" name="motivo" placeholder="Ej: cliente desistió, dirección inexistente…" required>${esc(v.detalle || '')}</textarea></div>
-      <div class="field" style="margin-top:12px"><label>Evidencia fotográfica (opcional)</label><div data-photos></div></div>
+      <div class="field" style="margin-top:12px"><label>Evidencia fotográfica * <span class="muted-sm">(al menos una foto)</span></label><div data-photos></div></div>
     </div>
     <div class="modal-foot"><button class="btn" data-close>Volver</button><button class="btn btn-danger" data-save>✕ Cancelar visita</button></div>`;
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
   const picker = attachPicker(node);
   node.querySelector('[data-save]').onclick = () => {
     const motivo = node.querySelector('[name=motivo]').value.trim();
-    if (!motivo) { node.querySelector('[name=motivo]').focus(); return; }
+    if (!motivo) { toast('Escribe el motivo de la cancelación', 'info'); node.querySelector('[name=motivo]').focus(); return; }
     const fotos = picker.getPhotos();
+    if (!fotos.length) { toast('Agrega al menos una foto de evidencia', 'info'); return; }
     store.updateVisita(uid, { estado: 'Cancelada', detalle: motivo, evidencias: evJSON(v, fotos, 'cancelada'), historial: histJSON(v, { tipo: 'cancelada', estado: 'Cancelada', motivo, fotos }) });
     toast('Visita cancelada', 'info'); closeModal();
   };
-  openModal(node, 'md');
+  openModal(node, 'md', { dismissable: false });
 }
 
 // ---------- Solicitar reagenda (con motivo + evidencia) ----------
@@ -274,7 +285,7 @@ function solicitarModal(uid) {
       <p class="muted-sm" style="margin-bottom:14px">${esc(v.cliente)} · ${esc(v.tipo)}</p>
       <div class="field"><label>Motivo de la solicitud *</label>
         <textarea class="textarea" name="motivo" placeholder="Ej: cliente no se encontraba, falta de poste, coordinar otro día…" required></textarea></div>
-      <div class="field" style="margin-top:12px"><label>Evidencia fotográfica (opcional)</label><div data-photos></div></div>
+      <div class="field" style="margin-top:12px"><label>Evidencia fotográfica * <span class="muted-sm">(al menos una foto)</span></label><div data-photos></div></div>
       <p class="muted-sm" style="margin-top:10px">Coordinación revisará tu solicitud y asignará una nueva fecha.</p>
     </div>
     <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-save>Enviar solicitud</button></div>`;
@@ -282,12 +293,13 @@ function solicitarModal(uid) {
   const picker = attachPicker(node);
   node.querySelector('[data-save]').onclick = () => {
     const motivo = node.querySelector('[name=motivo]').value.trim();
-    if (!motivo) { node.querySelector('[name=motivo]').focus(); return; }
+    if (!motivo) { toast('Escribe el motivo de la solicitud', 'info'); node.querySelector('[name=motivo]').focus(); return; }
     const fotos = picker.getPhotos();
+    if (!fotos.length) { toast('Agrega al menos una foto de evidencia', 'info'); return; }
     store.updateVisita(uid, { reagenda_solicitada: 'true', reagenda_motivo: motivo, estado: 'Pendiente', evidencias: evJSON(v, fotos, 'reagenda'), historial: histJSON(v, { tipo: 'reagenda', motivo, fotos }) });
     toast('Solicitud de reagenda enviada'); closeModal();
   };
-  openModal(node, 'md');
+  openModal(node, 'md', { dismissable: false });
 }
 
 // ---------- Nota ----------
@@ -306,5 +318,5 @@ function notaModal(uid) {
     store.updateVisita(uid, { detalle, historial: histJSON(v, { tipo: 'nota', detalle }) });
     toast('Nota guardada'); closeModal();
   };
-  openModal(node, 'md');
+  openModal(node, 'md', { dismissable: false });
 }

@@ -79,6 +79,20 @@ const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'te
 /** evidencias / historial se guardan como JSON (texto) y se exponen como arreglo */
 function parseEv(s) { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 
+/** Hash corto (determinístico) para detectar cambios sin transferir toda la data */
+function revHash(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return String(h >>> 0);
+}
+/** Firma corta a partir de campos ligeros de una visita (sin base64) */
+function visitSigPart(v) {
+  const len = (x) => (x == null ? 0 : String(x).length);
+  return [v.id, v.estado, v.tecnico, v.fecha, v.prioridad, v.reagenda_solicitada ? 1 : 0,
+    v.validada, len(v.detalle), len(v.evidencias), len(v.historial),
+    v.firma_cliente ? 1 : 0, v.firma_tecnico ? 1 : 0].join('~');
+}
+
 const { hashPassword, slugUser } = require('./server-auth.js');
 const ADMIN_USER = process.env.ADMIN_USER || 'coordinacion';
 const ADMIN_PASS = process.env.ADMIN_PASS || 'wifired2026';
@@ -150,6 +164,10 @@ function memoryStore() {
     },
     async deleteTecnico(id) { tecnicos = tecnicos.filter((x) => x.id != id); },
     async listVisitas() { return visitas.map(outV); },
+    async revSignature(forTecnico) {
+      const list = forTecnico ? visitas.filter((v) => v.tecnico === forTecnico) : visitas;
+      return revHash(list.length + '|' + list.map(visitSigPart).join('|'));
+    },
     async addVisita(d) {
       const ot = nextOt(visitas.map((x) => x.ot));
       const v = { id: ++vSeq, ot, ...pick(d) };
@@ -362,6 +380,20 @@ function pgStore(url) {
     async listVisitas() {
       const { rows } = await pool.query('SELECT * FROM visitas ORDER BY id DESC');
       return rows.map(outV);
+    },
+    async revSignature(forTecnico) {
+      // Sólo columnas ligeras (sin base64): detecta cambios sin leer las fotos
+      const where = forTecnico ? 'WHERE tecnico=$1' : '';
+      const params = forTecnico ? [forTecnico] : [];
+      const { rows } = await pool.query(
+        `SELECT id, estado, tecnico, fecha, prioridad, reagenda_solicitada, validada,
+                COALESCE(length(detalle),0) AS dl, COALESCE(length(evidencias),0) AS el,
+                COALESCE(length(historial),0) AS hl,
+                (COALESCE(firma_cliente,'')<>'')::int AS fc, (COALESCE(firma_tecnico,'')<>'')::int AS ft
+         FROM visitas ${where} ORDER BY id DESC`, params);
+      const part = (r) => [r.id, r.estado, r.tecnico, r.fecha, r.prioridad, r.reagenda_solicitada ? 1 : 0,
+        r.validada, r.dl, r.el, r.hl, r.fc, r.ft].join('~');
+      return revHash(rows.length + '|' + rows.map(part).join('|'));
     },
     async addVisita(d) {
       const { rows: ex } = await pool.query('SELECT ot FROM visitas');

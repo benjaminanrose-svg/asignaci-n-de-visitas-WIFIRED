@@ -4,7 +4,7 @@
 // ============================================================
 import * as store from '../store.js';
 import { esc, parseTecnico, fmtDateShort, todayISO, parseDate, prioRank } from '../util.js';
-import { statusBadge, techAvatar, visitDetailModal, workOrderModal } from '../components.js';
+import { statusBadge, techAvatar, visitDetailModal, workOrderModal, openModal, closeModal } from '../components.js';
 import { visitFormModal } from '../form.js';
 
 const STATUS_COLORS = {
@@ -174,6 +174,19 @@ export function renderPanel(root) {
 
   // selector de período
   root.querySelectorAll('[data-per]').forEach((b) => (b.onclick = () => { pstate.periodo = b.dataset.per; renderPanel(root); }));
+  // KPIs clicables → abren la lista de visitas que engloban
+  const kpiSets = {
+    total: { title: 'Todas las visitas', list: vs },
+    pend: { title: 'Visitas pendientes', list: vs.filter((v) => v.estado === 'Pendiente') },
+    prog: { title: 'Visitas programadas', list: vs.filter((v) => v.estado === 'Programada') },
+    comp: { title: 'Visitas completadas', list: vs.filter((v) => v.estado === 'Completada') },
+    repr: { title: 'Reprogramadas / canceladas', list: vs.filter((v) => ['Reprogramada', 'Cancelada'].includes(v.estado)) },
+  };
+  root.querySelectorAll('[data-kpi]').forEach((c) => {
+    const open = () => openKpiList(kpiSets[c.dataset.kpi]);
+    c.onclick = open;
+    c.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+  });
   // recordar plegado/expandido del rendimiento por técnico (persiste al refrescar datos)
   const perfCard = root.querySelector('[data-perfcard]');
   if (perfCard) perfCard.addEventListener('toggle', () => { pstate.perfOpen = perfCard.open; });
@@ -276,8 +289,9 @@ function estadisticasNodos(vs) {
 }
 
 function kpi(kind, ico, val, label, sub) {
+  const clickable = val > 0;
   return `
-  <div class="card kpi i-${kind}">
+  <div class="card kpi i-${kind} ${clickable ? 'kpi-clickable' : ''}" ${clickable ? `data-kpi="${kind}" role="button" tabindex="0" title="Ver las ${esc(label.toLowerCase())}"` : ''}>
     <div class="kpi-top">
       <div>
         <div class="kpi-val">${val}</div>
@@ -286,7 +300,28 @@ function kpi(kind, ico, val, label, sub) {
       <div class="kpi-ico">${ico}</div>
     </div>
     <div class="kpi-sub">${esc(sub)}</div>
+    ${clickable ? '<div class="kpi-see">Ver visitas →</div>' : ''}
   </div>`;
+}
+
+// Abre un modal con la lista de visitas de un KPI; cada fila abre el detalle
+function openKpiList({ title, list }) {
+  const sorted = list.slice().sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0) || prioRank(a.prioridad) - prioRank(b.prioridad));
+  const node = document.createElement('div');
+  node.innerHTML = `
+    <div class="modal-head"><h3>${esc(title)} · ${sorted.length}</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-body">
+      ${sorted.length ? `<div class="kpi-vlist">${sorted.map(proxRow).join('')}</div>` : '<p class="muted" style="padding:16px 0">No hay visitas en esta categoría para el período seleccionado.</p>'}
+    </div>
+    <div class="modal-foot"><span class="muted-sm">Toca una visita para ver su detalle</span><div class="grow"></div><button class="btn" data-close>Cerrar</button></div>`;
+  node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+  node.querySelectorAll('[data-open]').forEach((el) => (el.onclick = () => {
+    const v = store.byUid(el.dataset.open);
+    if (!v) return;
+    closeModal();
+    visitDetailModal(v, { onEdit: (x) => visitFormModal(x), onOrder: (x) => workOrderModal(x, store.company) });
+  }));
+  openModal(node, 'md');
 }
 
 function proxRow(v) {

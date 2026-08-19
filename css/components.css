@@ -92,6 +92,15 @@
 .kpi.i-prog  { --k: #8b5cf6; }
 .kpi.i-comp  { --k: var(--st-comp-dot); }
 .kpi.i-repr  { --k: var(--st-repr-dot); }
+/* KPI clicable: abre la lista de visitas que engloba */
+.kpi.kpi-clickable { cursor: pointer; }
+.kpi.kpi-clickable:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: color-mix(in srgb, var(--k) 55%, var(--border)); }
+.kpi.kpi-clickable:active { transform: translateY(-1px); }
+.kpi .kpi-see { font-size: 11px; font-weight: 700; color: var(--k); opacity: .9; margin-top: 2px; }
+.kpi.kpi-clickable:focus-visible { outline: 2px solid var(--k); outline-offset: 2px; }
+
+/* Lista de visitas dentro del modal del KPI */
+.kpi-vlist { display:flex; flex-direction:column; }
 .kpi.i-total .kpi-ico { background: var(--st-prog-bg); color: var(--st-prog-fg); }
 .kpi.i-pend  .kpi-ico { background: var(--st-pend-bg); color: var(--st-pend-fg); }
 .kpi.i-prog  .kpi-ico { background: #ede9fe; color:#6d28d9; }
@@ -148,6 +157,13 @@ table.data tbody tr:hover { background: var(--surface-2); }
 .hist-intro { margin-bottom: 12px; padding: 10px 14px; background: var(--surface-2); border: 1px solid var(--border-2); border-radius: 10px; }
 .input.input-bad { border-color: #ef4444; }
 .input.input-bad:focus { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.16); }
+.input.input-ok { border-color: #10b981; }
+.input.input-ok:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.16); }
+/* Mensaje de validación en vivo, debajo del campo */
+.field-hint { font-size: 11.5px; font-weight: 600; line-height: 1.3; margin-top: -1px; }
+.field-hint.bad { color: #dc2626; }
+.field-hint.ok  { color: #059669; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .field-hint.bad{ color:#f87171; } :root:not([data-theme="light"]) .field-hint.ok{ color:#34d399; } }
 .textarea { width: 100%; resize: vertical; min-height: 76px; font-family: inherit; }
 .seg { display:inline-flex; background: var(--surface-2); border:1px solid var(--border); border-radius: 10px; padding: 3px; gap: 2px; }
 .seg button { border:0; background:transparent; padding: 7px 13px; border-radius: 8px; font-weight:600; font-size:13px; cursor:pointer; color: var(--text-2); }
@@ -225,6 +241,9 @@ table.data tbody tr:hover { background: var(--surface-2); }
 }
 .modal.md { max-width: 620px; }
 .modal.lg { max-width: 860px; }
+/* Sacudida sutil cuando se intenta cerrar un formulario tocando fuera */
+.modal.modal-nudge { animation: modalNudge .3s ease; }
+@keyframes modalNudge { 0%,100%{ transform:translateX(0);} 20%{ transform:translateX(-7px);} 40%{ transform:translateX(6px);} 60%{ transform:translateX(-4px);} 80%{ transform:translateX(3px);} }
 .modal-head { padding: 20px 24px; border-bottom: 1px solid var(--border-2); display:flex; align-items:center; justify-content:space-between; gap: 12px; }
 .modal-head h3 { font-size: 17px; font-weight: 800; }
 .modal-body { padding: 22px 24px; overflow-y: auto; min-height: 0; }

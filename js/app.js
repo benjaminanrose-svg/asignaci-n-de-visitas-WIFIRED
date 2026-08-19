@@ -179,12 +179,23 @@ async function startApp() {
   setupOnlineOfflineListeners();
   render();
 
-  // Auto-actualización suave: no interrumpe si hay un modal abierto o edición en curso
-  setInterval(() => {
-    if (document.getElementById('modal-root').children.length) return;
-    if (document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
-    refresh();
-  }, 30000);
+  // Auto-actualización rápida y liviana: cada 8 s se consulta una "firma" mínima
+  // (sin fotos). Sólo si cambió —o pasó 1 min— se descarga todo. Así las
+  // novedades del técnico aparecen en segundos sin gastar datos de más.
+  let lastRev = null; let lastFull = 0;
+  setInterval(async () => {
+    if (document.getElementById('modal-root').children.length) return; // no interrumpir un modal abierto
+    if (document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; // ni una edición
+    if (!navigator.onLine || store.pendingCount() > 0) return;
+    try {
+      const rev = await store.checkRev();
+      const now = Date.now();
+      if (rev !== lastRev || now - lastFull > 60000) {
+        lastRev = rev; lastFull = now;
+        await refresh();
+      }
+    } catch (e) { /* sin conexión momentánea: se reintenta al siguiente ciclo */ }
+  }, 8000);
 }
 
 function boot() {
