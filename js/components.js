@@ -1,7 +1,7 @@
 // ============================================================
 // WIFIRED · Componentes de UI reutilizables + modales
 // ============================================================
-import { esc, parseTecnico, fmtDate, bloqueShort, colorFor, initials, telLink, waLink, todayISO, toast } from './util.js';
+import { esc, parseTecnico, fmtDate, fmtDateShort, bloqueShort, colorFor, initials, telLink, waLink, todayISO, toast, limpiaRut, normalizaFono, formatRut } from './util.js';
 import { openPhoto } from './photos.js';
 import { downloadZip, dataUriToBytes } from './zip.js';
 import * as store from './store.js';
@@ -262,9 +262,93 @@ export function closeModal() {
   document.removeEventListener('keydown', escClose);
 }
 
+// ---------------- Ficha / historial del cliente ----------------
+function normName(s) { return (s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+
+/**
+ * Devuelve todas las visitas del mismo cliente que la visita `v`.
+ * Usa el identificador más fuerte disponible, en orden: RUT → teléfono → nombre.
+ * Así se agrupa de forma predecible sin mezclar clientes distintos.
+ */
+export function clientVisits(v) {
+  const all = store.visitas();
+  const rut = limpiaRut(v.rut);
+  if (rut && rut.length >= 2) return all.filter((x) => limpiaRut(x.rut) === rut);
+  const fono = normalizaFono(v.telefono);
+  if (fono) return all.filter((x) => normalizaFono(x.telefono) === fono);
+  const name = normName(v.cliente);
+  if (name) return all.filter((x) => normName(x.cliente) === name);
+  return [v];
+}
+
+/** Modal con la ficha del cliente: sus datos y todas sus visitas registradas */
+export function clientCardModal(v, opts = {}) {
+  const visitas = clientVisits(v).slice()
+    .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || String(b.id).localeCompare(String(a.id)));
+  const n = visitas.length;
+  const by = (f) => visitas.filter(f).length;
+  const activas = by((x) => ['Pendiente', 'Programada', 'Reprogramada'].includes(x.estado));
+  const comp = by((x) => x.estado === 'Completada');
+  const canc = by((x) => x.estado === 'Cancelada');
+
+  // Datos de identidad: se toma el más reciente que tenga cada campo
+  const first = (getter) => { for (const x of visitas) { const val = getter(x); if (val) return val; } return ''; };
+  const rut = first((x) => x.rut);
+  const fono = first((x) => x.telefono);
+  const email = first((x) => x.email);
+  const dir = first((x) => x.direccion);
+  const ident = [rut ? '🪪 ' + esc(formatRut(rut)) : '', fono ? '📞 ' + esc(fono) : '', email ? '✉️ ' + esc(email) : '']
+    .filter(Boolean).join('  ·  ');
+
+  const pill = (cls, num, label) => `<div class="ds-pill ${cls}"><span class="ds-dot"></span><span class="ds-n">${num}</span><span class="ds-l">${esc(label)}</span></div>`;
+
+  const row = (x) => {
+    const tt = parseTecnico(x.tecnico);
+    const esActual = x._uid === v._uid;
+    return `<button class="day-row" data-open="${esc(x._uid)}" style="width:100%;text-align:left${esActual ? ';background:var(--surface-2)' : ''}">
+      <span style="flex:1; min-width:0">
+        <span class="cell-strong truncate" style="display:block">${esc(x.tipo || 'Visita')} <span class="muted-sm" style="font-weight:400">· ${esc(x.id)}</span>${esActual ? ' <span class="tag">esta visita</span>' : ''}</span>
+        <span class="cell-sub truncate" style="display:block">${esc(fmtDateShort(x.fecha))}${x.tecnico ? ' · ' + esc(tt.short) : ' · sin asignar'}${x.direccion ? ' · ' + esc(x.direccion) : ''}</span>
+      </span>
+      <span style="flex-shrink:0">${statusBadge(x.estado)}</span>
+    </button>`;
+  };
+
+  const node = document.createElement('div');
+  node.innerHTML = `
+    <div class="modal-head">
+      <div style="min-width:0">
+        <div class="row" style="gap:10px">${clientAvatar(v.cliente)}<h3 class="truncate">${esc(v.cliente || 'Sin nombre')}</h3></div>
+        ${ident ? `<div class="muted-sm" style="margin-top:6px">${ident}</div>` : ''}
+      </div>
+      <button class="icon-btn" data-close>✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="day-summary" style="margin-bottom:14px">
+        ${pill('ds-total', n, n === 1 ? 'visita' : 'visitas')}
+        ${pill('ds-comp', comp, 'completadas')}
+        ${pill('ds-prog', activas, 'activas')}
+        ${pill('ds-repr', canc, 'canceladas')}
+      </div>
+      ${dir ? `<div class="muted-sm" style="margin-bottom:12px">📍 <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dir + ', Melipilla, Chile')}" target="_blank" rel="noopener" style="color:var(--brand-500)">${esc(dir)} · ver mapa ›</a></div>` : ''}
+      <div class="hist-head" style="margin-bottom:6px"><span class="ev-title">🗂 Todas sus visitas (${n})</span></div>
+      <div class="kpi-vlist">${visitas.map(row).join('')}</div>
+    </div>
+    <div class="modal-foot"><span class="muted-sm">Toca una visita para ver su detalle</span><div class="grow"></div><button class="btn" data-close>Cerrar</button></div>`;
+  node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+  node.querySelectorAll('[data-open]').forEach((el) => (el.onclick = () => {
+    const x = store.byUid(el.dataset.open);
+    if (!x) return;
+    closeModal();
+    visitDetailModal(x, opts);
+  }));
+  openModal(node, 'md');
+}
+
 // ---------------- Detalle de visita ----------------
 export function visitDetailModal(v, { onEdit, onOrder, readOnly = false } = {}) {
   const t = parseTecnico(v.tecnico);
+  const otrasCliente = clientVisits(v).length;
   const node = document.createElement('div');
   node.innerHTML = `
     <div class="modal-head">
@@ -274,6 +358,7 @@ export function visitDetailModal(v, { onEdit, onOrder, readOnly = false } = {}) 
           ${statusBadge(v.estado)}
         </div>
         <h3 style="margin-top:6px">${esc(v.cliente || 'Sin nombre')}</h3>
+        ${otrasCliente >= 2 ? `<button class="btn btn-sm" data-clientcard style="margin-top:8px">📋 Ficha del cliente · ${otrasCliente} visitas</button>` : ''}
       </div>
       <button class="icon-btn" data-close>✕</button>
     </div>
@@ -308,6 +393,8 @@ export function visitDetailModal(v, { onEdit, onOrder, readOnly = false } = {}) 
       <button class="btn ${v.reagenda_solicitada ? '' : 'btn-primary'}" data-edit>✎ Editar</button>`}
     </div>`;
   node.querySelector('[data-close]').onclick = closeModal;
+  const ccBtn = node.querySelector('[data-clientcard]');
+  if (ccBtn) ccBtn.onclick = () => { closeModal(); clientCardModal(v, { onEdit, onOrder, readOnly }); };
   const editBtn = node.querySelector('[data-edit]');
   if (editBtn) editBtn.onclick = () => { closeModal(); onEdit && onEdit(v); };
   node.querySelector('[data-order]').onclick = () => { closeModal(); onOrder && onOrder(v); };
