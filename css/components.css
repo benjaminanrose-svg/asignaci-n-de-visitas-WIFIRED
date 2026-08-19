@@ -255,6 +255,13 @@ table.data tbody tr:hover { background: var(--surface-2); }
 .tech-card .tstat strong { display:block; font-size: 20px; font-weight: 800; }
 .tech-card .tstat span { font-size: 10.5px; color: var(--text-3); font-weight:600; }
 
+/* ---------- Clients ---------- */
+.cli-grid { display:grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); margin-top: 4px; }
+.cli-card { padding: 16px; text-align:left; cursor:pointer; border-left: 4px solid var(--brand-500); transition: box-shadow .15s, transform .1s; display:block; width:100%; }
+.cli-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,.18); transform: translateY(-1px); }
+.cli-count { flex:0 0 auto; min-width: 30px; height: 30px; padding: 0 8px; border-radius: 999px; background: var(--surface-2); border:1px solid var(--border-2); color: var(--text-2); font-weight: 800; font-size: 13px; display:grid; place-items:center; }
+.cli-foot { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-2); }
+
 /* ---------- Modal ---------- */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(15,23,42,.5);

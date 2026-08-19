@@ -9,6 +9,7 @@ import { renderPanel } from './views/panel.js';
 import { renderAgenda } from './views/agenda.js';
 import { renderCalendario } from './views/calendario.js';
 import { renderVisitas } from './views/visitas.js';
+import { renderClientes } from './views/clientes.js';
 import { renderTecnicos } from './views/tecnicos.js';
 import { renderConfig } from './views/config.js';
 import { renderTecnico } from './views/tecnico.js';
@@ -22,10 +23,11 @@ const ROUTES = {
   agenda:     { title: 'Agenda / Asignación', render: renderAgenda },
   calendario: { title: 'Calendario',          render: renderCalendario },
   visitas:    { title: 'Historial de visitas', render: renderVisitas },
+  clientes:   { title: 'Clientes',            render: renderClientes },
   tecnicos:   { title: 'Técnicos',            render: renderTecnicos },
   config:     { title: 'Configuración',       render: renderConfig },
 };
-const REACTIVE = ['panel', 'agenda', 'calendario', 'visitas', 'tecnicos', 'mis-visitas'];
+const REACTIVE = ['panel', 'agenda', 'calendario', 'visitas', 'clientes', 'tecnicos', 'mis-visitas'];
 
 const viewEl = document.getElementById('view');
 const titleEl = document.getElementById('page-title');

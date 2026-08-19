@@ -3,7 +3,7 @@
 // Precachea toda la app al instalar (funciona sin internet desde
 // la primera apertura) y actualiza en segundo plano cuando hay red.
 // ============================================================
-const CACHE = 'wifired-v17';
+const CACHE = 'wifired-v18';
 
 const ASSETS = [
   '/', '/index.html', '/manifest.webmanifest',
@@ -12,7 +12,7 @@ const ASSETS = [
   '/js/components.js', '/js/form.js', '/js/techform.js', '/js/photos.js',
   '/js/signature.js', '/js/push.js', '/js/zip.js',
   '/js/views/panel.js', '/js/views/agenda.js', '/js/views/calendario.js',
-  '/js/views/visitas.js', '/js/views/tecnicos.js', '/js/views/tecnico.js',
+  '/js/views/visitas.js', '/js/views/clientes.js', '/js/views/tecnicos.js', '/js/views/tecnico.js',
   '/js/views/config.js', '/js/views/login.js',
   '/icons/icon-192.png', '/icons/icon-512.png',
 ];
