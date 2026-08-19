@@ -21,7 +21,7 @@ function applyCompany() {
   company = e ? { ...COMPANY, ...e, fonos: Array.isArray(e.fonos) && e.fonos.length ? e.fonos : COMPANY.fonos } : { ...COMPANY };
 }
 
-let state = { visitas: [], tecnicos: [], config: { bloques: [], tipos: [], estados: [], prioridades: ['Alta', 'Media', 'Baja'], nodos: [], empresa: null } };
+let state = { visitas: [], tecnicos: [], tickets: [], config: { bloques: [], tipos: [], estados: [], prioridades: ['Alta', 'Media', 'Baja'], nodos: [], empresa: null } };
 let me = null;
 let persistent = true;
 let queue = load(QUEUE, []);
@@ -29,7 +29,7 @@ const listeners = new Set();
 
 function load(k, def) { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch (e) { return def; } }
 function saveQueue() { try { localStorage.setItem(QUEUE, JSON.stringify(queue)); } catch (e) {} }
-function saveCache() { try { localStorage.setItem(CACHE, JSON.stringify({ visitas: state.visitas, tecnicos: state.tecnicos, config: state.config, me })); } catch (e) {} }
+function saveCache() { try { localStorage.setItem(CACHE, JSON.stringify({ visitas: state.visitas, tecnicos: state.tecnicos, tickets: state.tickets, config: state.config, me })); } catch (e) {} }
 
 export function currentUser() { return me; }
 export function isCoordinador() { return me && me.rol === 'coordinador'; }
@@ -58,7 +58,7 @@ async function rawApi(method, url, body) {
 export async function initStore() {
   try {
     const data = await rawApi('GET', '/bootstrap');
-    state.visitas = data.visitas; state.tecnicos = data.tecnicos; state.config = data.config; me = data.me || null;
+    state.visitas = data.visitas; state.tecnicos = data.tecnicos; state.tickets = data.tickets || []; state.config = data.config; me = data.me || null;
     persistent = data.persistent !== false;
     applyCompany();
     saveCache();
@@ -66,7 +66,7 @@ export async function initStore() {
   } catch (e) {
     if (e.auth) throw e;
     const c = load(CACHE, null); // sin conexión: usar caché
-    if (c) { state.visitas = c.visitas; state.tecnicos = c.tecnicos; state.config = c.config; me = c.me; applyCompany(); }
+    if (c) { state.visitas = c.visitas; state.tecnicos = c.tecnicos; state.tickets = c.tickets || []; state.config = c.config; me = c.me; applyCompany(); }
     else throw e;
   }
   return state;
@@ -215,6 +215,40 @@ export async function deleteTecnico(id) {
   catch (e) { state.tecnicos = prev; emit(); toast(e.message, 'info'); }
 }
 
+// ---------- Tickets de atención ----------
+export function ticketsList() { return state.tickets; }
+export function ticketByUid(uid) { return state.tickets.find((t) => t._uid === uid); }
+
+export async function addTicket(data) {
+  try {
+    const t = await rawApi('POST', '/tickets', data);
+    state.tickets.unshift(t); emit();
+    return t;
+  } catch (e) { toast(e.message, 'info'); throw e; }
+}
+
+export async function updateTicket(uid, patch) {
+  const idx = state.tickets.findIndex((t) => t._uid === uid);
+  const prev = idx >= 0 ? state.tickets[idx] : null;
+  if (idx >= 0) { state.tickets[idx] = { ...prev, ...patch }; emit(); } // optimista
+  try {
+    const t = await rawApi('PUT', '/tickets/' + uid, patch);
+    if (idx >= 0) state.tickets[idx] = t;
+    emit();
+    return t;
+  } catch (e) {
+    if (idx >= 0 && prev) { state.tickets[idx] = prev; emit(); }
+    toast(e.message, 'info'); throw e;
+  }
+}
+
+export async function deleteTicket(uid) {
+  const prev = state.tickets.slice();
+  state.tickets = state.tickets.filter((t) => t._uid !== uid); emit();
+  try { await rawApi('DELETE', '/tickets/' + uid); }
+  catch (e) { state.tickets = prev; emit(); toast(e.message, 'info'); }
+}
+
 // ---------- Configuración ----------
 export async function saveConfig(patch) {
   const nueva = await rawApi('PUT', '/config', patch);
@@ -231,7 +265,8 @@ export async function checkRev() {
 // ---------- Auto-actualización (multi-usuario) ----------
 function signature() {
   return state.visitas.map((v) => v._uid + v.estado + v.tecnico + v.fecha + v.prioridad + (v.reagenda_solicitada ? '1' : '0') + (v.evidencias ? v.evidencias.length : 0)).join('|')
-    + '#' + state.tecnicos.map((t) => t.id + (t.activo ? '1' : '0') + t.display).join('|');
+    + '#' + state.tecnicos.map((t) => t.id + (t.activo ? '1' : '0') + t.display).join('|')
+    + '@' + (state.tickets || []).map((t) => t._uid + t.estado + t.factibilidad + t.categoria + (t.updated_at || '')).join('|');
 }
 /** Refresca datos desde el servidor; re-renderiza sólo si algo cambió */
 export async function refresh() {
@@ -239,7 +274,7 @@ export async function refresh() {
   let data;
   try { data = await rawApi('GET', '/bootstrap'); } catch (e) { return; }
   const before = signature();
-  state.visitas = data.visitas; state.tecnicos = data.tecnicos; state.config = data.config;
+  state.visitas = data.visitas; state.tecnicos = data.tecnicos; state.tickets = data.tickets || []; state.config = data.config;
   me = data.me || me; persistent = data.persistent !== false;
   applyCompany();
   if (signature() !== before) emit(); else saveCache();

@@ -24,23 +24,23 @@ export function visitFormModal(existing = null, prefill = {}) {
         <div class="form-grid">
           <div class="field full">
             <label>Nombre del cliente *</label>
-            <input class="input" name="cliente" required value="${esc(v.cliente || '')}" placeholder="Nombre y apellidos" />
+            <input class="input" name="cliente" required value="${esc(v.cliente || prefill.cliente || '')}" placeholder="Nombre y apellidos" />
           </div>
           <div class="field">
             <label>RUT</label>
-            <input class="input" name="rut" value="${esc(v.rut || '')}" placeholder="12.345.678-9" inputmode="text" autocomplete="off" />
+            <input class="input" name="rut" value="${esc(v.rut || prefill.rut || '')}" placeholder="12.345.678-9" inputmode="text" autocomplete="off" />
           </div>
           <div class="field">
             <label>Teléfono</label>
-            <input class="input" name="telefono" value="${esc(v.telefono || '')}" placeholder="9 1234 5678" inputmode="tel" autocomplete="off" />
+            <input class="input" name="telefono" value="${esc(v.telefono || prefill.telefono || '')}" placeholder="9 1234 5678" inputmode="tel" autocomplete="off" />
           </div>
           <div class="field">
             <label>Correo del cliente</label>
-            <input class="input" type="email" name="email" value="${esc(v.email || '')}" placeholder="cliente@correo.com" autocomplete="off" />
+            <input class="input" type="email" name="email" value="${esc(v.email || prefill.email || '')}" placeholder="cliente@correo.com" autocomplete="off" />
           </div>
           <div class="field full">
             <label>Dirección</label>
-            <input class="input" name="direccion" value="${esc(v.direccion || '')}" placeholder="Sector, parcela, referencia…" />
+            <input class="input" name="direccion" value="${esc(v.direccion || prefill.direccion || '')}" placeholder="Sector, parcela, referencia…" />
           </div>
           <div class="field full">
             <label>Tipo de visita *</label>
@@ -72,7 +72,7 @@ export function visitFormModal(existing = null, prefill = {}) {
           </div>
           <div class="field full">
             <label>Detalle / problema</label>
-            <textarea class="textarea" name="detalle" placeholder="Descripción del trabajo o falla reportada…">${esc(v.detalle || '')}</textarea>
+            <textarea class="textarea" name="detalle" placeholder="Descripción del trabajo o falla reportada…">${esc(v.detalle || prefill.detalle || '')}</textarea>
           </div>
         </div>
       </form>

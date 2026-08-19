@@ -216,7 +216,8 @@ api.get('/bootstrap', auth, wrap(async (req, res) => {
     const mine = visitas.filter((v) => v.tecnico === me.tecnico);
     return res.json({ visitas: mine, tecnicos: tecnicos.filter((t) => t.id === req.user.tecnico_id), config, me, persistent, mail });
   }
-  res.json({ visitas, tecnicos, config, me, persistent, mail });
+  const tickets = typeof s.listTickets === 'function' ? await s.listTickets() : [];
+  res.json({ visitas, tecnicos, config, me, persistent, mail, tickets });
 }));
 
 // --- Revisión ligera: firma corta para saber si hubo cambios (sin transferir fotos) ---
@@ -387,6 +388,31 @@ api.post('/visitas/limpiar-todo', auth, soloCoordinador, wrap(async (req, res) =
 
 api.delete('/visitas/:id', auth, soloCoordinador, wrap(async (req, res) => {
   await (await getStore()).deleteVisita(req.params.id); res.json({ ok: true });
+}));
+
+// --- Tickets de atención (WhatsApp / manual) — sólo coordinación ---
+api.get('/tickets', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  res.json(typeof s.listTickets === 'function' ? await s.listTickets() : []);
+}));
+api.post('/tickets', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.addTicket !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  const b = req.body || {};
+  if (!b.categoria && !b.nombre && !b.mensaje && !b.telefono) return res.status(400).json({ error: 'Faltan datos del ticket' });
+  res.status(201).json(await s.addTicket(b));
+}));
+api.put('/tickets/:id', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.updateTicket !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  const t = await s.updateTicket(req.params.id, req.body || {});
+  if (!t) return res.status(404).json({ error: 'Ticket no encontrado' });
+  res.json(t);
+}));
+api.delete('/tickets/:id', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.deleteTicket === 'function') await s.deleteTicket(req.params.id);
+  res.json({ ok: true });
 }));
 
 // --- Técnicos (sólo coordinación administra) ---

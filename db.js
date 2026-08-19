@@ -78,6 +78,12 @@ function nextOt(existing) {
 
 const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por', 'reagenda_solicitada', 'reagenda_motivo', 'prioridad', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'orden_enviada', 'nodo', 'historial', 'validada', 'aviso_agendada', 'recordatorio_enviado'];
 
+// Campos de un ticket de atención (WhatsApp / manual). Se clasifican por
+// categoría y estado; 'factibilidad' aplica a los de contratación.
+const TICKET_FIELDS = ['categoria', 'estado', 'factibilidad', 'nombre', 'telefono', 'direccion', 'ubicacion', 'mensaje', 'canal', 'notas', 'historial'];
+/** Normaliza el historial (arreglo o texto) a JSON en texto para guardar */
+function evStr(v) { return Array.isArray(v) ? JSON.stringify(v) : (v || '[]'); }
+
 /** evidencias / historial se guardan como JSON (texto) y se exponen como arreglo */
 function parseEv(s) { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 
@@ -122,6 +128,8 @@ function memoryStore() {
   let tSeq = 0;
   let visitas = SEED.visitas.map((v, i) => ({ id: i + 1, ot: v.id, ...pick(v) }));
   let vSeq = visitas.length;
+  let tickets = []; // se empieza desde 0
+  let kSeq = 0;
 
   function pick(v) {
     const o = {};
@@ -135,6 +143,8 @@ function memoryStore() {
   const credsOf = (tid) => { const u = users.find((x) => x.tecnico_id == tid); return { username: u ? u.username : '', password: u ? (u.pass_plain || '') : '' }; };
   const outT = (t) => ({ ...t, display: displayTecnico(t.rol, t.nombre), ...credsOf(t.id) });
   const outV = (v) => { const o = { _uid: String(v.id), id: v.ot, ...pick(v) }; o.prioridad = o.prioridad || 'Media'; o.evidencias = parseEv(o.evidencias); o.historial = parseEv(o.historial); return o; };
+  const pickTk = (d) => { const o = {}; TICKET_FIELDS.forEach((f) => (o[f] = d[f] || '')); o.historial = evStr(d.historial); return o; };
+  const outTk = (t) => { const o = { _uid: String(t.id), num: 'T-' + String(t.id).padStart(4, '0'), created_at: t.created_at, updated_at: t.updated_at, ...pickTk(t) }; o.estado = o.estado || 'Nuevo'; o.categoria = o.categoria || 'Otros'; o.canal = o.canal || 'manual'; o.historial = parseEv(o.historial); return o; };
   const uniqUser = (base, exceptId) => { let u = base || 'tecnico', b = u, i = 2; while (users.some((x) => x.username === u && x.id !== exceptId)) u = `${b}${i++}`; return u; };
 
   return {
@@ -168,7 +178,9 @@ function memoryStore() {
     async listVisitas() { return visitas.map(outV); },
     async revSignature(forTecnico) {
       const list = forTecnico ? visitas.filter((v) => v.tecnico === forTecnico) : visitas;
-      return revHash(list.length + '|' + list.map(visitSigPart).join('|'));
+      let sig = revHash(list.length + '|' + list.map(visitSigPart).join('|'));
+      if (!forTecnico) sig += '.' + revHash(tickets.length + '|' + tickets.map((t) => [t.id, t.estado, t.factibilidad, t.categoria, t.updated_at || ''].join('~')).join('|'));
+      return sig;
     },
     async addVisita(d) {
       const ot = nextOt(visitas.map((x) => x.ot));
@@ -183,6 +195,21 @@ function memoryStore() {
     },
     async deleteVisita(id) { visitas = visitas.filter((x) => x.id != id); },
     async deleteAllVisitas() { const n = visitas.length; visitas = []; return n; },
+    async listTickets() { return tickets.slice().sort((a, b) => b.id - a.id).map(outTk); },
+    async addTicket(d) {
+      const now = new Date().toISOString();
+      const t = { id: ++kSeq, created_at: now, updated_at: now, ...pickTk(d) };
+      if (!t.estado) t.estado = 'Nuevo';
+      tickets.push(t);
+      return outTk(t);
+    },
+    async updateTicket(id, patch) {
+      const t = tickets.find((x) => x.id == id); if (!t) return null;
+      TICKET_FIELDS.forEach((k) => { if (k in patch) t[k] = (k === 'historial') ? evStr(patch[k]) : patch[k]; });
+      t.updated_at = new Date().toISOString();
+      return outTk(t);
+    },
+    async deleteTicket(id) { tickets = tickets.filter((x) => x.id != id); },
     async setPin(id, pin) { const v = visitas.find((x) => x.id == id); if (v) { v.pin = pin; v.pin_ts = pin ? Date.now() : 0; } },
     async getPin(id) { const v = visitas.find((x) => x.id == id); return v ? { pin: v.pin || '', ts: v.pin_ts || 0 } : { pin: '', ts: 0 }; },
     async getSetting(k) { return settings[k] ?? null; },
@@ -229,6 +256,14 @@ function pgStore(url) {
     aviso_agendada: r.aviso_agendada || '', recordatorio_enviado: r.recordatorio_enviado || '',
   });
   const outU = (r) => r ? { id: r.id, username: r.username, pass: r.pass, rol: r.rol, nombre: r.nombre, tecnico_id: r.tecnico_id } : null;
+  const outTk = (r) => ({
+    _uid: String(r.id), num: 'T-' + String(r.id).padStart(4, '0'),
+    created_at: r.created_at, updated_at: r.updated_at,
+    categoria: r.categoria || 'Otros', estado: r.estado || 'Nuevo', factibilidad: r.factibilidad || '',
+    nombre: r.nombre || '', telefono: r.telefono || '', direccion: r.direccion || '',
+    ubicacion: r.ubicacion || '', mensaje: r.mensaje || '', canal: r.canal || 'manual',
+    notas: r.notas || '', historial: parseEv(r.historial),
+  });
   async function credsOf(tid) {
     const { rows } = await pool.query('SELECT username, pass_plain FROM usuarios WHERE tecnico_id=$1', [tid]);
     return rows[0] ? { username: rows[0].username, password: rows[0].pass_plain || '' } : { username: '', password: '' };
@@ -294,6 +329,23 @@ function pgStore(url) {
       await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pass_plain TEXT DEFAULT '';`);
       await pool.query(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);`);
       await pool.query(`CREATE TABLE IF NOT EXISTS push_subs (id SERIAL PRIMARY KEY, user_id INTEGER, endpoint TEXT UNIQUE, sub TEXT);`);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS tickets (
+          id SERIAL PRIMARY KEY,
+          categoria TEXT DEFAULT 'Otros',
+          estado TEXT DEFAULT 'Nuevo',
+          factibilidad TEXT DEFAULT '',
+          nombre TEXT DEFAULT '',
+          telefono TEXT DEFAULT '',
+          direccion TEXT DEFAULT '',
+          ubicacion TEXT DEFAULT '',
+          mensaje TEXT DEFAULT '',
+          canal TEXT DEFAULT 'manual',
+          notas TEXT DEFAULT '',
+          historial TEXT DEFAULT '[]',
+          created_at TIMESTAMPTZ DEFAULT now(),
+          updated_at TIMESTAMPTZ DEFAULT now()
+        );`);
 
       // Reset opcional de técnicos (poner RESET_TECNICOS=1 una vez y redeploy)
       if (process.env.RESET_TECNICOS === '1') {
@@ -399,7 +451,12 @@ function pgStore(url) {
          FROM visitas ${where} ORDER BY id DESC`, params);
       const part = (r) => [r.id, r.estado, r.tecnico, r.fecha, r.prioridad, r.reagenda_solicitada ? 1 : 0,
         r.validada, r.dl, r.el, r.hl, r.fc, r.ft].join('~');
-      return revHash(rows.length + '|' + rows.map(part).join('|'));
+      let sig = revHash(rows.length + '|' + rows.map(part).join('|'));
+      if (!forTecnico) {
+        const { rows: tk } = await pool.query(`SELECT id, estado, factibilidad, categoria, updated_at FROM tickets ORDER BY id DESC`);
+        sig += '.' + revHash(tk.length + '|' + tk.map((t) => [t.id, t.estado, t.factibilidad, t.categoria, t.updated_at ? new Date(t.updated_at).getTime() : ''].join('~')).join('|'));
+      }
+      return sig;
     },
     async addVisita(d) {
       const { rows: ex } = await pool.query('SELECT ot FROM visitas');
@@ -422,6 +479,24 @@ function pgStore(url) {
     },
     async deleteVisita(id) { await pool.query('DELETE FROM visitas WHERE id=$1', [id]); },
     async deleteAllVisitas() { const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM visitas'); await pool.query('DELETE FROM visitas'); return rows[0] ? rows[0].n : 0; },
+    async listTickets() { const { rows } = await pool.query('SELECT * FROM tickets ORDER BY id DESC'); return rows.map(outTk); },
+    async addTicket(d) {
+      const { rows } = await pool.query(
+        `INSERT INTO tickets (categoria,estado,factibilidad,nombre,telefono,direccion,ubicacion,mensaje,canal,notas,historial)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+        [d.categoria || 'Otros', d.estado || 'Nuevo', d.factibilidad || '', d.nombre || '', d.telefono || '',
+         d.direccion || '', d.ubicacion || '', d.mensaje || '', d.canal || 'manual', d.notas || '', evStr(d.historial)]);
+      return outTk(rows[0]);
+    },
+    async updateTicket(id, patch) {
+      const cols = [], vals = []; let i = 1;
+      TICKET_FIELDS.forEach((k) => { if (k in patch) { cols.push(`${k}=$${i++}`); vals.push(k === 'historial' ? evStr(patch[k]) : patch[k]); } });
+      if (!cols.length) return null;
+      cols.push('updated_at=now()'); vals.push(id);
+      const { rows } = await pool.query(`UPDATE tickets SET ${cols.join(', ')} WHERE id=$${i} RETURNING *`, vals);
+      return rows[0] ? outTk(rows[0]) : null;
+    },
+    async deleteTicket(id) { await pool.query('DELETE FROM tickets WHERE id=$1', [id]); },
     async setPin(id, pin) { await pool.query(`UPDATE visitas SET pin=$1, pin_ts = CASE WHEN $1 = '' THEN NULL ELSE now() END WHERE id=$2`, [pin, id]); },
     async getPin(id) { const { rows } = await pool.query('SELECT pin, pin_ts FROM visitas WHERE id=$1', [id]); return rows[0] ? { pin: rows[0].pin || '', ts: rows[0].pin_ts || 0 } : { pin: '', ts: 0 }; },
   };
