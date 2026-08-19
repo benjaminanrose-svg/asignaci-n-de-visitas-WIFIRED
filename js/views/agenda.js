@@ -7,7 +7,7 @@ import { visitCard, techAvatar, visitDetailModal, workOrderModal } from '../comp
 import { visitFormModal } from '../form.js';
 
 // estado local de la vista (persiste durante la sesión de navegación)
-const local = { date: null, mode: 'tecnico' };
+const local = { date: null, mode: 'tecnico', hideEmpty: false };
 
 export function renderAgenda(root) {
   if (!local.date) {
@@ -16,21 +16,28 @@ export function renderAgenda(root) {
     local.date = vs.find((d) => d >= todayISO()) || vs[vs.length - 1] || todayISO();
   }
 
+  const dayVisits = store.visitas().filter((v) => v.fecha === local.date);
+  const esHoy = local.date === todayISO();
+
   root.innerHTML = `
     <div class="board-toolbar">
       <div class="date-nav">
         <button class="icon-btn" data-nav="-1" title="Día anterior">‹</button>
         <input class="input" type="date" id="agenda-date" value="${esc(local.date)}" style="width:auto" />
         <button class="icon-btn" data-nav="1" title="Día siguiente">›</button>
-        <button class="btn btn-sm" data-today>Hoy</button>
+        <button class="btn btn-sm ${esHoy ? 'active-toggle' : ''}" data-today>Hoy</button>
       </div>
-      <div class="cur-date grow" style="text-align:left; padding-left:8px">${esc(fmtDate(local.date, true))}</div>
+      <div class="cur-date grow" style="text-align:left; padding-left:8px">
+        ${esc(fmtDate(local.date, true))}${esHoy ? ' <span class="today-chip">HOY</span>' : ''}
+      </div>
       <div class="seg" id="agenda-mode">
         <button data-mode="tecnico" class="${local.mode === 'tecnico' ? 'active' : ''}">Por técnico</button>
         <button data-mode="bloque" class="${local.mode === 'bloque' ? 'active' : ''}">Por bloque</button>
       </div>
+      ${local.mode === 'tecnico' ? `<button class="btn btn-sm ${local.hideEmpty ? 'active-toggle' : ''}" data-hide-empty>${local.hideEmpty ? '👁 Ver todos' : '⊟ Ocultar sin visitas'}</button>` : ''}
       <button class="btn btn-primary btn-sm" data-new>＋ Nueva visita</button>
     </div>
+    ${daySummary(dayVisits)}
     <div class="board" id="board"></div>`;
 
   // navegación
@@ -38,15 +45,31 @@ export function renderAgenda(root) {
   root.querySelectorAll('[data-nav]').forEach((b) => (b.onclick = () => { local.date = addDays(local.date, +b.dataset.nav); renderAgenda(root); }));
   root.querySelector('[data-today]').onclick = () => { local.date = todayISO(); renderAgenda(root); };
   root.querySelectorAll('#agenda-mode button').forEach((b) => (b.onclick = () => { local.mode = b.dataset.mode; renderAgenda(root); }));
+  const hideBtn = root.querySelector('[data-hide-empty]');
+  if (hideBtn) hideBtn.onclick = () => { local.hideEmpty = !local.hideEmpty; renderAgenda(root); };
   root.querySelector('[data-new]').onclick = () => visitFormModal(null, { fecha: local.date });
 
   const board = root.querySelector('#board');
-  const dayVisits = store.visitas().filter((v) => v.fecha === local.date);
 
   if (local.mode === 'tecnico') buildByTech(board, dayVisits);
   else buildByBloque(board, dayVisits);
 
   wireBoard(board, root);
+}
+
+// Resumen del día: pastillas con el conteo por estado, para leer la carga de un vistazo.
+function daySummary(dayVisits) {
+  const by = (f) => dayVisits.filter(f).length;
+  const items = [
+    { label: 'Del día', n: dayVisits.length, cls: 'ds-total' },
+    { label: 'Por asignar', n: by((v) => !v.tecnico), cls: 'ds-asig' },
+    { label: 'Pendientes', n: by((v) => v.estado === 'Pendiente'), cls: 'ds-pend' },
+    { label: 'Programadas', n: by((v) => v.estado === 'Programada'), cls: 'ds-prog' },
+    { label: 'Completadas', n: by((v) => v.estado === 'Completada'), cls: 'ds-comp' },
+    { label: 'Reprog./Cancel.', n: by((v) => ['Reprogramada', 'Cancelada'].includes(v.estado)), cls: 'ds-repr' },
+  ];
+  return `<div class="day-summary">${items.map((i) => `
+    <div class="ds-pill ${i.cls}"><span class="ds-dot"></span><span class="ds-n">${i.n}</span><span class="ds-l">${i.label}</span></div>`).join('')}</div>`;
 }
 
 function colHead(inner, count, cls = '') {
@@ -57,37 +80,45 @@ function buildByTech(board, dayVisits) {
   // columna "por asignar" (sin técnico)
   const unassigned = dayVisits.filter((v) => !v.tecnico);
   board.appendChild(makeCol('__none__',
-    `<div><div class="ch-name">📥 Por asignar</div><div class="ch-role">Arrastra una visita a un técnico</div></div>`,
+    `<div class="ch-meta"><div class="ch-name">📥 Por asignar</div><div class="ch-role">Arrastra una visita a un técnico</div></div>`,
     unassigned, true));
 
   // una columna por técnico con visitas ese día (o técnicos con carga)
   store.tecnicos().forEach((tec) => {
     const list = dayVisits.filter((v) => v.tecnico === tec);
+    if (local.hideEmpty && !list.length) return; // vista compacta: se omiten los sin visitas
     const t = parseTecnico(tec);
-    const head = `${techAvatar(tec)}<div><div class="ch-name">${esc(t.short)}</div><div class="ch-role">${esc(t.role)}</div></div>`;
-    board.appendChild(makeCol(tec, head, list, false));
+    const done = list.filter((v) => v.estado === 'Completada').length;
+    const sub = list.length ? `${done}/${list.length} completada${done === 1 ? '' : 's'}` : esc(t.role);
+    const head = `${techAvatar(tec)}<div class="ch-meta"><div class="ch-name">${esc(t.short)}</div><div class="ch-role">${sub}</div></div>`;
+    const prog = list.length ? done / list.length : null;
+    board.appendChild(makeCol(tec, head, list, false, prog));
   });
 }
 
 function buildByBloque(board, dayVisits) {
   store.bloques().forEach((b) => {
     const list = dayVisits.filter((v) => v.bloque === b);
-    const head = `<div><div class="ch-name">${esc(b)}</div><div class="ch-role">Bloque horario</div></div>`;
-    board.appendChild(makeCol('bloque::' + b, head, list, false));
+    const done = list.filter((v) => v.estado === 'Completada').length;
+    const head = `<div class="ch-meta"><div class="ch-name">🕑 ${esc(b)}</div><div class="ch-role">${list.length ? `${done}/${list.length} completada${done === 1 ? '' : 's'}` : 'Bloque horario'}</div></div>`;
+    board.appendChild(makeCol('bloque::' + b, head, list, false, list.length ? done / list.length : null));
   });
   const sinB = dayVisits.filter((v) => !v.bloque);
   if (sinB.length) {
-    board.appendChild(makeCol('bloque::', `<div><div class="ch-name">Sin bloque</div></div>`, sinB, true));
+    board.appendChild(makeCol('bloque::', `<div class="ch-meta"><div class="ch-name">Sin bloque</div></div>`, sinB, true));
   }
 }
 
-function makeCol(key, headInner, list, unassigned) {
+function makeCol(key, headInner, list, unassigned, prog = null) {
   list = list.slice().sort((a, b) => prioRank(a.prioridad) - prioRank(b.prioridad)); // mayor prioridad primero
   const col = document.createElement('div');
   col.className = 'col' + (unassigned ? ' is-unassigned' : '');
   col.dataset.col = key;
-  col.innerHTML = colHead(headInner, list.length, '') +
-    `<div class="col-body">${list.length ? list.map(visitCard).join('') : '<div class="col-empty">Sin visitas</div>'}</div>`;
+  const bar = (prog != null)
+    ? `<div class="col-progress" title="${Math.round(prog * 100)}% completado"><span style="width:${Math.round(prog * 100)}%"></span></div>` : '';
+  const empty = unassigned ? '✓ Nada por asignar' : 'Sin visitas';
+  col.innerHTML = colHead(headInner, list.length, '') + bar +
+    `<div class="col-body">${list.length ? list.map(visitCard).join('') : `<div class="col-empty">${empty}</div>`}</div>`;
   return col;
 }
 

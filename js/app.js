@@ -49,6 +49,18 @@ function render() {
   current = currentRoute();
   const route = ROUTES[current];
   titleEl.textContent = route.title;
+  // La búsqueda global sólo tiene sentido en el Historial: se oculta en el resto
+  // de las vistas y, al salir, se limpia para no dejar filtros activos.
+  const searchBox = document.querySelector('.search-box');
+  if (searchBox) {
+    const showSearch = current === 'visitas';
+    searchBox.style.display = showSearch ? '' : 'none';
+    if (!showSearch && ctx.search) {
+      ctx.search = '';
+      const gi = document.getElementById('global-search');
+      if (gi) gi.value = '';
+    }
+  }
   document.querySelectorAll('.nav-item').forEach((a) => a.classList.toggle('active', a.dataset.route === current));
   viewEl.innerHTML = '';
   route.render(viewEl, ctx);

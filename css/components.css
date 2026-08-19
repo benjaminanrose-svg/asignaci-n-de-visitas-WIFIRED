@@ -189,15 +189,41 @@ table.data tbody tr:hover { background: var(--surface-2); }
   border-radius: var(--radius);
   display:flex; flex-direction:column; min-height: 140px;
 }
-.col.is-unassigned { background: color-mix(in srgb, var(--st-pend-bg) 45%, var(--surface)); border-color: color-mix(in srgb, var(--st-pend-dot) 40%, var(--border)); }
+.col.is-unassigned { background: transparent; border-style: dashed; border-color: color-mix(in srgb, var(--st-pend-dot) 55%, var(--border)); }
+.col.is-unassigned .col-head { background: color-mix(in srgb, var(--st-pend-bg) 24%, transparent); border-bottom-color: color-mix(in srgb, var(--st-pend-dot) 30%, var(--border)); }
 .col-head { padding: 13px 15px; display:flex; align-items:center; gap: 10px; border-bottom: 1px solid var(--border); }
 .col-head .avatar-sm { width: 30px; height: 30px; font-size: 11px; border-radius: 9px; flex-shrink:0; display:grid; place-items:center; color:#fff; font-weight:700; }
-.col-head .ch-name { font-weight: 700; font-size: 13.5px; line-height:1.1; }
-.col-head .ch-role { font-size: 11px; color: var(--text-3); }
-.col-head .count { margin-left:auto; background: var(--surface); border:1px solid var(--border); border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 700; }
+.col-head .ch-meta { min-width: 0; }
+.col-head .ch-name { font-weight: 700; font-size: 13.5px; line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.col-head .ch-role { font-size: 11px; color: var(--text-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.col-head .count { margin-left:auto; background: var(--surface); border:1px solid var(--border); border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 700; flex-shrink:0; }
+.col-progress { height: 3px; background: color-mix(in srgb, var(--border) 70%, transparent); overflow:hidden; }
+.col-progress > span { display:block; height:100%; background: var(--st-comp-dot); border-radius: 0 2px 2px 0; transition: width .3s ease; }
 .col-body { padding: 10px; display:flex; flex-direction:column; gap: 9px; min-height: 60px; }
 .col-body.drop-hint { outline: 2px dashed var(--brand-500); outline-offset: -6px; border-radius: var(--radius); }
 .col-empty { text-align:center; color: var(--text-3); font-size: 12.5px; padding: 18px 8px; }
+
+/* ---- Resumen del día (pastillas de conteo) ---- */
+.day-summary { display:flex; flex-wrap:wrap; gap: 10px; margin: 2px 0 18px; }
+.ds-pill {
+  display:flex; align-items:center; gap: 8px;
+  background: var(--surface-2); border:1px solid var(--border);
+  border-radius: 12px; padding: 8px 14px 8px 12px; min-width: 0;
+}
+.ds-pill .ds-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; background: var(--text-3); }
+.ds-pill .ds-n { font-weight: 800; font-size: 16px; line-height:1; letter-spacing:-.3px; }
+.ds-pill .ds-l { font-size: 11.5px; color: var(--text-3); font-weight:600; }
+.ds-total .ds-dot { background: var(--brand-500); }
+.ds-asig  { border-color: color-mix(in srgb, var(--st-pend-dot) 45%, var(--border)); }
+.ds-asig  .ds-dot { background: var(--st-pend-dot); }
+.ds-pend  .ds-dot { background: var(--st-pend-dot); }
+.ds-prog  .ds-dot { background: var(--st-prog-dot); }
+.ds-comp  .ds-dot { background: var(--st-comp-dot); }
+.ds-repr  .ds-dot { background: var(--st-repr-dot); }
+
+/* Chip "HOY" y botón-toggle activo de la barra de agenda */
+.today-chip { font-size: 10.5px; font-weight: 800; color: #fff; background: var(--brand-500); border-radius: 6px; padding: 2px 6px; margin-left: 6px; vertical-align: 2px; letter-spacing:.4px; }
+.btn.active-toggle { background: color-mix(in srgb, var(--brand-500) 16%, var(--surface-2)); border-color: color-mix(in srgb, var(--brand-500) 55%, var(--border)); color: var(--brand-500); font-weight: 700; }
 
 .vcard {
   background: var(--surface); border:1px solid var(--border); border-radius: 11px;
