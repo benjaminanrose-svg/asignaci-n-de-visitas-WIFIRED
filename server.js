@@ -5,7 +5,7 @@ const express = require('express');
 const path = require('path');
 const { getStore } = require('./db.js');
 const { verifyPassword, signToken, verifyToken } = require('./server-auth.js');
-const { sendOrden, sendPin, ordenPDF, mailConfigured } = require('./mailer.js');
+const { sendOrden, sendPin, sendClienteAviso, ordenPDF, mailConfigured } = require('./mailer.js');
 const { publicKey, saveSubscription, notifyTecnicoById } = require('./push.js');
 
 /** Datos de empresa desde la configuración (con respaldo al valor por defecto) */
@@ -24,6 +24,74 @@ async function notifyAssign(v, kind) {
     const cuerpo = `${v.cliente || 'Cliente'} · ${v.tipo || ''}${v.fecha ? ' · ' + v.fecha : ''}`;
     notifyTecnicoById(t.id, { title: titulo, body: cuerpo, url: '/' }).catch(() => {});
   } catch (e) {}
+}
+
+const ESTADOS_ACTIVOS = ['Pendiente', 'Programada', 'Reprogramada'];
+
+/** ¿La coordinación tiene encendidos los avisos automáticos al cliente? */
+async function avisosActivos() {
+  try { const c = await (await getStore()).getConfig(); return c.avisos_cliente !== false; } catch (e) { return true; }
+}
+
+/**
+ * Envía (una sola vez) al cliente el aviso de que su visita quedó agendada.
+ * Se dispara al crear la visita y al asignarle fecha por primera vez.
+ * No bloquea la respuesta: se llama sin await.
+ */
+async function avisarClienteAgendada(v) {
+  try {
+    if (!v || v.aviso_agendada) return;            // ya se avisó antes
+    if (!v.email || !v.fecha) return;              // sin correo o sin fecha no hay qué avisar
+    if (!ESTADOS_ACTIVOS.includes(v.estado)) return;
+    if (!mailConfigured() || !(await avisosActivos())) return;
+    const r = await sendClienteAviso(v, await companyInfo(), 'agendada');
+    if (r.ok) {
+      await (await getStore()).updateVisita(v._uid, { aviso_agendada: new Date().toISOString() });
+      console.log(`[AVISO] agendada enviado a ${v.email} · visita ${v.id}`);
+    } else {
+      console.warn(`[AVISO] agendada NO enviado a ${v.email} · visita ${v.id} · ${r.reason || ''}`);
+    }
+  } catch (e) { console.warn('[AVISO] error agendada:', e.message); }
+}
+
+// ---------- Recordatorio automático del día antes ----------
+/** Fecha de hoy en Chile (YYYY-MM-DD) */
+function hoyChile() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santiago' }); }
+/** Hora (0-23) actual en Chile */
+function horaChile() { return parseInt(new Date().toLocaleString('en-US', { timeZone: 'America/Santiago', hour: '2-digit', hour12: false }), 10) || 0; }
+/** Suma días a una fecha ISO (YYYY-MM-DD) */
+function sumaDiasISO(iso, n) {
+  const p = iso.split('-').map(Number);
+  const d = new Date(p[0], p[1] - 1, p[2] + n);
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+let ultimoRecordatorio = ''; // día (Chile) en que ya se corrió el envío de recordatorios
+const HORA_RECORDATORIO = parseInt(process.env.HORA_RECORDATORIO || '18', 10); // 18:00 Chile por defecto
+
+/** Revisa si toca enviar los recordatorios de mañana y los envía una vez al día */
+async function correrRecordatorios() {
+  try {
+    if (!mailConfigured()) return;
+    const hoy = hoyChile();
+    if (ultimoRecordatorio === hoy) return;         // ya se corrió hoy
+    if (horaChile() < HORA_RECORDATORIO) return;    // aún no es la hora
+    if (!(await avisosActivos())) { ultimoRecordatorio = hoy; return; }
+    ultimoRecordatorio = hoy;
+    const manana = sumaDiasISO(hoy, 1);
+    const s = await getStore();
+    const [visitas, company] = await Promise.all([s.listVisitas(), companyInfo()]);
+    const pendientes = visitas.filter((v) => v.fecha === manana && v.email
+      && ESTADOS_ACTIVOS.includes(v.estado) && v.recordatorio_enviado !== manana);
+    let ok = 0;
+    for (const v of pendientes) {
+      const r = await sendClienteAviso(v, company, 'recordatorio');
+      if (r.ok) { await s.updateVisita(v._uid, { recordatorio_enviado: manana }); ok++; }
+      else console.warn(`[RECORDATORIO] NO enviado a ${v.email} · visita ${v.id} · ${r.reason || ''}`);
+    }
+    if (pendientes.length) console.log(`[RECORDATORIO] ${ok}/${pendientes.length} enviados para ${manana}`);
+  } catch (e) { console.warn('[RECORDATORIO] error:', e.message); }
 }
 
 const COMPANY = {
@@ -118,6 +186,7 @@ api.post('/visitas', auth, soloCoordinador, wrap(async (req, res) => {
   if (data.tecnico) data.asignado_por = req.user.nombre;
   const nueva = await s.addVisita(data);
   if (nueva.tecnico) notifyAssign(nueva, 'asignar');
+  avisarClienteAgendada(nueva); // confirmación al cliente (sin bloquear la respuesta)
   res.status(201).json(nueva);
 }));
 
@@ -177,6 +246,7 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
   if (req.user.rol !== 'tecnico') {
     if ('tecnico' in body && body.tecnico) notifyAssign(v, 'asignar');
     else if ('fecha' in body && v.tecnico) notifyAssign(v, 'reagenda');
+    avisarClienteAgendada(v); // confirmación al cliente si recién ahora tiene fecha (una sola vez)
   }
   res.json({ ...v, _email: email_result });
 }));
@@ -275,5 +345,11 @@ app.use(express.static(__dirname, { etag: true, lastModified: true, setHeaders: 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 getStore()
-  .then(() => app.listen(PORT, '0.0.0.0', () => console.log(`WIFIRED Agenda — servidor en http://0.0.0.0:${PORT}`)))
+  .then(() => app.listen(PORT, '0.0.0.0', () => {
+    console.log(`WIFIRED Agenda — servidor en http://0.0.0.0:${PORT}`);
+    // Recordatorios del día antes: se revisa cada 30 min y se envían una vez al día
+    // (a partir de HORA_RECORDATORIO, hora de Chile). Sin correo configurado no hace nada.
+    correrRecordatorios();
+    setInterval(correrRecordatorios, 30 * 60 * 1000);
+  }))
   .catch((e) => { console.error('Fallo al iniciar:', e); process.exit(1); });

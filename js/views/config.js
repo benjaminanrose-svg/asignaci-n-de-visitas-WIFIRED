@@ -32,6 +32,7 @@ export function renderConfig(root) {
   const cfg = store.configFull() || {};
   const emp = cfg.empresa || {};
   const fonos = Array.isArray(emp.fonos) ? emp.fonos.join(', ') : (emp.fonos || '');
+  const avisos = cfg.avisos_cliente !== false;
 
   root.innerHTML = `
     <div class="section-head">
@@ -52,6 +53,15 @@ export function renderConfig(root) {
           <div class="field"><label>Correo de contacto</label><input class="input" data-emp="email" value="${esc(emp.email || '')}"></div>
           <div class="field"><label>Trabajos autorizados por</label><input class="input" data-emp="autoriza" value="${esc(emp.autoriza || '')}"></div>
         </div>
+      </div>
+
+      <div class="card cfg-card">
+        <h3 class="cfg-title">📧 Avisos automáticos al cliente</h3>
+        <p class="muted-sm">Cuando está encendido, el cliente recibe por correo un aviso al agendarse su visita y un recordatorio el día antes. Requiere tener el correo configurado en el servidor y que la visita tenga correo del cliente.</p>
+        <label class="cfg-switch" style="display:flex;align-items:center;gap:10px;margin-top:10px;cursor:pointer">
+          <input type="checkbox" data-avisos ${avisos ? 'checked' : ''} style="width:18px;height:18px">
+          <span><b>Enviar avisos y recordatorios al cliente</b></span>
+        </label>
       </div>
 
       <div class="card cfg-card">
@@ -122,6 +132,7 @@ export function renderConfig(root) {
       estados: collectList(root, 'estados'),
       prioridades: collectList(root, 'prioridades'),
       nodos: collectList(root, 'nodos'),
+      avisos_cliente: root.querySelector('[data-avisos]').checked,
     };
     if (!payload.tipos.length) { toast('Deja al menos un tipo de servicio', 'info'); return; }
     if (!payload.estados.length) { toast('Deja al menos un estado', 'info'); return; }

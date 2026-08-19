@@ -212,6 +212,56 @@ async function sendPin(v, toEmail, pin) {
   return sendGeneric({ to: toEmail, subject: `Código de validación de su visita ${v.id} — WIFIRED`, html });
 }
 
+// ---------- Avisos al cliente (agendada / recordatorio) ----------
+const DIAS_L = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+/** '2026-08-03' → 'lunes 3 de agosto de 2026' */
+function fmtFechaLarga(iso) {
+  const p = String(iso || '').split('-').map(Number);
+  if (p.length !== 3 || !p[0]) return iso || '';
+  const d = new Date(p[0], p[1] - 1, p[2]);
+  return `${DIAS_L[d.getDay()]} ${d.getDate()} de ${MESES_L[d.getMonth()]} de ${d.getFullYear()}`;
+}
+
+/**
+ * Envía al cliente un aviso de su visita.
+ *   kind='agendada'    → confirmación de que la visita quedó agendada
+ *   kind='recordatorio'→ recordatorio de que la visita es al día siguiente
+ * Devuelve {ok, reason?}. No adjunta PDF.
+ */
+async function sendClienteAviso(v, company, kind) {
+  if (!mailConfigured()) return { ok: false, reason: 'Correo no configurado' };
+  if (!v.email) return { ok: false, reason: 'El cliente no tiene correo registrado' };
+  const co = company || {};
+  const fonos = Array.isArray(co.fonos) ? co.fonos.join(' · ') : (co.fonos || '');
+  const esRec = kind === 'recordatorio';
+  const titulo = esRec ? 'Recordatorio de su visita técnica' : 'Su visita técnica está agendada';
+  const intro = esRec
+    ? 'Le recordamos que <b>mañana</b> tiene programada una visita técnica de <b>WIFIRED</b>:'
+    : 'Su visita técnica con <b>WIFIRED</b> ha quedado agendada con los siguientes datos:';
+  const linea = (k, val) => val ? `<tr><td style="padding:6px 12px 6px 0;color:#666;white-space:nowrap;vertical-align:top">${esc(k)}</td><td style="padding:6px 0;font-weight:600;color:#111">${esc(val)}</td></tr>` : '';
+  const mapa = v.direccion
+    ? `<div style="margin:14px 0"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v.direccion + ', Melipilla, Chile')}" style="color:#0b5cff;text-decoration:none">📍 Ver la dirección en el mapa ›</a></div>` : '';
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111;font-size:14px;max-width:560px;margin:auto">
+    <p>Estimado/a ${esc(v.cliente || '')},</p>
+    <p>${intro}</p>
+    <table style="border-collapse:collapse;margin:8px 0 4px">
+      ${linea('Orden', v.id)}
+      ${linea('Servicio', v.tipo)}
+      ${linea('Fecha', fmtFechaLarga(v.fecha))}
+      ${linea('Horario', v.bloque)}
+      ${linea('Dirección', v.direccion)}
+    </table>
+    ${mapa}
+    <p style="color:#444">Le pedimos procurar que haya una persona mayor de edad en el domicilio durante la visita. Si necesita reprogramar o tiene alguna consulta, comuníquese con nosotros${fonos ? ` al ${esc(fonos)}` : ''}.</p>
+    <p style="color:#555">Saludos cordiales,<br><b>WIFIRED</b> — Telecomunicaciones</p>
+  </div>`;
+  const subject = esRec
+    ? `Recordatorio: su visita técnica WIFIRED es mañana — ${v.id}`
+    : `Su visita técnica WIFIRED está agendada — ${v.id}`;
+  return sendGeneric({ to: v.email, subject, html });
+}
+
 /** Envía la orden firmada (PDF) al correo del cliente. Devuelve {ok, reason?} */
 async function sendOrden(v, company) {
   const p = provider();
@@ -232,4 +282,4 @@ async function sendOrden(v, company) {
   }
 }
 
-module.exports = { sendOrden, sendPin, ordenPDF, mailConfigured };
+module.exports = { sendOrden, sendPin, sendClienteAviso, ordenPDF, mailConfigured };

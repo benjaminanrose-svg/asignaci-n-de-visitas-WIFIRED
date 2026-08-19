@@ -40,6 +40,8 @@ async function loadConfig(getSetting) {
     prioridades: arr(stored.prioridades, DEFAULT_CONFIG.prioridades),
     nodos: arr(stored.nodos, DEFAULT_CONFIG.nodos),
     empresa: { ...DEFAULT_CONFIG.empresa, ...(stored.empresa && typeof stored.empresa === 'object' ? stored.empresa : {}) },
+    // Avisos automáticos por correo al cliente (agendada + recordatorio). Encendidos por defecto.
+    avisos_cliente: stored.avisos_cliente !== false,
   };
 }
 /** Guarda un parche de configuración (fusiona sobre lo actual) */
@@ -74,7 +76,7 @@ function nextOt(existing) {
   return `OT-MEL-2026-${String(n).padStart(3, '0')}`;
 }
 
-const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por', 'reagenda_solicitada', 'reagenda_motivo', 'prioridad', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'orden_enviada', 'nodo', 'historial', 'validada'];
+const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por', 'reagenda_solicitada', 'reagenda_motivo', 'prioridad', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'orden_enviada', 'nodo', 'historial', 'validada', 'aviso_agendada', 'recordatorio_enviado'];
 
 /** evidencias / historial se guardan como JSON (texto) y se exponen como arreglo */
 function parseEv(s) { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
@@ -223,6 +225,7 @@ function pgStore(url) {
     prioridad: r.prioridad || 'Media', evidencias: parseEv(r.evidencias),
     email: r.email || '', firma_cliente: r.firma_cliente || '', firma_tecnico: r.firma_tecnico || '', orden_enviada: r.orden_enviada || '',
     nodo: r.nodo || '', historial: parseEv(r.historial), validada: r.validada || '',
+    aviso_agendada: r.aviso_agendada || '', recordatorio_enviado: r.recordatorio_enviado || '',
   });
   const outU = (r) => r ? { id: r.id, username: r.username, pass: r.pass, rol: r.rol, nombre: r.nombre, tecnico_id: r.tecnico_id } : null;
   async function credsOf(tid) {
@@ -275,6 +278,8 @@ function pgStore(url) {
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS validada TEXT DEFAULT '';`);
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS pin TEXT DEFAULT '';`);
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS pin_ts TIMESTAMPTZ;`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS aviso_agendada TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS recordatorio_enviado TEXT DEFAULT '';`);
       await pool.query(`
         CREATE TABLE IF NOT EXISTS usuarios (
           id SERIAL PRIMARY KEY,
