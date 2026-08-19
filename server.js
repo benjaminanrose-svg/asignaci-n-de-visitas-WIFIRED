@@ -3,9 +3,10 @@
 // ============================================================
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const { getStore } = require('./db.js');
 const { verifyPassword, signToken, verifyToken } = require('./server-auth.js');
-const { sendOrden, sendPin, sendClienteAviso, ordenPDF, mailConfigured } = require('./mailer.js');
+const { sendOrden, sendPin, sendClienteAviso, sendRespaldo, ordenPDF, mailConfigured } = require('./mailer.js');
 const { publicKey, saveSubscription, notifyTecnicoById } = require('./push.js');
 
 /** Datos de empresa desde la configuración (con respaldo al valor por defecto) */
@@ -92,6 +93,61 @@ async function correrRecordatorios() {
     }
     if (pendientes.length) console.log(`[RECORDATORIO] ${ok}/${pendientes.length} enviados para ${manana}`);
   } catch (e) { console.warn('[RECORDATORIO] error:', e.message); }
+}
+
+// ---------- Respaldo de datos ----------
+/**
+ * Arma un respaldo con todos los registros operativos.
+ * light=true quita las fotos/firmas (base64) para que quepa en un correo;
+ * conserva todo el texto (clientes, visitas, asignaciones, estados, notas).
+ */
+async function buildBackup(light) {
+  const s = await getStore();
+  const [visitas, tecnicos, config] = await Promise.all([s.listVisitas(), s.listTecnicos(), s.getConfig()]);
+  const tec = tecnicos.map((t) => ({ id: t.id, rol: t.rol, nombre: t.nombre, telefono: t.telefono, activo: t.activo, display: t.display }));
+  let vis = visitas;
+  if (light) {
+    vis = visitas.map((v) => {
+      const { firma_cliente, firma_tecnico, evidencias, historial, ...rest } = v;
+      return { ...rest, fotos: (evidencias || []).length, eventos: (historial || []).length };
+    });
+  }
+  return { version: 1, exported_at: new Date().toISOString(), visitas: vis, tecnicos: tec, config };
+}
+
+let ultimoRespaldo = ''; // día (Chile) en que ya se corrió el respaldo automático
+const HORA_RESPALDO = parseInt(process.env.HORA_RESPALDO || '3', 10); // 03:00 Chile por defecto
+
+/** Respaldo automático diario: guarda en BACKUP_DIR y/o envía a BACKUP_EMAIL */
+async function correrRespaldo() {
+  try {
+    const dir = process.env.BACKUP_DIR;
+    const email = process.env.BACKUP_EMAIL;
+    if (!dir && !(email && mailConfigured())) return; // nada configurado: no hace nada
+    const hoy = hoyChile();
+    if (ultimoRespaldo === hoy) return;
+    if (horaChile() < HORA_RESPALDO) return;
+    ultimoRespaldo = hoy;
+    const filename = `respaldo_wifired_${hoy}.json`;
+
+    if (dir) {
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, filename), JSON.stringify(await buildBackup(false)));
+        // conservar sólo los últimos 14 respaldos
+        const files = fs.readdirSync(dir).filter((f) => /^respaldo_wifired_.*\.json$/.test(f)).sort();
+        while (files.length > 14) { try { fs.unlinkSync(path.join(dir, files.shift())); } catch (e) {} }
+        console.log(`[RESPALDO] guardado en ${dir}/${filename}`);
+      } catch (e) { console.warn('[RESPALDO] no se pudo escribir archivo:', e.message); }
+    }
+    if (email && mailConfigured()) {
+      const light = await buildBackup(true);
+      const b64 = Buffer.from(JSON.stringify(light, null, 2), 'utf8').toString('base64');
+      const r = await sendRespaldo(email, filename, b64, `${light.visitas.length} visitas · ${light.tecnicos.length} técnicos`);
+      if (r.ok) console.log(`[RESPALDO] enviado por correo a ${email}`);
+      else console.warn(`[RESPALDO] correo NO enviado a ${email} · ${r.reason || ''}`);
+    }
+  } catch (e) { console.warn('[RESPALDO] error:', e.message); }
 }
 
 const COMPANY = {
@@ -310,6 +366,14 @@ api.put('/config', auth, soloCoordinador, wrap(async (req, res) => {
   res.json(await s.saveConfig(req.body || {}));
 }));
 
+// Descargar un respaldo completo de los registros (sólo coordinación)
+api.get('/backup', auth, soloCoordinador, wrap(async (req, res) => {
+  const data = await buildBackup(false);
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="respaldo_wifired_${hoyChile()}.json"`);
+  res.send(JSON.stringify(data, null, 2));
+}));
+
 api.delete('/visitas/:id', auth, soloCoordinador, wrap(async (req, res) => {
   await (await getStore()).deleteVisita(req.params.id); res.json({ ok: true });
 }));
@@ -347,9 +411,10 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 getStore()
   .then(() => app.listen(PORT, '0.0.0.0', () => {
     console.log(`WIFIRED Agenda — servidor en http://0.0.0.0:${PORT}`);
-    // Recordatorios del día antes: se revisa cada 30 min y se envían una vez al día
-    // (a partir de HORA_RECORDATORIO, hora de Chile). Sin correo configurado no hace nada.
-    correrRecordatorios();
-    setInterval(correrRecordatorios, 30 * 60 * 1000);
+    // Recordatorios del día antes + respaldo automático: se revisan cada 30 min y
+    // se ejecutan una vez al día (según hora de Chile). Sin nada configurado, no hacen nada.
+    const tick = () => { correrRecordatorios(); correrRespaldo(); };
+    tick();
+    setInterval(tick, 30 * 60 * 1000);
   }))
   .catch((e) => { console.error('Fallo al iniciar:', e); process.exit(1); });

@@ -94,6 +94,12 @@ export function renderConfig(root) {
         ${listEditor('nodos', cfg.nodos)}
       </div>
 
+      <div class="card cfg-card">
+        <h3 class="cfg-title">💾 Respaldo de datos</h3>
+        <p class="muted-sm">Descarga una copia de seguridad completa (clientes, visitas, asignaciones, estados y configuración) en un archivo. Guárdala en tu computador, Google Drive o un pendrive. El servidor también genera un respaldo automático cada madrugada.</p>
+        <button class="btn" data-backup style="margin-top:10px">⭳ Descargar respaldo completo ahora</button>
+      </div>
+
       <div class="cfg-footbar">
         <button class="btn btn-primary" data-save>Guardar cambios</button>
       </div>
@@ -113,6 +119,22 @@ export function renderConfig(root) {
 
   // Validación de correos
   bindField(root.querySelector('[data-emp="email"]'), { validate: validaEmail, msg: 'Correo inválido' });
+
+  // Descargar respaldo completo
+  root.querySelector('[data-backup]').onclick = async (e) => {
+    const btn = e.currentTarget; btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Generando…';
+    try {
+      const data = await store.getBackup();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `respaldo_wifired_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      toast('Respaldo descargado ✓');
+    } catch (err) { toast(err.message || 'No se pudo generar el respaldo', 'info'); }
+    btn.disabled = false; btn.textContent = orig;
+  };
 
   // Guardar
   const doSave = async (btn) => {

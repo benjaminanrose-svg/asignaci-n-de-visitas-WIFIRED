@@ -156,6 +156,9 @@ export async function enviarPin(uid, email) {
   return rawApi('POST', '/visitas/' + uid + '/enviar-pin', email ? { email } : undefined);
 }
 
+/** Obtiene un respaldo completo de los registros (sólo coordinación) */
+export async function getBackup() { return rawApi('GET', '/backup'); }
+
 /** Descarga la orden de trabajo en PDF (la misma que se envía al cliente/soporte). Devuelve Uint8Array */
 export async function ordenPdfBytes(uid) {
   const tk = getToken();

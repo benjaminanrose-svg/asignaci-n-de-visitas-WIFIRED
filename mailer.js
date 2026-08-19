@@ -262,6 +262,17 @@ async function sendClienteAviso(v, company, kind) {
   return sendGeneric({ to: v.email, subject, html });
 }
 
+/** Envía un respaldo (JSON adjunto) al correo indicado. Devuelve {ok, reason?} */
+async function sendRespaldo(to, filename, contentB64, resumen) {
+  if (!to) return { ok: false, reason: 'Sin destinatario de respaldo' };
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111;font-size:14px;max-width:560px;margin:auto">
+    <p>Respaldo automático de <b>WIFIRED</b> · ${new Date().toLocaleString('es-CL')}</p>
+    <p style="font-weight:600">${esc(resumen || '')}</p>
+    <p style="color:#555;font-size:12.5px">Adjunto va el respaldo de los registros (clientes, visitas, asignaciones, estados y configuración). Guárdelo en un lugar seguro. Las fotografías de cada visita se descargan aparte desde la app (botón “Descargar todo (ZIP)”).</p>
+  </div>`;
+  return sendGeneric({ to, subject: `Respaldo WIFIRED · ${filename}`, html, attachment: { filename, content: contentB64 } });
+}
+
 /** Envía la orden firmada (PDF) al correo del cliente. Devuelve {ok, reason?} */
 async function sendOrden(v, company) {
   const p = provider();
@@ -282,4 +293,4 @@ async function sendOrden(v, company) {
   }
 }
 
-module.exports = { sendOrden, sendPin, sendClienteAviso, ordenPDF, mailConfigured };
+module.exports = { sendOrden, sendPin, sendClienteAviso, sendRespaldo, ordenPDF, mailConfigured };
