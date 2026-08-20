@@ -208,7 +208,10 @@ function detailHtml(t) {
           <div class="row" style="gap:6px; flex-wrap:wrap">
             ${FACTS.map((f) => `<button class="btn btn-sm ${t.factibilidad === f.v ? 'btn-primary' : ''}" data-fact="${f.v}">${f.l}</button>`).join('')}
           </div>
-          <p class="muted-sm" style="margin-top:6px">Primero revisa la ubicación en el mapa. Marca <strong>Factible</strong> si le llega la red; recién ahí envíale los planes y marca <strong>Planes enviados</strong>.</p>
+          <p class="muted-sm" style="margin-top:6px">Primero revisa la ubicación en el mapa. Marca <strong>Factible</strong> si le llega la red; luego usa el botón para enviarle los planes por WhatsApp.</p>
+          <div style="margin-top:10px">
+            <button class="btn btn-sm btn-primary" data-planes ${t.telefono ? '' : 'disabled title="El ticket no tiene teléfono"'}>📤 Enviar planes por WhatsApp</button>
+          </div>
         </div>` : ''}
 
       <div class="form-grid" style="margin-top:14px">
@@ -242,6 +245,17 @@ function wire(node, uid) {
   const est = node.querySelector('[data-estado]');
   if (est) est.onchange = (e) => applyPatch(node, uid, { estado: e.target.value });
   node.querySelectorAll('[data-fact]').forEach((b) => (b.onclick = () => applyPatch(node, uid, { factibilidad: b.dataset.fact })));
+
+  const planes = node.querySelector('[data-planes]');
+  if (planes) planes.onclick = async () => {
+    if (!confirm('¿Enviar los planes al cliente por WhatsApp?\n(Se usa el texto configurado en el Bot de WhatsApp.)')) return;
+    planes.disabled = true;
+    try {
+      await store.enviarPlanes(uid);
+      toast('📤 Planes en cola de envío por WhatsApp');
+      refreshNode(node, uid);
+    } catch (e) { toast(e.message, 'info'); planes.disabled = false; }
+  };
 
   const saveNotas = node.querySelector('[data-savenotas]');
   if (saveNotas) saveNotas.onclick = async () => {

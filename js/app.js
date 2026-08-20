@@ -95,6 +95,24 @@ function updateBell() {
   prevReqCount = c;
 }
 
+// ---------- Aviso de tickets nuevos (coordinación) ----------
+let prevTkNuevos = null;
+function updateTicketsBadge() {
+  const n = store.ticketsList().filter((t) => t.estado === 'Nuevo').length;
+  const nav = document.querySelector('.nav-item[data-route="tickets"]');
+  if (!nav) return;
+  let badge = nav.querySelector('.nav-badge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = 'nav-badge';
+    nav.appendChild(badge);
+  }
+  badge.textContent = n;
+  badge.style.display = n ? '' : 'none';
+  if (prevTkNuevos !== null && n > prevTkNuevos) toast(`🎫 ${n - prevTkNuevos} ticket(s) nuevo(s) por WhatsApp`, 'info');
+  prevTkNuevos = n;
+}
+
 function reqPanel() {
   const reqs = store.visitas().filter((v) => v.reagenda_solicitada || v.validada === 'pendiente');
   const node = document.createElement('div');
@@ -176,9 +194,9 @@ async function startApp() {
     document.querySelector('.main').prepend(bar);
   }
 
-  subscribe(() => { if (!esTecnico) updateBell(); if (REACTIVE.includes(current)) render(); });
+  subscribe(() => { if (!esTecnico) { updateBell(); updateTicketsBadge(); } if (REACTIVE.includes(current)) render(); });
   window.addEventListener('hashchange', render);
-  if (!esTecnico) updateBell();
+  if (!esTecnico) { updateBell(); updateTicketsBadge(); }
 
   document.getElementById('btn-menu').onclick = () => document.getElementById('sidebar').classList.toggle('open');
 

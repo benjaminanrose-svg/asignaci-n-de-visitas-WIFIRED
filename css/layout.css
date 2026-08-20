@@ -46,6 +46,9 @@
 :root[data-theme="dark"] .nav-item.active,
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .nav-item.active{ color:#93c5fd; } }
 .nav-ico { width: 20px; text-align:center; font-size: 15px; opacity:.9; }
+.nav-badge { margin-left:auto; min-width:20px; height:20px; padding:0 6px; border-radius:999px;
+  background: var(--st-canc-dot); color:#fff; font-size:11px; font-weight:800; display:grid; place-items:center;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--st-canc-dot) 25%, transparent); }
 
 .sidebar-foot { margin-top: auto; display:flex; flex-direction:column; gap:12px; padding-top: 16px; }
 .sidebar-foot .muted-sm { text-align:center; }

@@ -94,6 +94,8 @@ export function renderConfig(root) {
   const emp = cfg.empresa || {};
   const fonos = Array.isArray(emp.fonos) ? emp.fonos.join(', ') : (emp.fonos || '');
   const avisos = cfg.avisos_cliente !== false;
+  const bot = cfg.bot || {};
+  const bh = bot.horario || {};
 
   root.innerHTML = `
     <div class="section-head">
@@ -123,6 +125,30 @@ export function renderConfig(root) {
           <input type="checkbox" data-avisos ${avisos ? 'checked' : ''} style="width:18px;height:18px">
           <span><b>Enviar avisos y recordatorios al cliente</b></span>
         </label>
+      </div>
+
+      <div class="card cfg-card">
+        <h3 class="cfg-title">🤖 Bot de WhatsApp</h3>
+        <p class="muted-sm">El asistente que responde a los clientes por WhatsApp y crea tickets. Estos textos los usa el bot sin que tengas que tocar código. (Requiere tener el bot conectado en el servidor.)</p>
+        <label style="display:flex;align-items:center;gap:10px;margin:12px 0;cursor:pointer">
+          <input type="checkbox" data-bot="activo" ${bot.activo !== false ? 'checked' : ''} style="width:18px;height:18px">
+          <span><b>Bot activo</b> — responde automáticamente a los clientes</span>
+        </label>
+        <div class="field full"><label>Saludo del menú (primera frase que ve el cliente)</label>
+          <textarea class="textarea" data-bot="saludo" placeholder="Soy el asistente virtual…">${esc(bot.saludo || '')}</textarea></div>
+        <div class="field full" style="margin-top:12px"><label>Texto de los planes (se envía al cliente con el botón “Enviar planes por WhatsApp”)</label>
+          <textarea class="textarea" data-bot="planes" style="min-height:130px" placeholder="Estos son nuestros planes…">${esc(bot.planes || '')}</textarea></div>
+
+        <label style="display:flex;align-items:center;gap:10px;margin:16px 0 8px;cursor:pointer">
+          <input type="checkbox" data-bot="horario_activo" ${bh.activo ? 'checked' : ''} style="width:18px;height:18px">
+          <span><b>Avisar cuando el cliente escribe fuera de horario</b></span>
+        </label>
+        <div class="cfg-two">
+          <div class="field"><label>Atención desde</label><input class="input" type="time" data-bot="horario_desde" value="${esc(bh.desde || '09:00')}"></div>
+          <div class="field"><label>Atención hasta</label><input class="input" type="time" data-bot="horario_hasta" value="${esc(bh.hasta || '19:00')}"></div>
+        </div>
+        <div class="field full" style="margin-top:10px"><label>Mensaje fuera de horario</label>
+          <textarea class="textarea" data-bot="horario_mensaje" placeholder="Estamos fuera de horario…">${esc(bh.mensaje || '')}</textarea></div>
       </div>
 
       <div class="card cfg-card">
@@ -219,6 +245,17 @@ export function renderConfig(root) {
       prioridades: collectList(root, 'prioridades'),
       nodos: collectList(root, 'nodos'),
       avisos_cliente: root.querySelector('[data-avisos]').checked,
+      bot: {
+        activo: root.querySelector('[data-bot="activo"]').checked,
+        saludo: root.querySelector('[data-bot="saludo"]').value.trim(),
+        planes: root.querySelector('[data-bot="planes"]').value.trim(),
+        horario: {
+          activo: root.querySelector('[data-bot="horario_activo"]').checked,
+          desde: root.querySelector('[data-bot="horario_desde"]').value || '09:00',
+          hasta: root.querySelector('[data-bot="horario_hasta"]').value || '19:00',
+          mensaje: root.querySelector('[data-bot="horario_mensaje"]').value.trim(),
+        },
+      },
     };
     if (!payload.tipos.length) { toast('Deja al menos un tipo de servicio', 'info'); return; }
     if (!payload.estados.length) { toast('Deja al menos un estado', 'info'); return; }

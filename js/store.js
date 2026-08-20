@@ -249,6 +249,17 @@ export async function deleteTicket(uid) {
   catch (e) { state.tickets = prev; emit(); toast(e.message, 'info'); }
 }
 
+/** Envía los planes al cliente por WhatsApp (encola el mensaje para el bot) */
+export async function enviarPlanes(uid) {
+  const r = await rawApi('POST', '/tickets/' + uid + '/enviar-planes');
+  if (r && r.ticket) {
+    const idx = state.tickets.findIndex((t) => t._uid === uid);
+    if (idx >= 0) state.tickets[idx] = r.ticket;
+    emit();
+  }
+  return r;
+}
+
 // ---------- Configuración ----------
 export async function saveConfig(patch) {
   const nueva = await rawApi('PUT', '/config', patch);

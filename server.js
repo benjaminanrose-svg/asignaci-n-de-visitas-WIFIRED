@@ -29,6 +29,13 @@ async function notifyAssign(v, kind) {
 
 const ESTADOS_ACTIVOS = ['Pendiente', 'Programada', 'Reprogramada'];
 
+/** Normaliza un teléfono a sus últimos 9 dígitos (para comparar clientes) */
+function normFono(p) {
+  let d = String(p || '').replace(/\D/g, '');
+  if (d.startsWith('56')) d = d.slice(2);
+  return d.length >= 8 ? d.slice(-9) : '';
+}
+
 /** ¿La coordinación tiene encendidos los avisos automáticos al cliente? */
 async function avisosActivos() {
   try { const c = await (await getStore()).getConfig(); return c.avisos_cliente !== false; } catch (e) { return true; }
@@ -415,6 +422,22 @@ api.delete('/tickets/:id', auth, soloCoordinador, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Enviar los planes al cliente por WhatsApp (encola el mensaje para el bot)
+api.post('/tickets/:id/enviar-planes', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.addOutbox !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  const t = (typeof s.listTickets === 'function' ? await s.listTickets() : []).find((x) => x._uid === String(req.params.id));
+  if (!t) return res.status(404).json({ error: 'Ticket no encontrado' });
+  if (!t.telefono) return res.status(400).json({ error: 'El ticket no tiene teléfono del cliente' });
+  const c = await s.getConfig();
+  const texto = (req.body && req.body.texto) || (c.bot && c.bot.planes) || '';
+  if (!texto.trim()) return res.status(400).json({ error: 'No hay texto de planes configurado' });
+  await s.addOutbox(t.telefono, texto);
+  const upd = await s.updateTicket(req.params.id, { factibilidad: 'planes_enviados', estado: 'En proceso' });
+  console.log(`[BOT] planes encolados para ${t.telefono} (ticket ${t.num})`);
+  res.json({ ok: true, ticket: upd });
+}));
+
 // Endpoint del bot de WhatsApp: crea tickets con una clave propia (no JWT).
 // El bot corre en el mismo servidor y llega por http://localhost:PORT.
 function requireBotKey(req, res, next) {
@@ -433,6 +456,36 @@ api.post('/bot/ticket', requireBotKey, wrap(async (req, res) => {
   const t = await s.addTicket(b);
   console.log(`[BOT] ticket ${t.num} creado · ${t.categoria} · ${b.telefono || ''}`);
   res.status(201).json(t);
+}));
+
+// El bot lee la configuración (saludo, planes, horario) desde la app
+api.get('/bot/config', requireBotKey, wrap(async (req, res) => {
+  const c = await (await getStore()).getConfig();
+  res.json(c.bot || {});
+}));
+
+// Bandeja de salida: mensajes automáticos que el bot debe enviar por WhatsApp
+api.get('/bot/outbox', requireBotKey, wrap(async (req, res) => {
+  const s = await getStore();
+  res.json(typeof s.listOutboxPending === 'function' ? await s.listOutboxPending() : []);
+}));
+api.post('/bot/outbox/:id/sent', requireBotKey, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.markOutboxSent === 'function') await s.markOutboxSent(req.params.id);
+  res.json({ ok: true });
+}));
+
+// El bot consulta el estado de la visita activa de un cliente por su teléfono
+api.get('/bot/visita', requireBotKey, wrap(async (req, res) => {
+  const s = await getStore();
+  const tel = normFono(req.query.telefono || '');
+  if (!tel) return res.json({ found: false });
+  const visitas = await s.listVisitas();
+  const match = visitas.filter((v) => normFono(v.telefono) === tel)
+    .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  const activa = match.find((v) => ESTADOS_ACTIVOS.includes(v.estado)) || match[0];
+  if (!activa) return res.json({ found: false });
+  res.json({ found: true, estado: activa.estado, fecha: activa.fecha || '', tecnico: activa.tecnico || '', tipo: activa.tipo || '' });
 }));
 
 // --- Técnicos (sólo coordinación administra) ---

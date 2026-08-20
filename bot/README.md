@@ -117,7 +117,31 @@ cd bot && npm install
 pm2 restart wifired-bot
 ```
 
-## Cambiar los textos del menú
+## Configurar el bot desde la app (sin tocar código)
 
-Están todos arriba en `whatsapp-bot.js` (constantes `MENU` y `FLOWS`). Se
-editan y luego `pm2 restart wifired-bot`.
+En la app, entra a **⚙ Configuración → 🤖 Bot de WhatsApp**. Desde ahí, la
+coordinación puede editar sin reiniciar nada:
+
+- **Bot activo** — enciende/apaga las respuestas automáticas.
+- **Saludo del menú** — la primera frase que ve el cliente.
+- **Texto de los planes** — lo que se envía con el botón "Enviar planes por
+  WhatsApp" desde un ticket de Contratación (después de marcarlo Factible).
+- **Horario de atención** — y el mensaje que se envía fuera de horario.
+
+El bot lee esta configuración cada minuto, así que los cambios se aplican solos.
+
+## Automatizaciones incluidas
+
+- **Tickets automáticos** por cada solicitud del cliente (con su categoría).
+- **Envío de planes**: al marcar un ticket como Factible y tocar "Enviar
+  planes por WhatsApp", el bot se los manda al cliente.
+- **Consulta de visita**: si el cliente elige "Agendar o consultar una visita",
+  el bot busca su visita por teléfono y le informa el estado.
+- **Aviso de ticket nuevo**: en la app, el menú "Tickets" muestra un contador
+  rojo y un aviso cuando entra una solicitud nueva.
+
+## Cambiar el orden/estructura del menú
+
+El menú y los flujos (las 5 opciones) están en `whatsapp-bot.js`
+(`menuText()` y `FLOWS`). Se editan y luego `pm2 restart wifired-bot`. Los
+textos del saludo, planes y horario NO: esos se editan desde la app.

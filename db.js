@@ -28,6 +28,34 @@ const DEFAULT_CONFIG = {
 };
 const CONFIG = DEFAULT_CONFIG; // compat
 
+// Configuración por defecto del bot de WhatsApp (editable desde la app).
+const DEFAULT_BOT = {
+  activo: true,
+  saludo: 'Soy el asistente virtual. ¿En qué te ayudo hoy?',
+  planes: 'Estos son nuestros planes de internet 📶\n\n• Plan 100 Megas — $[PRECIO]\n• Plan 200 Megas — $[PRECIO]\n• Plan 400 Megas — $[PRECIO]\n\n¿Cuál te interesa? Con gusto te ayudo a contratarlo. 🙂',
+  horario: {
+    activo: false,
+    desde: '09:00',
+    hasta: '19:00',
+    mensaje: 'En este momento estamos fuera de nuestro horario de atención, pero igual registramos tu solicitud y te respondemos apenas volvamos. 🙌',
+  },
+};
+/** Fusiona la config del bot guardada sobre los valores por defecto */
+function mergeBot(b) {
+  const s = b && typeof b === 'object' ? b : {};
+  const h = s.horario && typeof s.horario === 'object' ? s.horario : {};
+  return {
+    activo: s.activo !== false,
+    saludo: typeof s.saludo === 'string' && s.saludo.trim() ? s.saludo : DEFAULT_BOT.saludo,
+    planes: typeof s.planes === 'string' && s.planes.trim() ? s.planes : DEFAULT_BOT.planes,
+    horario: {
+      activo: !!h.activo,
+      desde: h.desde || DEFAULT_BOT.horario.desde,
+      hasta: h.hasta || DEFAULT_BOT.horario.hasta,
+      mensaje: typeof h.mensaje === 'string' && h.mensaje.trim() ? h.mensaje : DEFAULT_BOT.horario.mensaje,
+    },
+  };
+}
 /** Fusiona la config guardada (settings.config) sobre los valores por defecto */
 async function loadConfig(getSetting) {
   let stored = {};
@@ -42,6 +70,8 @@ async function loadConfig(getSetting) {
     empresa: { ...DEFAULT_CONFIG.empresa, ...(stored.empresa && typeof stored.empresa === 'object' ? stored.empresa : {}) },
     // Avisos automáticos por correo al cliente (agendada + recordatorio). Encendidos por defecto.
     avisos_cliente: stored.avisos_cliente !== false,
+    // Configuración del bot de WhatsApp (textos, planes, horario).
+    bot: mergeBot(stored.bot),
   };
 }
 /** Guarda un parche de configuración (fusiona sobre lo actual) */
@@ -49,6 +79,10 @@ async function saveConfigWith(getSetting, setSetting, patch) {
   const cur = await loadConfig(getSetting);
   const next = { ...cur, ...(patch || {}) };
   if (patch && patch.empresa) next.empresa = { ...cur.empresa, ...patch.empresa };
+  if (patch && patch.bot) {
+    next.bot = { ...cur.bot, ...patch.bot };
+    if (patch.bot.horario) next.bot.horario = { ...cur.bot.horario, ...patch.bot.horario };
+  }
   await setSetting('config', JSON.stringify(next));
   return next;
 }
@@ -130,6 +164,8 @@ function memoryStore() {
   let vSeq = visitas.length;
   let tickets = []; // se empieza desde 0
   let kSeq = 0;
+  let outbox = []; // mensajes automáticos que el bot debe enviar por WhatsApp
+  let oSeq = 0;
 
   function pick(v) {
     const o = {};
@@ -210,6 +246,12 @@ function memoryStore() {
       return outTk(t);
     },
     async deleteTicket(id) { tickets = tickets.filter((x) => x.id != id); },
+    async addOutbox(telefono, texto) {
+      const o = { id: ++oSeq, telefono: telefono || '', texto: texto || '', estado: 'pendiente', created_at: new Date().toISOString(), sent_at: null };
+      outbox.push(o); return o;
+    },
+    async listOutboxPending() { return outbox.filter((o) => o.estado === 'pendiente').map((o) => ({ ...o })); },
+    async markOutboxSent(id) { const o = outbox.find((x) => x.id == id); if (o) { o.estado = 'enviado'; o.sent_at = new Date().toISOString(); } },
     async setPin(id, pin) { const v = visitas.find((x) => x.id == id); if (v) { v.pin = pin; v.pin_ts = pin ? Date.now() : 0; } },
     async getPin(id) { const v = visitas.find((x) => x.id == id); return v ? { pin: v.pin || '', ts: v.pin_ts || 0 } : { pin: '', ts: 0 }; },
     async getSetting(k) { return settings[k] ?? null; },
@@ -345,6 +387,15 @@ function pgStore(url) {
           historial TEXT DEFAULT '[]',
           created_at TIMESTAMPTZ DEFAULT now(),
           updated_at TIMESTAMPTZ DEFAULT now()
+        );`);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS bot_outbox (
+          id SERIAL PRIMARY KEY,
+          telefono TEXT DEFAULT '',
+          texto TEXT DEFAULT '',
+          estado TEXT DEFAULT 'pendiente',
+          created_at TIMESTAMPTZ DEFAULT now(),
+          sent_at TIMESTAMPTZ
         );`);
 
       // Reset opcional de técnicos (poner RESET_TECNICOS=1 una vez y redeploy)
@@ -497,6 +548,16 @@ function pgStore(url) {
       return rows[0] ? outTk(rows[0]) : null;
     },
     async deleteTicket(id) { await pool.query('DELETE FROM tickets WHERE id=$1', [id]); },
+    async addOutbox(telefono, texto) {
+      const { rows } = await pool.query(
+        `INSERT INTO bot_outbox (telefono, texto, estado) VALUES ($1,$2,'pendiente') RETURNING *`, [telefono || '', texto || '']);
+      return rows[0];
+    },
+    async listOutboxPending() {
+      const { rows } = await pool.query(`SELECT id, telefono, texto, estado, created_at FROM bot_outbox WHERE estado='pendiente' ORDER BY id ASC LIMIT 50`);
+      return rows;
+    },
+    async markOutboxSent(id) { await pool.query(`UPDATE bot_outbox SET estado='enviado', sent_at=now() WHERE id=$1`, [id]); },
     async setPin(id, pin) { await pool.query(`UPDATE visitas SET pin=$1, pin_ts = CASE WHEN $1 = '' THEN NULL ELSE now() END WHERE id=$2`, [pin, id]); },
     async getPin(id) { const { rows } = await pool.query('SELECT pin, pin_ts FROM visitas WHERE id=$1', [id]); return rows[0] ? { pin: rows[0].pin || '', ts: rows[0].pin_ts || 0 } : { pin: '', ts: 0 }; },
   };
