@@ -202,6 +202,22 @@ async function startApp() {
 
   if (!esTecnico) {
     document.getElementById('btn-nueva-visita').onclick = () => visitFormModal();
+    // Respaldar todo: descarga un archivo JSON con todos los registros
+    const btnBk = document.getElementById('btn-backup-side');
+    if (btnBk) btnBk.onclick = async () => {
+      const orig = btnBk.textContent; btnBk.disabled = true; btnBk.textContent = 'Generando…';
+      try {
+        const data = await store.getBackup();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `respaldo_wifired_${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        toast('Respaldo descargado ✓');
+      } catch (e) { toast(e.message || 'No se pudo generar el respaldo', 'info'); }
+      btnBk.disabled = false; btnBk.textContent = orig;
+    };
     const search = document.getElementById('global-search');
     search.addEventListener('input', debounce((e) => {
       ctx.search = e.target.value.trim().toLowerCase();
