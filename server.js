@@ -285,6 +285,16 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
   } else {
     patch = { ...body };
     delete patch.pin_ingresado;
+    // N° de OT editable por coordinación (no puede quedar vacío ni repetirse)
+    if ('ot' in body) {
+      const nuevoOt = String(body.ot || '').trim();
+      if (!nuevoOt) return res.status(400).json({ error: 'El N° de OT no puede quedar vacío' });
+      const all = await s.listVisitas();
+      if (all.some((v) => v.id === nuevoOt && v._uid !== String(req.params.id))) {
+        return res.status(400).json({ error: `El N° de OT "${nuevoOt}" ya existe en otra visita` });
+      }
+      patch.ot = nuevoOt;
+    }
     if ('tecnico' in body) patch.asignado_por = body.tecnico ? req.user.nombre : '';
     // coordinación autoriza manualmente (fallback cuando el PIN no llegó al cliente)
     if (body.estado === 'Completada' && !body.validada) patch.validada = 'coordinacion';

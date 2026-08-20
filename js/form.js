@@ -22,6 +22,11 @@ export function visitFormModal(existing = null, prefill = {}) {
     <div class="modal-body">
       <form id="visit-form">
         <div class="form-grid">
+          ${isNew ? '' : `
+          <div class="field full">
+            <label>N° de Orden de Trabajo (OT)</label>
+            <input class="input" name="ot" value="${esc(v.id || '')}" placeholder="OT-MEL-2026-001" autocomplete="off" />
+          </div>`}
           <div class="field full">
             <label>Nombre del cliente *</label>
             <input class="input" name="cliente" required value="${esc(v.cliente || prefill.cliente || '')}" placeholder="Nombre y apellidos" />

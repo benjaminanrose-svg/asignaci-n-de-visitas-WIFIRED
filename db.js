@@ -227,6 +227,7 @@ function memoryStore() {
     async updateVisita(id, patch) {
       const v = visitas.find((x) => x.id == id); if (!v) return null;
       VISIT_FIELDS.forEach((k) => { if (k in patch) v[k] = patch[k]; });
+      if ('ot' in patch && String(patch.ot || '').trim()) v.ot = String(patch.ot).trim();
       return outV(v);
     },
     async deleteVisita(id) { visitas = visitas.filter((x) => x.id != id); },
@@ -522,6 +523,7 @@ function pgStore(url) {
     async updateVisita(id, patch) {
       const cols = [], vals = []; let i = 1;
       VISIT_FIELDS.forEach((k) => { if (k in patch) { cols.push(`${k}=$${i++}`); vals.push(patch[k]); } });
+      if ('ot' in patch && String(patch.ot || '').trim()) { cols.push(`ot=$${i++}`); vals.push(String(patch.ot).trim()); }
       if (!cols.length) return null;
       cols.push(`updated_at=now()`);
       vals.push(id);
