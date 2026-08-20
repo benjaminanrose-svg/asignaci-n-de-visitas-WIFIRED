@@ -14,13 +14,10 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 
-/** Busca el navegador Chromium del sistema (evita descargar uno aparte) */
+/** Navegador a usar. Por defecto usa el Chrome propio de puppeteer (más
+ *  compatible). Si defines CHROMIUM_PATH, usa ese en su lugar. */
 function findChromium() {
-  if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
-  for (const p of ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/snap/bin/chromium']) {
-    try { if (fs.existsSync(p)) return p; } catch (e) {}
-  }
-  return undefined; // si no hay, whatsapp-web.js usa su navegador incluido
+  return process.env.CHROMIUM_PATH || undefined;
 }
 
 const API_URL = (process.env.API_URL || 'http://localhost:8081').replace(/\/+$/, '');
@@ -143,6 +140,8 @@ client.on('authenticated', () => console.log('🔐 Sesión autenticada.'));
 client.on('ready', async () => { await loadBotConfig(); console.log(`✅ Bot conectado y escuchando. API: ${API_URL}`); });
 client.on('auth_failure', (m) => console.error('❌ Fallo de autenticación:', m));
 client.on('disconnected', (r) => console.warn('⚠️ Desconectado:', r));
+client.on('loading_screen', (p, m) => console.log(`⏳ Cargando WhatsApp… ${p}% ${m || ''}`));
+client.on('change_state', (s) => console.log('🔄 Estado:', s));
 
 async function botSend(id, text) {
   lastBotSend.set(id, Date.now());
@@ -173,6 +172,7 @@ client.on('message_create', (msg) => {
 
 client.on('message', async (msg) => {
   try {
+    console.log(`📩 mensaje de ${msg.from} · tipo:${msg.type} · "${(msg.body || '').slice(0, 40)}"`);
     const id = msg.from;
     if (!id.endsWith('@c.us')) return;         // ignora grupos y difusiones
     if (msg.fromMe) return;
