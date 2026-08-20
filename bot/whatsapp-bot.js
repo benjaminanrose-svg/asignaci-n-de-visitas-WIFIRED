@@ -1,33 +1,40 @@
 // ============================================================
-// WIFIRED · Bot de WhatsApp (gratis, sobre WhatsApp Web)
+// WIFIRED · Bot de WhatsApp (gratis, motor Baileys — SIN navegador)
 // Atiende a los clientes con un menú y crea tickets en WIFIRED.
 // Automatiza: envío de planes, consulta de visita y horario.
 // Corre en el mismo servidor y habla con la app por su API local.
 //
-// Requisitos: Node 18+ (usa fetch nativo), whatsapp-web.js, qrcode-terminal.
+// Se conecta a WhatsApp por su protocolo (WebSocket), sin abrir Chrome:
+// mucho más liviano y estable en servidores.
+//
+// Requisitos: Node 18+ (usa fetch nativo), @whiskeysockets/baileys, qrcode-terminal.
 // Variables de entorno:
 //   BOT_API_KEY  (obligatoria) — la misma clave configurada en la app.
 //   API_URL      (opcional)    — URL local de la app. Por defecto http://localhost:8081
 //   EMPRESA      (opcional)    — nombre que saluda el bot.
 // ============================================================
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const path = require('path');
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  DisconnectReason,
+} = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
-const fs = require('fs');
-
-/** Navegador a usar. Por defecto usa el Chrome propio de puppeteer (más
- *  compatible). Si defines CHROMIUM_PATH, usa ese en su lugar. */
-function findChromium() {
-  return process.env.CHROMIUM_PATH || undefined;
-}
 
 const API_URL = (process.env.API_URL || 'http://localhost:8081').replace(/\/+$/, '');
 const BOT_API_KEY = process.env.BOT_API_KEY || '';
 const EMPRESA = process.env.EMPRESA || 'TELECOMUNICACIONES WIFIRED';
+const AUTH_DIR = process.env.AUTH_DIR || path.join(__dirname, 'auth_wifired');
 
 if (!BOT_API_KEY) {
   console.error('❌ Falta la variable BOT_API_KEY (debe ser la misma que configuraste en la app).');
   process.exit(1);
 }
+
+// Logger silencioso para Baileys (sin depender de pino)
+const NOOP = () => {};
+const logger = { level: 'silent', trace: NOOP, debug: NOOP, info: NOOP, warn: NOOP, error: NOOP, fatal: NOOP, child: () => logger };
 
 // ---------- Config del bot (se lee desde la app y se refresca sola) ----------
 let botCfg = {
@@ -37,8 +44,8 @@ let botCfg = {
   horario: { activo: false, desde: '09:00', hasta: '19:00', mensaje: '' },
 };
 
-async function api(path, opts = {}) {
-  const r = await fetch(API_URL + path, {
+async function api(pathname, opts = {}) {
+  const r = await fetch(API_URL + pathname, {
     ...opts,
     headers: { 'Content-Type': 'application/json', 'x-bot-key': BOT_API_KEY, ...(opts.headers || {}) },
   });
@@ -125,96 +132,157 @@ function fueraDeHorario() {
   return !(now >= d && now <= u);
 }
 
-// ---------- Cliente WhatsApp ----------
-const client = new Client({
-  authStrategy: new LocalAuth({ clientId: 'wifired' }),
-  puppeteer: { headless: true, executablePath: findChromium(), args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] },
-});
+// ---------- Utilidades de mensajes (Baileys) ----------
+const SUFIJO = '@s.whatsapp.net';
 
-client.on('qr', (qr) => {
-  console.log('\n📲 Escanea este código QR con el WhatsApp de la empresa:');
-  console.log('   (WhatsApp → Dispositivos vinculados → Vincular un dispositivo)\n');
-  qrcode.generate(qr, { small: true });
-});
-client.on('authenticated', () => console.log('🔐 Sesión autenticada.'));
-client.on('ready', async () => { await loadBotConfig(); console.log(`✅ Bot conectado y escuchando. API: ${API_URL}`); });
-client.on('auth_failure', (m) => console.error('❌ Fallo de autenticación:', m));
-client.on('disconnected', (r) => console.warn('⚠️ Desconectado:', r));
-client.on('loading_screen', (p, m) => console.log(`⏳ Cargando WhatsApp… ${p}% ${m || ''}`));
-client.on('change_state', (s) => console.log('🔄 Estado:', s));
-
-async function botSend(id, text) {
-  lastBotSend.set(id, Date.now());
-  try { await client.sendMessage(id, text); } catch (e) { console.error('Error al enviar:', e.message); }
+/** Extrae el texto de un mensaje de Baileys, venga como venga. */
+function getText(m) {
+  const mm = (m && m.message) || {};
+  return (
+    mm.conversation ||
+    (mm.extendedTextMessage && mm.extendedTextMessage.text) ||
+    (mm.imageMessage && mm.imageMessage.caption) ||
+    (mm.videoMessage && mm.videoMessage.caption) ||
+    (mm.buttonsResponseMessage && mm.buttonsResponseMessage.selectedButtonId) ||
+    (mm.listResponseMessage && mm.listResponseMessage.singleSelectReply && mm.listResponseMessage.singleSelectReply.selectedRowId) ||
+    ''
+  ).trim();
 }
 
-function crearTicket(payload) { return api('/api/bot/ticket', { method: 'POST', body: JSON.stringify(payload) }); }
+/** Devuelve {latitude, longitude} si el mensaje es una ubicación, o null. */
+function getLocation(m) {
+  const loc = m && m.message && m.message.locationMessage;
+  if (!loc) return null;
+  return { latitude: loc.degreesLatitude, longitude: loc.degreesLongitude };
+}
 
-/** Convierte un teléfono (dígitos) al id de chat de WhatsApp */
+/** Convierte un teléfono (dígitos) al JID de WhatsApp */
 function toChatId(tel) {
   let d = String(tel || '').replace(/\D/g, '');
   if (!d) return null;
   if (!d.startsWith('56')) { if (d.length === 9) d = '56' + d; else if (d.length === 8) d = '569' + d; else d = '56' + d; }
-  return d + '@c.us';
+  return d + SUFIJO;
 }
 
-// Cuando un humano (la coordinación) responde manualmente desde el WhatsApp,
-// el bot se calla en ese chat por un rato para no interrumpir.
-client.on('message_create', (msg) => {
-  if (!msg.fromMe) return;
-  const to = msg.to;
-  if (!to || !to.endsWith('@c.us')) return;
-  const last = lastBotSend.get(to) || 0;
-  if (Date.now() - last < 8000) return; // ese mensaje lo envió el propio bot
-  handoff.set(to, Date.now() + HANDOFF_TTL);
-  resetSession(to);
-});
+// ---------- Conexión Baileys ----------
+let sock = null;
 
-client.on('message', async (msg) => {
-  try {
-    console.log(`📩 mensaje de ${msg.from} · tipo:${msg.type} · "${(msg.body || '').slice(0, 40)}"`);
-    const id = msg.from;
-    if (!id.endsWith('@c.us')) return;         // ignora grupos y difusiones
-    if (msg.fromMe) return;
-    if (botCfg.activo === false) return;       // bot apagado desde la app
-    const now = Date.now();
+async function botSend(id, text) {
+  lastBotSend.set(id, Date.now());
+  try { await sock.sendMessage(id, { text }); } catch (e) { console.error('Error al enviar:', e.message); }
+}
 
-    // Silencio por handoff (humano atendiendo)
-    const h = handoff.get(id);
-    if (h && now < h) return;
-    if (h) handoff.delete(id);
+function crearTicket(payload) { return api('/api/bot/ticket', { method: 'POST', body: JSON.stringify(payload) }); }
 
-    const text = (msg.body || '').trim();
-    const low = text.toLowerCase();
+async function start() {
+  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  const { version } = await fetchLatestBaileysVersion();
 
-    // Comandos globales para volver al menú
-    if (['menu', 'menú', 'hola', 'inicio', 'buenas', 'empezar'].includes(low)) {
-      resetSession(id);
+  sock = makeWASocket({
+    version,
+    auth: state,
+    logger,
+    browser: ['WIFIRED', 'Chrome', '1.0.0'],
+    markOnlineOnConnect: false,
+    syncFullHistory: false,
+  });
+
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('connection.update', (u) => {
+    const { connection, lastDisconnect, qr } = u;
+    if (qr) {
+      console.log('\n📲 Escanea este código QR con el WhatsApp de la empresa:');
+      console.log('   (WhatsApp → Dispositivos vinculados → Vincular un dispositivo)\n');
+      qrcode.generate(qr, { small: true });
+    }
+    if (connection === 'open') {
+      loadBotConfig();
+      console.log(`✅ Bot conectado y escuchando. API: ${API_URL}`);
+    }
+    if (connection === 'close') {
+      const code = (lastDisconnect && lastDisconnect.error && lastDisconnect.error.output && lastDisconnect.error.output.statusCode) || 0;
+      const cerroSesion = code === DisconnectReason.loggedOut;
+      if (cerroSesion) {
+        console.error('❌ Sesión cerrada desde el teléfono. Borra la carpeta "auth_wifired" y vuelve a escanear el QR.');
+      } else {
+        console.warn(`⚠️ Conexión cerrada (código ${code}). Reintentando en 3 s…`);
+        setTimeout(() => start().catch((e) => console.error('Error al reconectar:', e.message)), 3000);
+      }
+    }
+  });
+
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return; // ignora sincronización de historial
+    for (const m of messages) {
+      try { await onMessage(m); } catch (e) { console.error('Error procesando mensaje:', e); }
+    }
+  });
+}
+
+async function onMessage(m) {
+  if (!m || !m.message) return;
+  const id = m.key && m.key.remoteJid;
+  if (!id || id === 'status@broadcast') return;
+  if (!id.endsWith(SUFIJO)) return; // ignora grupos (@g.us) y difusiones
+
+  // Mensajes enviados por nosotros mismos: si los escribió un humano
+  // (la coordinación) desde el teléfono, el bot se calla un rato.
+  if (m.key.fromMe) {
+    const last = lastBotSend.get(id) || 0;
+    if (Date.now() - last < 8000) return; // lo envió el propio bot
+    handoff.set(id, Date.now() + HANDOFF_TTL);
+    resetSession(id);
+    return;
+  }
+
+  if (botCfg.activo === false) return; // bot apagado desde la app
+
+  const info = {
+    id,
+    body: getText(m),
+    location: getLocation(m),
+    notifyName: m.pushName || '',
+  };
+  console.log(`📩 mensaje de ${id} · "${(info.body || (info.location ? '[ubicación]' : '')).slice(0, 40)}"`);
+
+  const now = Date.now();
+
+  // Silencio por handoff (humano atendiendo)
+  const h = handoff.get(id);
+  if (h && now < h) return;
+  if (h) handoff.delete(id);
+
+  const text = info.body;
+  const low = text.toLowerCase();
+
+  // Comandos globales para volver al menú
+  if (['menu', 'menú', 'hola', 'inicio', 'buenas', 'empezar'].includes(low)) {
+    resetSession(id);
+    if (fueraDeHorario() && botCfg.horario.mensaje) await botSend(id, botCfg.horario.mensaje);
+    return botSend(id, menuText());
+  }
+
+  let sess = sessions.get(id);
+  if (sess && now - sess.ts > SESSION_TTL) { sessions.delete(id); sess = null; }
+
+  // Sin flujo activo: interpretar selección del menú
+  if (!sess) {
+    const opt = (text.match(/^([1-5])/) || [])[1];
+    if (!opt) {
       if (fueraDeHorario() && botCfg.horario.mensaje) await botSend(id, botCfg.horario.mensaje);
       return botSend(id, menuText());
     }
+    return startFlow(id, opt, info);
+  }
 
-    let sess = sessions.get(id);
-    if (sess && now - sess.ts > SESSION_TTL) { sessions.delete(id); sess = null; }
+  // En medio de un flujo: procesar la respuesta al paso actual
+  return handleStep(id, sess, info);
+}
 
-    // Sin flujo activo: interpretar selección del menú
-    if (!sess) {
-      const opt = (text.match(/^([1-5])/) || [])[1];
-      if (!opt) {
-        if (fueraDeHorario() && botCfg.horario.mensaje) await botSend(id, botCfg.horario.mensaje);
-        return botSend(id, menuText());
-      }
-      return startFlow(id, opt, msg);
-    }
-
-    // En medio de un flujo: procesar la respuesta al paso actual
-    return handleStep(id, sess, msg);
-  } catch (e) { console.error('Error procesando mensaje:', e); }
-});
-
-async function startFlow(id, opt, msg) {
-  const nombre = (msg._data && msg._data.notifyName) || '';
-  const telefono = id.replace('@c.us', '');
+async function startFlow(id, opt, info) {
+  const nombre = info.notifyName || '';
+  const telefono = id.replace(SUFIJO, '');
 
   // Opción 5: pasar a un ejecutivo (silencia el bot y crea ticket)
   if (opt === '5') {
@@ -243,22 +311,22 @@ async function startFlow(id, opt, msg) {
   return botSend(id, flow.pasos[0].pregunta);
 }
 
-async function handleStep(id, sess, msg) {
+async function handleStep(id, sess, info) {
   const flow = FLOWS[sess.opt];
   const paso = flow.pasos[sess.idx];
   let valor;
 
   if (paso.esUbicacion) {
-    if (msg.type === 'location' && msg.location) {
-      valor = `${msg.location.latitude},${msg.location.longitude}`;
+    if (info.location) {
+      valor = `${info.location.latitude},${info.location.longitude}`;
     } else {
-      valor = (msg.body || '').trim(); // aceptar dirección escrita
+      valor = (info.body || '').trim(); // aceptar dirección escrita
     }
     if (!valor) {
       return botSend(id, 'Necesito tu *ubicación* o tu *dirección* para revisar la cobertura.\nToca 📎 → *Ubicación* → *Enviar ubicación actual*, o escríbeme tu dirección exacta.');
     }
   } else {
-    valor = (msg.body || '').trim();
+    valor = (info.body || '').trim();
     if (!valor) return botSend(id, paso.pregunta);
   }
 
@@ -276,8 +344,8 @@ async function handleStep(id, sess, msg) {
   resetSession(id);
   const payload = {
     categoria: flow.categoria,
-    nombre: sess.data.nombre || (msg._data && msg._data.notifyName) || '',
-    telefono: id.replace('@c.us', ''),
+    nombre: sess.data.nombre || info.notifyName || '',
+    telefono: id.replace(SUFIJO, ''),
     ubicacion: sess.data.ubicacion || '',
     mensaje: sess.data.mensaje || '',
   };
@@ -293,7 +361,7 @@ async function handleStep(id, sess, msg) {
 // ---------- Bandeja de salida: envía los mensajes automáticos (planes, etc.) ----------
 let poolingOut = false;
 async function pollOutbox() {
-  if (poolingOut) return;
+  if (poolingOut || !sock) return;
   poolingOut = true;
   try {
     const pend = await api('/api/bot/outbox');
@@ -308,7 +376,7 @@ async function pollOutbox() {
   finally { poolingOut = false; }
 }
 
-console.log('Iniciando bot de WhatsApp WIFIRED…');
-client.initialize();
+console.log('Iniciando bot de WhatsApp WIFIRED (motor Baileys)…');
+start().catch((e) => { console.error('Error al iniciar:', e); process.exit(1); });
 setInterval(loadBotConfig, 60 * 1000);      // refresca la config cada minuto
 setInterval(pollOutbox, 12 * 1000);         // envía mensajes automáticos pendientes

@@ -4,7 +4,11 @@ Bot **gratis** que atiende a los clientes por WhatsApp con un menú y crea
 **tickets** automáticamente en la app WIFIRED. Corre en el mismo servidor que
 la app y le habla por su API local (no usa internet para eso).
 
-> ⚠️ Usa WhatsApp Web de forma no oficial. Va contra las reglas de WhatsApp y
+> Motor: **Baileys** — se conecta a WhatsApp por su protocolo (WebSocket),
+> **sin abrir ningún navegador**. Es liviano y estable en servidores (no
+> necesita Chromium ni sus librerías).
+
+> ⚠️ Usa WhatsApp de forma no oficial. Va contra las reglas de WhatsApp y
 > el número podría ser bloqueado. Para bajar el riesgo: no enviar mensajes
 > masivos, responder solo a quien escribe primero, y de preferencia usar un
 > número secundario.
@@ -33,20 +37,14 @@ Cuando un cliente escribe, el bot responde con:
 
 ### 1. Requisitos (una sola vez)
 
-Necesitas **Node 18 o superior** y las librerías del navegador para el bot.
-Entra por SSH como root y ejecuta:
+Solo necesitas **Node 18 o superior** (Baileys no usa navegador, así que no hay
+que instalar Chromium ni sus librerías). Entra por SSH como root:
 
 ```bash
 # Node 18 (si no lo tienes)
 node -v   # si muestra v18 o más, ya está; si no:
 curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
 apt-get install -y nodejs
-
-# Librerías que necesita el navegador interno (Chromium) en Debian/Ubuntu
-apt-get install -y chromium \
-  libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
-  libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 \
-  libpango-1.0-0 libcairo2 libatspi2.0-0 fonts-liberation
 ```
 
 ### 2. Traer el código del bot
