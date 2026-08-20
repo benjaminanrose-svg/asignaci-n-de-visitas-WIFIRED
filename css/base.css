@@ -2,7 +2,7 @@
    WIFIRED · Agenda Técnica — Base: reset, tokens, tipografía
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -10,7 +10,13 @@ body {
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
-  background: var(--bg);
+  /* Fondo con un brillo azul/cian muy sutil (Dirección A) que da profundidad.
+     El color-mix hace que sea notorio en oscuro y casi imperceptible en claro. */
+  background:
+    radial-gradient(1000px 560px at 10% -10%, color-mix(in srgb, var(--brand-500) 15%, transparent), transparent 60%),
+    radial-gradient(820px 560px at 110% 4%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 55%),
+    var(--bg);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -50,9 +56,12 @@ ul { margin: 0; padding: 0; list-style: none; }
   --shadow-md: 0 4px 12px rgba(15,23,42,.08), 0 2px 4px rgba(15,23,42,.04);
   --shadow-lg: 0 16px 40px rgba(15,23,42,.16);
 
-  --radius: 14px;
-  --radius-sm: 10px;
+  --radius: 16px;
+  --radius-sm: 11px;
   --radius-lg: 20px;
+
+  /* Tipografía de titulares y números grandes (Dirección A) */
+  --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
 
   --sidebar-w: 248px;
 }
@@ -92,3 +101,24 @@ ul { margin: 0; padding: 0; list-style: none; }
 
 @keyframes fadeUp { from { opacity:0; transform: translateY(6px);} to {opacity:1; transform:none;} }
 @keyframes pop    { from { opacity:0; transform: scale(.96);} to {opacity:1; transform:none;} }
+
+/* ---------- Tipografía de titulares y números grandes (Dirección A) ----------
+   Space Grotesk para el nombre WIFIRED, títulos de sección/tarjeta/ventana,
+   los números KPI, el centro de la dona y otros números destacados. El resto
+   del texto sigue en Inter. */
+.brand-text strong,
+.topbar-title,
+.section-head h2,
+.card-head h3,
+.modal-head h3,
+.kpi .kpi-val,
+.donut-center strong,
+.ds-pill .ds-n,
+.tech-card .tstat strong,
+.tec-hello,
+.tec-client,
+.login-brand h1,
+.tk-num,
+.cli-count {
+  font-family: var(--font-display);
+}
