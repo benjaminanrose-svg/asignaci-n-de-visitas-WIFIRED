@@ -200,6 +200,21 @@ export function priorityTag(p) {
   return `<span class="prio ${cls}">⚑ ${esc(p)}</span>`;
 }
 
+/** Estado de la confirmación por WhatsApp del cliente + botón para pedirla ahora */
+function confirmacionBlock(v, readOnly) {
+  const activa = ['Pendiente', 'Programada', 'Reprogramada'].includes(v.estado);
+  let estado = '';
+  if (v.confirmacion === 'si') estado = '<span style="color:#10b981;font-weight:600">✅ Confirmada por el cliente</span>';
+  else if (v.confirmacion === 'no') estado = '<span style="color:#ef4444;font-weight:600">❌ Cancelada por el cliente</span>';
+  else if (v.confirmacion_enviada) estado = '<span style="color:#f59e0b;font-weight:600">⏳ Esperando respuesta del cliente</span>';
+  const puedePedir = !readOnly && store.isCoordinador() && v.telefono && activa && v.confirmacion !== 'si';
+  if (!estado && !puedePedir) return '';
+  return `<div class="detail-list" style="margin-top:10px">
+      <div class="detail-row"><span class="dl-k">Confirmación</span><span class="dl-v">${estado || '<span class="muted">Sin pedir aún</span>'}</span></div>
+    </div>
+    ${puedePedir ? '<div style="margin-top:8px"><button class="btn btn-sm" data-pedirconf>📅 Pedir confirmación ahora por WhatsApp</button></div>' : ''}`;
+}
+
 export function techAvatar(full, cls = 'avatar-sm') {
   const t = parseTecnico(full);
   return `<span class="${cls}" style="background:${t.color}">${esc(t.initials)}</span>`;
@@ -380,6 +395,7 @@ export function visitDetailModal(v, { onEdit, onOrder, readOnly = false } = {}) 
         <div class="detail-row"><span class="dl-k">Detalle / problema</span><span class="dl-v">${esc(v.detalle || '—')}</span></div>
         ${v.asignado_por ? `<div class="detail-row"><span class="dl-k">Asignado por</span><span class="dl-v">${esc(v.asignado_por)}</span></div>` : ''}
       </div>
+      ${confirmacionBlock(v, readOnly)}
       ${historialBlock(v)}
     </div>
     <div class="modal-foot">
@@ -400,6 +416,13 @@ export function visitDetailModal(v, { onEdit, onOrder, readOnly = false } = {}) 
   node.querySelector('[data-order]').onclick = () => { closeModal(); onOrder && onOrder(v); };
   const reagBtn = node.querySelector('[data-reagendar]');
   if (reagBtn) reagBtn.onclick = () => { closeModal(); reagendarModal(v); };
+  const pcBtn = node.querySelector('[data-pedirconf]');
+  if (pcBtn) pcBtn.onclick = async () => {
+    if (!confirm('¿Enviar ahora la solicitud de confirmación al cliente por WhatsApp?')) return;
+    pcBtn.disabled = true; const orig = pcBtn.textContent; pcBtn.textContent = 'Enviando…';
+    try { await store.pedirConfirmacionVisita(v._uid); toast('📤 Solicitud de confirmación en cola'); closeModal(); }
+    catch (e) { toast(e.message || 'No se pudo enviar', 'info'); pcBtn.disabled = false; pcBtn.textContent = orig; }
+  };
   const delBtn = node.querySelector('[data-delete]');
   if (delBtn) delBtn.onclick = async () => {
     if (!confirm(`¿Eliminar la visita ${v.id} de ${v.cliente || 'este cliente'}? Esta acción no se puede deshacer.`)) return;

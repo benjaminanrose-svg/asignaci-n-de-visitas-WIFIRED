@@ -259,6 +259,7 @@ function renderBotConfig(root) {
   const cfg = store.configFull() || {};
   const bot = cfg.bot || {};
   const bh = bot.horario || {};
+  const cvv = bot.confirma_visita || {};
   const sw = 'display:flex;align-items:center;gap:10px;cursor:pointer';
   const cb = 'width:18px;height:18px';
 
@@ -321,14 +322,31 @@ function renderBotConfig(root) {
       </div>
 
       <div class="card cfg-card">
-        <h3 class="cfg-title">🔔 Avisos automáticos <span class="tag" style="margin-left:6px">Próximamente</span></h3>
-        <p class="muted-sm">El bot podrá enviar mensajes por sí solo, sin que tengas que hacer nada:</p>
+        <h3 class="cfg-title">📅 Confirmación automática de visitas</h3>
+        <p class="muted-sm">El día <b>anterior</b> a la visita, a la hora que elijas, el bot le escribe al cliente por WhatsApp y le pide confirmar. Si responde <b>NO</b>, la visita se <b>cancela sola</b>; si responde <b>SÍ</b>, queda confirmada.</p>
+        <label style="${sw};margin:12px 0 8px">
+          <input type="checkbox" data-b="cv_activo" ${cvv.activo ? 'checked' : ''} style="${cb}">
+          <span><b>Activar confirmación automática</b></span>
+        </label>
+        <div class="field" style="max-width:220px">
+          <label>Hora de envío (el día anterior)</label>
+          <input class="input" type="number" min="0" max="23" data-b="cv_hora" value="${esc(String(cvv.hora != null ? cvv.hora : 18))}">
+        </div>
+        <div class="field full" style="margin-top:10px">
+          <label>Mensaje de confirmación</label>
+          <textarea class="textarea" data-b="cv_mensaje" style="min-height:120px" placeholder="Hola {nombre}, ¿confirmas tu visita de mañana?…">${esc(cvv.mensaje || '')}</textarea>
+          <p class="muted-sm" style="margin-top:6px">Puedes usar: <b>{nombre}</b> (nombre del cliente), <b>{fecha}</b> (día de la visita) y <b>{bloque}</b> (bloque horario). El cliente responde <b>SÍ</b> o <b>NO</b>.</p>
+        </div>
+        <p class="muted-sm" style="margin-top:8px">💡 Para probarlo sin esperar, abre una visita y usa el botón <b>“Pedir confirmación ahora”</b>. Y recuerda tener el <b>modo prueba apagado</b> (o el cliente de prueba desbloqueado) para que el bot procese su respuesta.</p>
+      </div>
+
+      <div class="card cfg-card">
+        <h3 class="cfg-title">🔔 Más avisos automáticos <span class="tag" style="margin-left:6px">Próximamente</span></h3>
         <ul class="muted-sm" style="margin:8px 0 0; padding-left:18px; line-height:1.7">
-          <li>📅 <b>Confirmación de visita</b> — el día anterior a una hora fija pregunta “¿Confirmas tu visita? SÍ / NO”; si responde NO, la visita se cancela sola.</li>
           <li>⏳ <b>Vencimiento de plan</b> — avisa al cliente cuando se acerca la fecha de vencimiento.</li>
           <li>💰 <b>Deuda</b> — le recuerda cuánto quedó debiendo.</li>
         </ul>
-        <p class="muted-sm" style="margin-top:10px">Los activaremos uno por uno. Los de vencimiento y deuda necesitan primero cargar los datos de facturación de cada cliente.</p>
+        <p class="muted-sm" style="margin-top:10px">Necesitan primero cargar los datos de facturación de cada cliente (plan, vencimiento y saldo).</p>
       </div>
 
       <div class="cfg-footbar">
@@ -354,6 +372,11 @@ function renderBotConfig(root) {
           desde: q('[data-b="horario_desde"]').value || '09:00',
           hasta: q('[data-b="horario_hasta"]').value || '19:00',
           mensaje: q('[data-b="horario_mensaje"]').value.trim(),
+        },
+        confirma_visita: {
+          activo: q('[data-b="cv_activo"]').checked,
+          hora: parseInt(q('[data-b="cv_hora"]').value, 10) || 18,
+          mensaje: q('[data-b="cv_mensaje"]').value.trim(),
         },
       },
     };

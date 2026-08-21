@@ -137,9 +137,11 @@ const handoff = new Map();    // chatId -> timestamp hasta el cual el bot NO res
 const lastBotSend = new Map();// chatId -> timestamp del último envío del bot
 const desbloqueados = new Map(); // (modo prueba) chatId -> ts, chats que dijeron la palabra clave
 const esperaPlan = new Map();    // teléfono (dígitos) -> ts límite: le enviamos planes y esperamos su elección
+const esperaConfirmacion = new Map(); // teléfono (dígitos) -> ts límite: le pedimos confirmar su visita (SÍ/NO)
 const SESSION_TTL = 10 * 60 * 1000;      // 10 min sin actividad → se reinicia el flujo
 const HANDOFF_TTL = 3 * 60 * 60 * 1000;  // 3 h de silencio cuando entra un humano
 const PLAN_TTL = 12 * 60 * 60 * 1000;    // 12 h para reconocer la respuesta del cliente a los planes
+const CONFIRM_TTL = 20 * 60 * 60 * 1000; // 20 h para reconocer el SÍ/NO de confirmación de visita
 
 function resetSession(id) { sessions.delete(id); }
 
@@ -360,9 +362,33 @@ async function onMessage(m) {
   let sess = sessions.get(id);
   if (sess && now - sess.ts > SESSION_TTL) { sessions.delete(id); sess = null; }
 
-  // Sin flujo activo: primero vemos si está respondiendo a los planes que le enviamos.
+  // Sin flujo activo: primero vemos si está respondiendo a algo que le pedimos.
   if (!sess) {
     const telDig = soloDigitos(info.telefono);
+
+    // ¿Está respondiendo a la confirmación de su visita? (SÍ / NO)
+    if (telDig && esperaConfirmacion.has(telDig)) {
+      const esSi = /^(s[ií]|si|sí|confirm|de acuerdo|dale|ya|ok|okey|okay|listo|correcto|asi es|así es|👍)/i.test(low);
+      const esNo = /^(no|cancel|nop|negativo|no puedo|no podr)/i.test(low);
+      if (!esSi && !esNo) {
+        return botSend(id, 'Para *confirmar* tu visita responde *SÍ*; para *cancelarla* responde *NO*. 🙌');
+      }
+      esperaConfirmacion.delete(telDig);
+      try {
+        const r = await api('/api/bot/confirmar-visita', {
+          method: 'POST',
+          body: JSON.stringify({ telefono: info.telefono || telDig, respuesta: esNo ? 'no' : 'si' }),
+        });
+        if (r && r.accion === 'cancelada') {
+          return botSend(id, 'Entendido, *cancelamos* tu visita. ❌\nSi quieres reagendar, escribe *menú* y con gusto coordinamos otra fecha. 🙌');
+        }
+        return botSend(id, '¡Gracias por confirmar! ✅ Tu visita queda *confirmada*. Te esperamos. 🙌');
+      } catch (e) {
+        console.error('No se pudo registrar la confirmación:', e.message);
+        return botSend(id, 'Recibimos tu respuesta, ¡gracias! Un ejecutivo la revisará. 🙌');
+      }
+    }
+
     if (telDig && esperaPlan.has(telDig)) {
       esperaPlan.delete(telDig);
       try {
@@ -493,10 +519,14 @@ async function pollOutbox() {
       const chatId = toChatId(m.telefono);
       if (!chatId) { await api('/api/bot/outbox/' + m.id + '/sent', { method: 'POST' }); continue; }
       await botSend(chatId, m.texto || '');
-      // Recordamos que a este cliente le mandamos planes: su próxima respuesta
-      // se tratará como su elección (y NO como una opción del menú).
       const telDig = soloDigitos(m.telefono);
-      if (telDig) esperaPlan.set(telDig, Date.now() + PLAN_TTL);
+      if (telDig && m.tipo === 'confirmacion') {
+        // Le pedimos confirmar su visita: su próxima respuesta (SÍ/NO) se procesa como confirmación.
+        esperaConfirmacion.set(telDig, Date.now() + CONFIRM_TTL);
+      } else if (telDig) {
+        // Le mandamos planes: su próxima respuesta se trata como su elección (no como menú).
+        esperaPlan.set(telDig, Date.now() + PLAN_TTL);
+      }
       await api('/api/bot/outbox/' + m.id + '/sent', { method: 'POST' });
       console.log(`[BOT] mensaje automático enviado a ${m.telefono}`);
     }
