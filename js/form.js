@@ -78,9 +78,9 @@ export function visitFormModal(existing = null, prefill = {}) {
             <label>Nodo</label>
             <select class="select" name="nodo">${opt(store.nodos(), v.nodo, 'Sin nodo')}</select>
           </div>
-          <div class="field full" data-facti-hide>
-            <label>Detalle / problema</label>
-            <textarea class="textarea" name="detalle" placeholder="Descripción del trabajo o falla reportada…">${esc(v.detalle || prefill.detalle || '')}</textarea>
+          <div class="field full">
+            <label>Detalle / nota</label>
+            <textarea class="textarea" name="detalle" placeholder="Descripción del trabajo, falla reportada o nota…">${esc(v.detalle || prefill.detalle || '')}</textarea>
           </div>
         </div>
       </form>
