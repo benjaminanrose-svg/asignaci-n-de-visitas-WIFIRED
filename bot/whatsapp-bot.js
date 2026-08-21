@@ -27,6 +27,13 @@ const BOT_API_KEY = process.env.BOT_API_KEY || '';
 const EMPRESA = process.env.EMPRESA || 'TELECOMUNICACIONES WIFIRED';
 const AUTH_DIR = process.env.AUTH_DIR || path.join(__dirname, 'auth_wifired');
 
+// ---------- Modo prueba ----------
+// Con MODO_PRUEBA activo, el bot IGNORA a todos los clientes y solo atiende a quien
+// escriba la palabra clave (por defecto "paralelepipedo"). Ideal para probar sin molestar.
+// Se enciende con la variable MODO_PRUEBA=1 (y se apaga quitándola o poniéndola en 0).
+const MODO_PRUEBA = /^(1|true|si|sí|on)$/i.test(process.env.MODO_PRUEBA || '');
+const PALABRA_PRUEBA = (process.env.PALABRA_PRUEBA || 'paralelepipedo').toLowerCase();
+
 if (!BOT_API_KEY) {
   console.error('❌ Falta la variable BOT_API_KEY (debe ser la misma que configuraste en la app).');
   process.exit(1);
@@ -115,6 +122,7 @@ const FLOWS = {
 const sessions = new Map();   // chatId -> { opt, idx, data, ts }
 const handoff = new Map();    // chatId -> timestamp hasta el cual el bot NO responde
 const lastBotSend = new Map();// chatId -> timestamp del último envío del bot
+const desbloqueados = new Map(); // (modo prueba) chatId -> ts, chats que dijeron la palabra clave
 const SESSION_TTL = 10 * 60 * 1000;      // 10 min sin actividad → se reinicia el flujo
 const HANDOFF_TTL = 3 * 60 * 60 * 1000;  // 3 h de silencio cuando entra un humano
 
@@ -246,7 +254,12 @@ async function start() {
       const miNumero = (sock.user && sock.user.id ? String(sock.user.id).split(':')[0].split('@')[0] : '') || '(desconocido)';
       console.log(`✅ Bot conectado y escuchando. API: ${API_URL}`);
       console.log(`📱 El bot ES el número: +${miNumero}`);
-      console.log('👉 Para PROBARLO: escribe "hola" a ese número DESDE OTRO teléfono (un número distinto).');
+      if (MODO_PRUEBA) {
+        console.log(`🧪 MODO PRUEBA ACTIVO — el bot solo responde a quien escriba: "${PALABRA_PRUEBA}"`);
+        console.log('👉 Para PROBARLO: escribe esa palabra a la empresa DESDE OTRO teléfono.');
+      } else {
+        console.log('👉 Para PROBARLO: escribe "hola" a ese número DESDE OTRO teléfono (un número distinto).');
+      }
     }
     if (connection === 'close') {
       const code = (lastDisconnect && lastDisconnect.error && lastDisconnect.error.output && lastDisconnect.error.output.statusCode) || 0;
@@ -306,6 +319,16 @@ async function onMessage(m) {
 
   const text = info.body;
   const low = text.toLowerCase();
+
+  // Modo prueba: solo atendemos a quien escriba la palabra clave; el resto se ignora.
+  if (MODO_PRUEBA) {
+    if (low === PALABRA_PRUEBA) {
+      desbloqueados.set(id, Date.now());
+      resetSession(id);
+      return botSend(id, '🧪 *Modo prueba activado.* A partir de ahora te atiendo. 👇\n\n' + menuText());
+    }
+    if (!desbloqueados.has(id)) return; // en pruebas, ignoramos a todos los demás
+  }
 
   // Comandos globales para volver al menú
   if (['menu', 'menú', 'hola', 'inicio', 'buenas', 'empezar'].includes(low)) {
