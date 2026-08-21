@@ -95,7 +95,6 @@ export function renderConfig(root) {
   const fonos = Array.isArray(emp.fonos) ? emp.fonos.join(', ') : (emp.fonos || '');
   const avisos = cfg.avisos_cliente !== false;
   const bot = cfg.bot || {};
-  const bh = bot.horario || {};
 
   root.innerHTML = `
     <div class="section-head">
@@ -129,26 +128,13 @@ export function renderConfig(root) {
 
       <div class="card cfg-card">
         <h3 class="cfg-title">🤖 Bot de WhatsApp</h3>
-        <p class="muted-sm">El asistente que responde a los clientes por WhatsApp y crea tickets. Estos textos los usa el bot sin que tengas que tocar código. (Requiere tener el bot conectado en el servidor.)</p>
-        <label style="display:flex;align-items:center;gap:10px;margin:12px 0;cursor:pointer">
-          <input type="checkbox" data-bot="activo" ${bot.activo !== false ? 'checked' : ''} style="width:18px;height:18px">
-          <span><b>Bot activo</b> — responde automáticamente a los clientes</span>
-        </label>
-        <div class="field full"><label>Saludo del menú (primera frase que ve el cliente)</label>
-          <textarea class="textarea" data-bot="saludo" placeholder="Soy el asistente virtual…">${esc(bot.saludo || '')}</textarea></div>
-        <div class="field full" style="margin-top:12px"><label>Texto de los planes (se envía al cliente con el botón “Enviar planes por WhatsApp”)</label>
-          <textarea class="textarea" data-bot="planes" style="min-height:130px" placeholder="Estos son nuestros planes…">${esc(bot.planes || '')}</textarea></div>
-
-        <label style="display:flex;align-items:center;gap:10px;margin:16px 0 8px;cursor:pointer">
-          <input type="checkbox" data-bot="horario_activo" ${bh.activo ? 'checked' : ''} style="width:18px;height:18px">
-          <span><b>Avisar cuando el cliente escribe fuera de horario</b></span>
-        </label>
-        <div class="cfg-two">
-          <div class="field"><label>Atención desde</label><input class="input" type="time" data-bot="horario_desde" value="${esc(bh.desde || '09:00')}"></div>
-          <div class="field"><label>Atención hasta</label><input class="input" type="time" data-bot="horario_hasta" value="${esc(bh.hasta || '19:00')}"></div>
+        <p class="muted-sm">El asistente que atiende a tus clientes por WhatsApp: menú, tickets, planes, horario y (pronto) avisos automáticos. Tiene su propia sección para no mezclarla con el resto.</p>
+        <div class="row" style="align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px">
+          <span class="tag" style="background:color-mix(in srgb, ${bot.activo !== false ? '#10b981' : '#94a3b8'} 16%, transparent); color:${bot.activo !== false ? '#10b981' : '#94a3b8'}; border-color:color-mix(in srgb, ${bot.activo !== false ? '#10b981' : '#94a3b8'} 40%, var(--border))">${bot.activo !== false ? '🟢 Activo' : '⚪ Inactivo'}</span>
+          ${bot.modo_prueba !== false ? '<span class="tag">🧪 En modo prueba</span>' : ''}
+          <div class="grow"></div>
+          <button class="btn btn-primary" data-openbot>⚙️ Abrir configuración del Bot →</button>
         </div>
-        <div class="field full" style="margin-top:10px"><label>Mensaje fuera de horario</label>
-          <textarea class="textarea" data-bot="horario_mensaje" placeholder="Estamos fuera de horario…">${esc(bh.mensaje || '')}</textarea></div>
       </div>
 
       <div class="card cfg-card">
@@ -226,6 +212,9 @@ export function renderConfig(root) {
   // Vaciar historial (empezar de cero) — con respaldo previo y confirmación escrita
   root.querySelector('[data-wipe]').onclick = () => wipeFlow(root);
 
+  // Abrir la sección dedicada del Bot de WhatsApp
+  root.querySelector('[data-openbot]').onclick = () => renderBotConfig(root);
+
   // Guardar
   const doSave = async (btn) => {
     const empEmail = (root.querySelector('[data-emp="email"]').value || '').trim();
@@ -245,17 +234,6 @@ export function renderConfig(root) {
       prioridades: collectList(root, 'prioridades'),
       nodos: collectList(root, 'nodos'),
       avisos_cliente: root.querySelector('[data-avisos]').checked,
-      bot: {
-        activo: root.querySelector('[data-bot="activo"]').checked,
-        saludo: root.querySelector('[data-bot="saludo"]').value.trim(),
-        planes: root.querySelector('[data-bot="planes"]').value.trim(),
-        horario: {
-          activo: root.querySelector('[data-bot="horario_activo"]').checked,
-          desde: root.querySelector('[data-bot="horario_desde"]').value || '09:00',
-          hasta: root.querySelector('[data-bot="horario_hasta"]').value || '19:00',
-          mensaje: root.querySelector('[data-bot="horario_mensaje"]').value.trim(),
-        },
-      },
     };
     if (!payload.tipos.length) { toast('Deja al menos un tipo de servicio', 'info'); return; }
     if (!payload.estados.length) { toast('Deja al menos un estado', 'info'); return; }
@@ -271,4 +249,123 @@ export function renderConfig(root) {
     }
   };
   root.querySelectorAll('[data-save]').forEach((b) => (b.onclick = () => doSave(b)));
+}
+
+// ============================================================
+// Sección dedicada del Bot de WhatsApp (se abre desde Configuración)
+// ============================================================
+function renderBotConfig(root) {
+  if (!store.isCoordinador()) { renderConfig(root); return; }
+  const cfg = store.configFull() || {};
+  const bot = cfg.bot || {};
+  const bh = bot.horario || {};
+  const sw = 'display:flex;align-items:center;gap:10px;cursor:pointer';
+  const cb = 'width:18px;height:18px';
+
+  root.innerHTML = `
+    <div class="section-head">
+      <div>
+        <h2>🤖 Bot de WhatsApp</h2>
+        <span class="muted-sm">Toda la configuración del asistente, en un solo lugar</span>
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="btn" data-back>← Volver</button>
+        <button class="btn btn-primary" data-savebot>Guardar cambios</button>
+      </div>
+    </div>
+
+    <div class="cfg-wrap">
+      <div class="card cfg-card">
+        <h3 class="cfg-title">⚙️ General</h3>
+        <label style="${sw};margin:6px 0">
+          <input type="checkbox" data-b="activo" ${bot.activo !== false ? 'checked' : ''} style="${cb}">
+          <span><b>Bot activo</b> — responde automáticamente a los clientes</span>
+        </label>
+        <div style="border-top:1px solid var(--border);margin:14px 0"></div>
+        <label style="${sw};margin:6px 0">
+          <input type="checkbox" data-b="modo_prueba" ${bot.modo_prueba !== false ? 'checked' : ''} style="${cb}">
+          <span><b>Modo prueba</b> 🧪 — el bot solo responde a quien escriba la palabra clave (para probar sin molestar a clientes reales)</span>
+        </label>
+        <div class="field" style="margin-top:8px;max-width:280px">
+          <label>Palabra clave del modo prueba</label>
+          <input class="input" data-b="palabra_prueba" value="${esc(bot.palabra_prueba || 'paralelepipedo')}" autocomplete="off">
+        </div>
+        <p class="muted-sm" style="margin-top:6px">💡 Cuando termines de probar, <b>apaga el modo prueba</b> y el bot atenderá a todos los clientes con “hola”.</p>
+      </div>
+
+      <div class="card cfg-card">
+        <h3 class="cfg-title">💬 Saludo del menú</h3>
+        <div class="field full"><label>Primera frase que ve el cliente al escribir</label>
+          <textarea class="textarea" data-b="saludo" placeholder="Soy el asistente virtual…">${esc(bot.saludo || '')}</textarea></div>
+      </div>
+
+      <div class="card cfg-card">
+        <h3 class="cfg-title">📶 Planes</h3>
+        <p class="muted-sm">Este texto se le envía al cliente con el botón “Enviar planes por WhatsApp” del ticket. Usa *asteriscos* para negrita.</p>
+        <div class="field full" style="margin-top:8px">
+          <textarea class="textarea" data-b="planes" style="min-height:180px" placeholder="Estos son nuestros planes…">${esc(bot.planes || '')}</textarea></div>
+      </div>
+
+      <div class="card cfg-card">
+        <h3 class="cfg-title">🕐 Horario de atención</h3>
+        <label style="${sw};margin:6px 0 8px">
+          <input type="checkbox" data-b="horario_activo" ${bh.activo ? 'checked' : ''} style="${cb}">
+          <span><b>Avisar cuando el cliente escribe fuera de horario</b></span>
+        </label>
+        <div class="cfg-two">
+          <div class="field"><label>Atención desde</label><input class="input" type="time" data-b="horario_desde" value="${esc(bh.desde || '09:00')}"></div>
+          <div class="field"><label>Atención hasta</label><input class="input" type="time" data-b="horario_hasta" value="${esc(bh.hasta || '19:00')}"></div>
+        </div>
+        <div class="field full" style="margin-top:10px"><label>Mensaje fuera de horario</label>
+          <textarea class="textarea" data-b="horario_mensaje" placeholder="Estamos fuera de horario…">${esc(bh.mensaje || '')}</textarea></div>
+      </div>
+
+      <div class="card cfg-card">
+        <h3 class="cfg-title">🔔 Avisos automáticos <span class="tag" style="margin-left:6px">Próximamente</span></h3>
+        <p class="muted-sm">El bot podrá enviar mensajes por sí solo, sin que tengas que hacer nada:</p>
+        <ul class="muted-sm" style="margin:8px 0 0; padding-left:18px; line-height:1.7">
+          <li>📅 <b>Confirmación de visita</b> — el día anterior a una hora fija pregunta “¿Confirmas tu visita? SÍ / NO”; si responde NO, la visita se cancela sola.</li>
+          <li>⏳ <b>Vencimiento de plan</b> — avisa al cliente cuando se acerca la fecha de vencimiento.</li>
+          <li>💰 <b>Deuda</b> — le recuerda cuánto quedó debiendo.</li>
+        </ul>
+        <p class="muted-sm" style="margin-top:10px">Los activaremos uno por uno. Los de vencimiento y deuda necesitan primero cargar los datos de facturación de cada cliente.</p>
+      </div>
+
+      <div class="cfg-footbar">
+        <button class="btn" data-back>← Volver a Configuración</button>
+        <div class="grow"></div>
+        <button class="btn btn-primary" data-savebot>Guardar cambios</button>
+      </div>
+    </div>`;
+
+  root.querySelectorAll('[data-back]').forEach((b) => (b.onclick = () => renderConfig(root)));
+
+  const doSaveBot = async () => {
+    const q = (sel) => root.querySelector(sel);
+    const payload = {
+      bot: {
+        activo: q('[data-b="activo"]').checked,
+        modo_prueba: q('[data-b="modo_prueba"]').checked,
+        palabra_prueba: q('[data-b="palabra_prueba"]').value.trim() || 'paralelepipedo',
+        saludo: q('[data-b="saludo"]').value.trim(),
+        planes: q('[data-b="planes"]').value.trim(),
+        horario: {
+          activo: q('[data-b="horario_activo"]').checked,
+          desde: q('[data-b="horario_desde"]').value || '09:00',
+          hasta: q('[data-b="horario_hasta"]').value || '19:00',
+          mensaje: q('[data-b="horario_mensaje"]').value.trim(),
+        },
+      },
+    };
+    root.querySelectorAll('[data-savebot]').forEach((b) => { b.disabled = true; });
+    try {
+      await store.saveConfig(payload);
+      toast('Configuración del bot guardada ✓');
+      renderBotConfig(root);
+    } catch (e) {
+      toast(e.message || 'No se pudo guardar', 'info');
+      root.querySelectorAll('[data-savebot]').forEach((b) => { b.disabled = false; });
+    }
+  };
+  root.querySelectorAll('[data-savebot]').forEach((b) => (b.onclick = doSaveBot));
 }
