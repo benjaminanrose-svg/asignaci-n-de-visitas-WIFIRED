@@ -1,7 +1,7 @@
 // ============================================================
 // WIFIRED · Componentes de UI reutilizables + modales
 // ============================================================
-import { esc, parseTecnico, fmtDate, fmtDateShort, bloqueShort, colorFor, initials, telLink, waLink, todayISO, toast, limpiaRut, normalizaFono, formatRut } from './util.js';
+import { esc, parseTecnico, fmtDate, fmtDateShort, bloqueShort, colorFor, initials, telLink, waLink, todayISO, toast, limpiaRut, normalizaFono, formatRut, mapsHref } from './util.js';
 import { openPhoto } from './photos.js';
 import { downloadZip, dataUriToBytes } from './zip.js';
 import * as store from './store.js';
@@ -330,7 +330,7 @@ export function clientCardModal(v, opts = {}) {
         ${pill('ds-prog', activas, 'activas')}
         ${pill('ds-repr', canc, 'canceladas')}
       </div>
-      ${dir ? `<div class="muted-sm" style="margin-bottom:12px">📍 <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dir + ', Melipilla, Chile')}" target="_blank" rel="noopener" style="color:var(--brand-500)">${esc(dir)} · ver mapa ›</a></div>` : ''}
+      ${dir ? `<div class="muted-sm" style="margin-bottom:12px">📍 <a href="${mapsHref(dir)}" target="_blank" rel="noopener" style="color:var(--brand-500)">${esc(dir)} · ver mapa ›</a></div>` : ''}
       <div class="hist-head" style="margin-bottom:6px"><span class="ev-title">🗂 Todas sus visitas (${n})</span></div>
       <div class="kpi-vlist">${visitas.map(row).join('')}</div>
     </div>
@@ -376,7 +376,7 @@ export function visitDetailModal(v, { onEdit, onOrder, readOnly = false } = {}) 
         <div class="detail-row"><span class="dl-k">Técnico asignado</span><span class="dl-v row" style="gap:8px">${v.tecnico ? techAvatar(v.tecnico) + esc(t.name) : '<span class="muted">Sin asignar</span>'}</span></div>
         <div class="detail-row"><span class="dl-k">RUT</span><span class="dl-v">${esc(v.rut || '—')}</span></div>
         <div class="detail-row"><span class="dl-k">Teléfono</span><span class="dl-v">${esc(v.telefono || '—')}</span></div>
-        <div class="detail-row"><span class="dl-k">Dirección</span><span class="dl-v">${v.direccion ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v.direccion + ', Melipilla, Chile')}" target="_blank" rel="noopener" style="color:var(--brand-500)">${esc(v.direccion)} · ver mapa ›</a>` : '—'}</span></div>
+        <div class="detail-row"><span class="dl-k">Dirección</span><span class="dl-v">${v.direccion ? `<a href="${mapsHref(v.direccion)}" target="_blank" rel="noopener" style="color:var(--brand-500)">${esc(v.direccion)} · ver mapa ›</a>` : '—'}</span></div>
         <div class="detail-row"><span class="dl-k">Detalle / problema</span><span class="dl-v">${esc(v.detalle || '—')}</span></div>
         ${v.asignado_por ? `<div class="detail-row"><span class="dl-k">Asignado por</span><span class="dl-v">${esc(v.asignado_por)}</span></div>` : ''}
       </div>
