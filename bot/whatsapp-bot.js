@@ -19,6 +19,7 @@ const {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   DisconnectReason,
+  downloadMediaMessage,
 } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 
@@ -80,19 +81,25 @@ async function loadBotConfig() {
 
 // ---------- Textos ----------
 function menuText() {
-  return `¡Hola! 👋 Bienvenido a *${EMPRESA}*.
+  return `¡Hola! 👋 Bienvenido/a a *${EMPRESA}*.
 ${botCfg.saludo}
 
-Para ayudarte, respóndeme con *un solo número* (del 1 al 5) 👇
+Cuéntame en qué te puedo ayudar hoy. Respóndeme con *un solo número* (del 1 al 4) 👇
 
-*1* · Soporte técnico 🛠️ (internet lento, cortes, sin señal)
-*2* · Planes y contratar internet 📶
+*1* · Soporte técnico 🛠️
+    _Internet lento, cortes, sin señal o cualquier falla. Si hace falta, coordinamos una visita técnica a tu domicilio._
+
+*2* · Planes y contratación 📶
+    _Conoce nuestros planes y contrata internet nuevo._
+
 *3* · Pagos y facturación 💳
-*4* · Agendar o consultar una visita 📅
-*5* · Hablar con una persona 🧑‍💼
+    _Pagar, consultar tu deuda o enviar un comprobante._
 
-_Ejemplo: escribe *2* si quieres contratar._
-_Escribe *menú* cuando quieras volver aquí._`;
+*4* · Hablar con una persona 🧑‍💼
+    _Te comunicamos con un ejecutivo de WIFIRED._
+
+_Ejemplo: escribe *1* si tienes un problema con tu internet._
+_Escribe *menú* en cualquier momento para volver a este menú._`;
 }
 const CIERRE = '\n\n_Escribe *menú* si necesitas algo más._ 🙌';
 
@@ -101,35 +108,43 @@ const FLOWS = {
   '1': {
     categoria: 'Soporte',
     pasos: [
-      { campo: 'nombre', pregunta: 'Lamento el problema con tu servicio. 🛠️\n\nPara ayudarte, ¿cuál es tu *nombre completo*?' },
-      { campo: 'mensaje', pregunta: 'Gracias. Ahora cuéntame *qué está pasando* (ej: sin internet desde ayer, anda lento, sin señal…).' },
+      { campo: 'nombre', pregunta: 'Lamento mucho el problema con tu servicio. 🛠️ Te ayudo enseguida.\n\nPara empezar, ¿cuál es tu *nombre completo*?' },
+      { campo: 'ubicacion', esUbicacion: true, pregunta: 'Gracias. 🙌 ¿En qué *dirección* está ocurriendo el problema?\n\nEscríbela con *calle, número y sector*, o compárteme tu *ubicación*: toca el clip 📎 → *Ubicación* → *Enviar ubicación actual*.\n\n_Así el técnico sabe exactamente dónde ir si hace falta una visita._' },
+      { campo: 'mensaje', pregunta: 'Perfecto. Ahora, por favor, cuéntame *con el mayor detalle posible qué está pasando*:\n\n• ¿Estás *sin internet*, va *lento* o hay *cortes* que van y vuelven?\n• ¿*Desde cuándo* ocurre?\n• ¿Afecta a *todos* los dispositivos o solo a algunos?\n• ¿Las *luces del router* están encendidas o alguna parpadea/está apagada?\n\n_Mientras más me cuentes, más rápido lo resolvemos._' },
     ],
-    confirma: (n) => `✅ ¡Listo! Registramos tu solicitud de *soporte* con el N° *${n}*.\nUn técnico revisará tu caso a la brevedad.`,
+    confirma: (n) => `✅ ¡Listo! Registramos tu solicitud de *soporte técnico* con el N° *${n}*.\n\nNuestro equipo revisará tu caso y, si es necesario, *coordinará una visita técnica* a tu domicilio para solucionarlo. Te contactaremos a la brevedad. 🛠️🙌`,
   },
   '2': {
     categoria: 'Contratación',
     pasos: [
-      { campo: 'ubicacion', esUbicacion: true, pregunta: '¡Genial! 📶 Primero revisemos si tenemos *cobertura* en tu sector.\n\nPor favor compárteme tu *ubicación*:\ntoca el clip 📎 → *Ubicación* → *Enviar tu ubicación actual*.\n\n_Si prefieres, también puedes escribirme tu dirección exacta (calle, número y sector)._' },
-      { campo: 'nombre', pregunta: '¡Perfecto! Por último, ¿cuál es tu *nombre*?' },
+      { campo: 'ubicacion', esUbicacion: true, pregunta: '¡Qué bueno que quieras ser parte de *WIFIRED*! 📶\n\nLo primero es revisar si tenemos *cobertura* en tu sector. Para eso necesito saber dónde vives:\n\n📎 Compárteme tu *ubicación* (toca el clip → *Ubicación* → *Enviar ubicación actual*),\no escríbeme tu *dirección exacta*: calle, número, sector o parcela y alguna referencia.' },
+      { campo: 'nombre', pregunta: '¡Perfecto! 🙌 ¿Cuál es tu *nombre completo*?' },
     ],
-    confirma: (n) => `✅ ¡Recibido! Estamos revisando la *factibilidad* en tu sector (N° *${n}*).\nTe confirmamos pronto si podemos llevarte internet y te enviamos los planes. 📶`,
+    confirma: (n) => `✅ ¡Recibido! Registramos tu solicitud de *contratación* con el N° *${n}*.\n\nAhora nuestro equipo revisará la *factibilidad* (si nuestra red llega a tu sector). En cuanto la confirmemos, te enviaremos los *planes disponibles* y coordinaremos la *instalación*. 📶\n\nTe contactaremos muy pronto. ¡Gracias por preferirnos!`,
   },
   '3': {
     categoria: 'Pagos',
     pasos: [
-      { campo: 'nombre', pregunta: '💳 Con gusto. ¿Cuál es el *nombre o RUT del titular*?' },
-      { campo: 'mensaje', pregunta: '¿En qué te ayudamos? (ej: quiero pagar, consultar mi deuda, enviar comprobante).' },
+      { campo: 'nombre', pregunta: '💳 Con gusto te ayudo con pagos y facturación.\n\n¿Cuál es el *nombre completo o el RUT del titular* de la cuenta?' },
+      { campo: 'mensaje', pregunta: '¿Qué necesitas exactamente? Por ejemplo:\n\n• *Pagar* mi mensualidad\n• *Consultar* mi deuda o mi estado de cuenta\n• *Enviar un comprobante* de pago\n• Corregir un dato de mi *boleta/factura*\n\nCuéntame con detalle para poder ayudarte mejor. 🙌' },
     ],
-    confirma: (n) => `✅ ¡Gracias! Tu consulta de *pagos* quedó registrada con el N° *${n}*.\nTe contactaremos a la brevedad. 💳`,
-  },
-  '4': {
-    categoria: 'Visita',
-    pasos: [
-      { campo: 'mensaje', pregunta: '¿Quieres *agendar* una nueva visita o *consultar* algo puntual? Cuéntame, e incluye tu *dirección* si es una visita nueva.' },
-    ],
-    confirma: (n) => `✅ ¡Listo! Tu solicitud quedó registrada con el N° *${n}*.\nCoordinación te contactará para confirmar. 📅`,
+    confirma: (n) => `✅ ¡Gracias! Tu solicitud de *pagos y facturación* quedó registrada con el N° *${n}*.\n\nUn ejecutivo revisará tu caso y te contactará a la brevedad para ayudarte. 💳🙌`,
   },
 };
+
+// Proceso de contratación: se inicia cuando el cliente elige un plan (tras recibir la lista).
+// Recoge todos los datos del contrato, paso a paso, incluidas las fotos del carnet y la
+// aceptación de las condiciones (que el bot toma de la configuración).
+const PASOS_CONTRATO = [
+  { campo: 'nombre', pregunta: '¡Genial! Para dejar todo listo, te pediré algunos datos, uno por uno. 📝\n\n1️⃣ ¿Cuál es tu *nombre completo*?' },
+  { campo: 'rut', esRut: true, pregunta: '2️⃣ ¿Cuál es tu *RUT*? (ej: 12.345.678-9)' },
+  { campo: 'telefono', esTelefono: true, pregunta: '3️⃣ ¿Cuál es tu *número de teléfono de contacto*? (9 dígitos, ej: 9 1234 5678)' },
+  { campo: 'correo', esCorreo: true, pregunta: '4️⃣ ¿Cuál es tu *correo electrónico*? (ej: nombre@correo.com)' },
+  { campo: 'direccion', esUbicacion: true, pregunta: '5️⃣ ¿Cuál es la *dirección exacta de instalación*?\n\nEscríbela (calle, número, sector o parcela y una referencia), o compárteme tu *ubicación* 📎.' },
+  { campo: 'carnet_frente', esFoto: true, pregunta: '6️⃣ Ahora necesito una *foto del FRENTE de tu carnet de identidad* 📷 (el lado con tu foto).\n\nTómale una foto clara y envíamela como imagen.' },
+  { campo: 'carnet_reverso', esFoto: true, pregunta: '7️⃣ ¡Perfecto! Ahora una *foto del REVERSO de tu carnet* 📷 (el lado de atrás).' },
+  { campo: 'condiciones', esCondiciones: true, pregunta: '' },
+];
 
 // ---------- Estado en memoria ----------
 const sessions = new Map();   // chatId -> { opt, idx, data, ts }
@@ -219,6 +234,13 @@ function telefonoDeTexto(txt) {
   return '';
 }
 
+/** Valida un correo electrónico de forma sencilla */
+function validaCorreo(x) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(x || '').trim()); }
+/** Deja solo dígitos y K del RUT; devuelve '' si es claramente inválido (menos de 7 caracteres) */
+function normalizaRut(x) { const r = String(x || '').replace(/[^0-9kK]/g, '').toUpperCase(); return r.length >= 7 ? r : ''; }
+/** Da formato al RUT: 123456789 -> 12.345.678-9 */
+function formateaRut(r) { if (!r) return ''; const dv = r.slice(-1); const n = r.slice(0, -1); return n.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv; }
+
 /** Paso extra: pedir el teléfono cuando WhatsApp no nos entrega el número real (@lid). */
 const PASO_TELEFONO = {
   campo: 'telefono',
@@ -243,6 +265,29 @@ async function botSend(id, text) {
 }
 
 function crearTicket(payload) { return api('/api/bot/ticket', { method: 'POST', body: JSON.stringify(payload) }); }
+
+/** Descarga una imagen recibida y la devuelve como data URI (base64), o '' si no es imagen. */
+async function getFotoDataUri(m) {
+  const img = m && m.message && m.message.imageMessage;
+  if (!img) return '';
+  try {
+    const buf = await downloadMediaMessage(m, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage });
+    const mime = img.mimetype || 'image/jpeg';
+    return 'data:' + mime + ';base64,' + Buffer.from(buf).toString('base64');
+  } catch (e) { console.error('No pude descargar la foto:', e.message); return ''; }
+}
+
+/** Envía la pregunta de un paso (soporta condiciones dinámicas y preguntas como función). */
+async function enviarPregunta(id, paso) {
+  if (paso.esCondiciones) {
+    const cond = (botCfg.condiciones || '').trim();
+    if (cond) await botSend(id, '📄 *Términos y condiciones del servicio WIFIRED:*\n\n' + cond);
+    else await botSend(id, '📄 *Términos y condiciones del servicio.* (Un ejecutivo te los detallará al coordinar la instalación.)');
+    return botSend(id, 'Para *finalizar tu contratación*, ¿estás de acuerdo con las condiciones? Responde *SÍ* para aceptar, o *NO*. ✍️');
+  }
+  const p = typeof paso.pregunta === 'function' ? paso.pregunta() : paso.pregunta;
+  return botSend(id, p);
+}
 
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -325,6 +370,7 @@ async function onMessage(m) {
 
   const info = {
     id,
+    raw: m,
     body: getText(m),
     location: getLocation(m),
     notifyName: m.pushName || '',
@@ -397,12 +443,15 @@ async function onMessage(m) {
           body: JSON.stringify({ telefono: info.telefono || telDig, nombre: info.notifyName || '', eleccion: text }),
         });
       } catch (e) { console.error('No se pudo registrar la elección de plan:', e.message); }
-      handoff.set(id, Date.now() + HANDOFF_TTL);
-      return botSend(id, '¡Excelente elección! 🎉\nUn ejecutivo te contactará muy pronto para coordinar tu *contratación e instalación*.\n\n_Gracias por preferir ' + EMPRESA + '._ 🙌');
+      // Iniciamos el PROCESO DE CONTRATACIÓN: recogemos todos los datos del contrato.
+      await botSend(id, '¡Excelente elección! 🎉 Vamos a *dejar todo listo para tu contratación*.');
+      const cs = { opt: 'CONTRATO', idx: 0, data: { plan: text }, ts: Date.now(), telefono: info.telefono || telDig, telefono_original: info.telefono || telDig, pasos: PASOS_CONTRATO.slice() };
+      sessions.set(id, cs);
+      return enviarPregunta(id, cs.pasos[0]);
     }
 
-    // Selección del menú: SOLO un número solo (1-5), para no confundir con planes ni teléfonos.
-    const mOpt = text.match(/^\s*([1-5])[\s.)\-]*$/);
+    // Selección del menú: SOLO un número solo (1-4), para no confundir con planes ni teléfonos.
+    const mOpt = text.match(/^\s*([1-4])[\s.)\-]*$/);
     const opt = mOpt ? mOpt[1] : null;
     if (!opt) {
       if (fueraDeHorario() && botCfg.horario.mensaje) await botSend(id, botCfg.horario.mensaje);
@@ -421,24 +470,12 @@ async function startFlow(id, opt, info) {
   // Con el formato @lid, si no lo tenemos, lo pediremos dentro del flujo (NO inventamos un número).
   const telefono = info.telefono || '';
 
-  // Opción 5: pasar a un ejecutivo (silencia el bot y crea ticket)
-  if (opt === '5') {
+  // Opción 4: pasar a un ejecutivo (silencia el bot y crea ticket)
+  if (opt === '4') {
     try { await crearTicket({ categoria: 'Ejecutivo', nombre, telefono, mensaje: 'El cliente solicitó hablar con un ejecutivo.' }); } catch (e) { console.error(e.message); }
     handoff.set(id, Date.now() + HANDOFF_TTL);
     resetSession(id);
-    return botSend(id, '🧑‍💼 ¡Con gusto! Un ejecutivo continuará esta conversación contigo lo antes posible.\n\n_Dejé de responder automáticamente para que puedas hablar con la persona._');
-  }
-
-  // Opción 4: si conocemos el teléfono real, consultamos su visita antes de seguir
-  if (opt === '4' && telefono) {
-    try {
-      const r = await api('/api/bot/visita?telefono=' + encodeURIComponent(telefono));
-      if (r && r.found) {
-        const t = r.tecnico ? ` con *${r.tecnico}*` : '';
-        const f = r.fecha ? ` para el *${r.fecha}*` : '';
-        await botSend(id, `📅 Encontré una visita a tu nombre: *${r.estado}*${f}${t}.`);
-      }
-    } catch (e) { /* si falla la consulta, seguimos igual */ }
+    return botSend(id, '🧑‍💼 ¡Con gusto! En un momento un *ejecutivo de WIFIRED* continuará esta conversación contigo.\n\n_Dejé de responder automáticamente para que puedas hablar directamente con la persona. Si necesitas volver al menú, escribe *menú*._');
   }
 
   const flow = FLOWS[opt];
@@ -447,34 +484,50 @@ async function startFlow(id, opt, info) {
   const pasos = telefono ? flow.pasos.slice() : [PASO_TELEFONO, ...flow.pasos];
   const sess = { opt, idx: 0, data: {}, ts: Date.now(), telefono, pasos };
   sessions.set(id, sess);
-  return botSend(id, pasos[0].pregunta);
+  return enviarPregunta(id, pasos[0]);
 }
 
 async function handleStep(id, sess, info) {
-  const flow = FLOWS[sess.opt];
-  const pasos = sess.pasos || flow.pasos;
+  const flow = FLOWS[sess.opt];             // undefined en el proceso de contratación (usa sess.pasos)
+  const pasos = sess.pasos || (flow && flow.pasos) || [];
   const paso = pasos[sess.idx];
   let valor;
 
   if (paso.esTelefono) {
     const tel = telefonoDeTexto(info.body);
-    if (!tel) {
-      return botSend(id, 'No pude reconocer ese número. 🤔\nEscríbelo con los *9 dígitos*, por ejemplo: *9 1234 5678*.');
-    }
+    if (!tel) return botSend(id, 'No pude reconocer ese número. 🤔\nEscríbelo con los *9 dígitos*, por ejemplo: *9 1234 5678*.');
     sess.telefono = tel;
     valor = tel;
+  } else if (paso.esCorreo) {
+    const c = (info.body || '').trim();
+    if (!validaCorreo(c)) return botSend(id, 'Ese correo no parece válido. 🤔 Escríbelo así: *nombre@correo.com* 📧');
+    valor = c;
+  } else if (paso.esRut) {
+    const r = normalizaRut(info.body);
+    if (!r) return botSend(id, 'Ese RUT no parece válido. 🤔 Escríbelo con guión, por ejemplo: *12.345.678-9*');
+    valor = r;
+  } else if (paso.esFoto) {
+    const foto = await getFotoDataUri(info.raw);
+    if (!foto) return botSend(id, 'Necesito una *foto* 📷. Toma una foto clara con tu cámara y envíamela *como imagen* (no como texto).');
+    valor = foto;
+  } else if (paso.esCondiciones) {
+    const low = (info.body || '').toLowerCase();
+    const si = /^(s[ií]|si|sí|acepto|de acuerdo|estoy de acuerdo|ok|dale|confirmo|👍)/.test(low);
+    const no = /^(no|rechazo|no acepto|no estoy)/.test(low);
+    if (!si && !no) return botSend(id, 'Para continuar necesito tu respuesta: responde *SÍ* para *aceptar* las condiciones, o *NO*. ✍️');
+    if (no) {
+      resetSession(id);
+      handoff.set(id, Date.now() + HANDOFF_TTL);
+      return botSend(id, 'Entendido. 🙏 Sin la aceptación de las condiciones no podemos continuar con la contratación por aquí.\n\nSi cambias de opinión, escribe *menú*. Un ejecutivo queda atento para resolver tus dudas.');
+    }
+    valor = 'aceptadas';
   } else if (paso.esUbicacion) {
-    if (info.location) {
-      valor = `${info.location.latitude},${info.location.longitude}`;
-    } else {
-      valor = (info.body || '').trim(); // aceptar dirección escrita
-    }
-    if (!valor) {
-      return botSend(id, 'Necesito tu *ubicación* o tu *dirección* para revisar la cobertura.\nToca 📎 → *Ubicación* → *Enviar ubicación actual*, o escríbeme tu dirección exacta.');
-    }
+    if (info.location) valor = `${info.location.latitude},${info.location.longitude}`;
+    else valor = (info.body || '').trim();
+    if (!valor) return botSend(id, 'Necesito tu *ubicación* o tu *dirección*.\nToca 📎 → *Ubicación* → *Enviar ubicación actual*, o escríbeme tu dirección exacta.');
   } else {
     valor = (info.body || '').trim();
-    if (!valor) return botSend(id, paso.pregunta);
+    if (!valor) return enviarPregunta(id, paso);
   }
 
   sess.data[paso.campo] = valor;
@@ -484,19 +537,22 @@ async function handleStep(id, sess, info) {
   // ¿Quedan más pasos?
   if (sess.idx < pasos.length) {
     sessions.set(id, sess);
-    return botSend(id, pasos[sess.idx].pregunta);
+    return enviarPregunta(id, pasos[sess.idx]);
   }
 
-  // Fin del flujo: separar dirección (texto) de ubicación GPS ("lat,lng")
+  // Fin del flujo
   resetSession(id);
+  if (sess.opt === 'CONTRATO') return finalizarContrato(id, sess, info);
+
+  // Flujos del menú: separar dirección (texto) de ubicación GPS ("lat,lng") y crear el ticket
   const ubic = (sess.data.ubicacion || '').trim();
   const esCoords = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(ubic);
   const payload = {
     categoria: flow.categoria,
     nombre: sess.data.nombre || info.notifyName || '',
     telefono: sess.telefono || info.telefono || '',
-    direccion: esCoords ? '' : ubic,   // dirección escrita → campo Dirección del panel
-    ubicacion: ubic,                    // coords o texto → enlace "Ver en mapa"
+    direccion: esCoords ? '' : ubic,
+    ubicacion: ubic,
     mensaje: sess.data.mensaje || '',
   };
   try {
@@ -506,6 +562,31 @@ async function handleStep(id, sess, info) {
     console.error('No se pudo crear el ticket:', e.message);
     return botSend(id, '⚠️ Hubo un problema al registrar tu solicitud. Por favor intenta de nuevo en unos minutos o escribe *menú*.');
   }
+}
+
+/** Cierra el proceso de contratación: envía todos los datos + fotos del carnet al ticket. */
+async function finalizarContrato(id, sess, info) {
+  const d = sess.data;
+  const ubic = (d.direccion || '').trim();
+  const esCoords = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(ubic);
+  const payload = {
+    telefono: sess.telefono_original || d.telefono || info.telefono || '',
+    telefono_declarado: d.telefono || '',
+    plan: d.plan || '',
+    nombre: d.nombre || info.notifyName || '',
+    rut: d.rut ? formateaRut(d.rut) : '',
+    correo: d.correo || '',
+    direccion: esCoords ? '' : ubic,
+    ubicacion: ubic,
+    carnet_frente: d.carnet_frente || '',
+    carnet_reverso: d.carnet_reverso || '',
+    condiciones: d.condiciones === 'aceptadas' ? 'aceptadas' : '',
+  };
+  try { await api('/api/bot/contratacion-datos', { method: 'POST', body: JSON.stringify(payload) }); }
+  catch (e) { console.error('No se pudo guardar la contratación:', e.message); }
+  handoff.set(id, Date.now() + HANDOFF_TTL);
+  const nom = (d.nombre || '').trim().split(/\s+/)[0] || '';
+  return botSend(id, `✅ ¡Listo${nom ? ', ' + nom : ''}! Recibimos todos tus datos y tu aceptación de las condiciones. 🎉\n\nUn ejecutivo revisará tu contratación y coordinará contigo la *instalación*. ¡Bienvenido/a a *${EMPRESA}*! 🙌`);
 }
 
 // ---------- Bandeja de salida: envía los mensajes automáticos (planes, etc.) ----------
