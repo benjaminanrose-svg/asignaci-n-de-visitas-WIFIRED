@@ -28,10 +28,13 @@ const EMPRESA = process.env.EMPRESA || 'TELECOMUNICACIONES WIFIRED';
 const AUTH_DIR = process.env.AUTH_DIR || path.join(__dirname, 'auth_wifired');
 
 // ---------- Modo prueba ----------
-// Con MODO_PRUEBA activo, el bot IGNORA a todos los clientes y solo atiende a quien
-// escriba la palabra clave (por defecto "paralelepipedo"). Ideal para probar sin molestar.
-// Se enciende con la variable MODO_PRUEBA=1 (y se apaga quitándola o poniéndola en 0).
-const MODO_PRUEBA = /^(1|true|si|sí|on)$/i.test(process.env.MODO_PRUEBA || '');
+// Es el MISMO bot principal, con un interruptor: cuando está activo, IGNORA a todos
+// los clientes y solo atiende a quien escriba la palabra clave (por defecto
+// "paralelepipedo"). Ideal para probar sin molestar a nadie.
+//
+// Viene ENCENDIDO por defecto (estamos en pruebas). Para que atienda a TODOS,
+// se apaga con la variable MODO_PRUEBA=0 (o false/no/off).
+const MODO_PRUEBA = !/^(0|false|no|off)$/i.test(process.env.MODO_PRUEBA || '');
 const PALABRA_PRUEBA = (process.env.PALABRA_PRUEBA || 'paralelepipedo').toLowerCase();
 
 if (!BOT_API_KEY) {
