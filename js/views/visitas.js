@@ -9,8 +9,13 @@ import * as store from '../store.js';
 import { esc, parseTecnico, fmtDateShort, bloqueShort, prioRank } from '../util.js';
 import { statusBadge, priorityTag, techAvatar, clientAvatar, visitDetailModal, workOrderModal } from '../components.js';
 
-const local = { estado: '', tecnico: '', bloque: '', tipo: '' };
+const local = { categoria: '', estado: '', tecnico: '', bloque: '', tipo: '' };
 let lastRows = [];
+
+const CAT_TICKET_COLOR = {
+  'Soporte': '#f59e0b', 'Contratación': '#2563eb', 'Pagos': '#10b981',
+  'Visita': '#8b5cf6', 'Ejecutivo': '#06b6d4', 'Otros': '#94a3b8',
+};
 
 function exportCSV(rows) {
   const cols = ['OT', 'Estado', 'Prioridad', 'Tipo', 'Fecha', 'Bloque', 'Cliente', 'RUT', 'Teléfono', 'Dirección', 'Técnico', 'Detalle', 'Asignado por'];
@@ -31,10 +36,17 @@ export function renderVisitas(root, ctx) {
   root.innerHTML = `
     <div class="hist-intro muted-sm">📚 Historial completo de visitas — abre una para ver su detalle, descargar la orden de trabajo (OT) y el ZIP con toda la evidencia.</div>
     <div class="filters">
+      <select class="select" data-f="categoria">
+        <option value="">Todas las categorías</option>
+        <option value="visita" ${local.categoria === 'visita' ? 'selected' : ''}>🔧 Visitas</option>
+        <option value="factibilidad" ${local.categoria === 'factibilidad' ? 'selected' : ''}>📶 Factibilidad</option>
+        <option value="ticket" ${local.categoria === 'ticket' ? 'selected' : ''}>🎫 Tickets</option>
+      </select>
+      ${local.categoria === 'ticket' ? '' : `
       <select class="select" data-f="estado">${optAll('Todos los estados', store.estados(), local.estado)}</select>
       <select class="select" data-f="tecnico">${optAll('Todos los técnicos', store.tecnicos(), local.tecnico, true)}</select>
       <select class="select" data-f="bloque">${optAll('Todos los bloques', store.bloques(), local.bloque)}</select>
-      <select class="select" data-f="tipo">${optAll('Todos los tipos', store.tipos(), local.tipo)}</select>
+      ${local.categoria === 'factibilidad' ? '' : `<select class="select" data-f="tipo">${optAll('Todos los tipos', store.tipos(), local.tipo)}</select>`}`}
       <div class="grow"></div>
       <button class="btn btn-sm" data-export>⭳ Exportar</button>
       <button class="btn btn-sm" data-clear>Limpiar filtros</button>
@@ -44,18 +56,26 @@ export function renderVisitas(root, ctx) {
     </div>`;
 
   root.querySelectorAll('[data-f]').forEach((sel) => {
-    sel.onchange = () => { local[sel.dataset.f] = sel.value; paint(); };
+    sel.onchange = () => {
+      local[sel.dataset.f] = sel.value;
+      // Al cambiar de categoría cambian los filtros visibles → re-renderizamos todo.
+      if (sel.dataset.f === 'categoria') renderVisitas(root, ctx); else paint();
+    };
   });
   root.querySelector('[data-export]').onclick = () => exportCSV(lastRows);
   root.querySelector('[data-clear]').onclick = () => {
-    local.estado = local.tecnico = local.bloque = local.tipo = '';
+    local.categoria = local.estado = local.tecnico = local.bloque = local.tipo = '';
     renderVisitas(root, ctx);
   };
 
   const host = root.querySelector('#table-host');
 
   function paint() {
+    if (local.categoria === 'ticket') return paintTickets();
     let rows = store.visitas();
+    const esFacti = (v) => String(v.tipo || '').trim().toLowerCase() === 'factibilidad';
+    if (local.categoria === 'factibilidad') rows = rows.filter(esFacti);
+    else if (local.categoria === 'visita') rows = rows.filter((v) => !esFacti(v));
     if (local.estado) rows = rows.filter((v) => v.estado === local.estado);
     if (local.tecnico) rows = rows.filter((v) => (local.tecnico === '__none__' ? !v.tecnico : v.tecnico === local.tecnico));
     if (local.bloque) rows = rows.filter((v) => v.bloque === local.bloque);
@@ -99,6 +119,41 @@ export function renderVisitas(root, ctx) {
         visitDetailModal(v, { onOrder: (x) => workOrderModal(x, store.company), readOnly: true });
       };
     });
+  }
+
+  function paintTickets() {
+    let tks = (typeof store.ticketsList === 'function' ? store.ticketsList() : []) || [];
+    if (search) {
+      tks = tks.filter((t) => [t.num, t.nombre, t.telefono, t.mensaje, t.categoria, t.rut, t.email]
+        .some((f) => (f || '').toLowerCase().includes(search)));
+    }
+    lastRows = [];
+    if (!tks.length) {
+      host.innerHTML = `<div class="empty-state"><div class="es-ico">🎫</div><p>No hay tickets${search ? ' con esa búsqueda' : ''}.</p></div>`;
+      return;
+    }
+    const chip = (txt, color) => `<span class="tag" style="background:color-mix(in srgb, ${color} 16%, transparent); color:${color}; border-color:color-mix(in srgb, ${color} 40%, var(--border))">${esc(txt)}</span>`;
+    const fecha = (t) => { const d = t.created_at ? String(t.created_at).slice(0, 10) : ''; return d ? fmtDateShort(d) : '—'; };
+    host.innerHTML = `
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>N°</th><th>Cliente</th><th>Categoría</th><th>Teléfono</th><th>Estado</th><th>Recibido</th></tr></thead>
+        <tbody>
+          ${tks.map((t) => `
+            <tr>
+              <td><span class="cell-id">${esc(t.num)}</span></td>
+              <td><div class="cell-strong truncate" style="max-width:200px">${esc(t.nombre || 'Sin nombre')}</div></td>
+              <td>${chip(t.categoria || 'Otros', CAT_TICKET_COLOR[t.categoria] || '#94a3b8')}</td>
+              <td class="nowrap">${esc(t.telefono || '—')}</td>
+              <td>${statusBadge(t.estado)}</td>
+              <td class="nowrap">${esc(fecha(t))}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="row-between" style="padding:12px 18px; border-top:1px solid var(--border-2)">
+      <span class="muted-sm">${tks.length} ticket${tks.length === 1 ? '' : 's'}${search ? ` · búsqueda: "${esc(search)}"` : ''}</span>
+    </div>`;
   }
 
   paint();
