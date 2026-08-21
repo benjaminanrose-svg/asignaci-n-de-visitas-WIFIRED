@@ -310,9 +310,11 @@ function renderBotConfig(root) {
 
       <div class="card cfg-card">
         <h3 class="cfg-title">📄 Términos y condiciones de contratación</h3>
-        <p class="muted-sm">Cuando un cliente elige un plan, el bot recoge sus datos (nombre, RUT, teléfono, correo, dirección y foto del carnet) y le envía este texto para que lo <b>acepte</b> antes de finalizar. Pega aquí tus condiciones.</p>
+        <p class="muted-sm">Cuando un cliente elige un plan, el bot recoge sus datos (nombre, RUT, teléfono, correo, dirección y foto del carnet) y le <b>envía el PDF de Términos y Condiciones</b> para que los <b>acepte</b> antes de finalizar.</p>
+        <p class="muted-sm" style="margin-top:6px">📎 <b>El PDF actual ya está cargado en el bot.</b> Para cambiarlo, envíame el nuevo archivo y lo reemplazo.</p>
         <div class="field full" style="margin-top:8px">
-          <textarea class="textarea" data-b="condiciones" style="min-height:150px" placeholder="Ej: 1) El servicio se cobra mensualmente… 2) La permanencia mínima es… 3) Los equipos se entregan en comodato…">${esc(cond)}</textarea>
+          <label>Texto de respaldo (se usa solo si algún día no hay PDF cargado)</label>
+          <textarea class="textarea" data-b="condiciones" style="min-height:110px" placeholder="Opcional: un resumen de las condiciones por si no hay PDF…">${esc(cond)}</textarea>
         </div>
       </div>
 
