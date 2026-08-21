@@ -14,6 +14,7 @@
 //   EMPRESA      (opcional)    — nombre que saluda el bot.
 // ============================================================
 const path = require('path');
+const fs = require('fs');
 const {
   default: makeWASocket,
   useMultiFileAuthState,
@@ -27,6 +28,7 @@ const API_URL = (process.env.API_URL || 'http://localhost:8081').replace(/\/+$/,
 const BOT_API_KEY = process.env.BOT_API_KEY || '';
 const EMPRESA = process.env.EMPRESA || 'TELECOMUNICACIONES WIFIRED';
 const AUTH_DIR = process.env.AUTH_DIR || path.join(__dirname, 'auth_wifired');
+const CONDICIONES_PDF = path.join(__dirname, 'condiciones.pdf'); // T&C que el bot envía en la contratación
 
 // ---------- Modo prueba ----------
 // Es el MISMO bot principal, con un interruptor: cuando está activo, IGNORA a todos
@@ -277,13 +279,46 @@ async function getFotoDataUri(m) {
   } catch (e) { console.error('No pude descargar la foto:', e.message); return ''; }
 }
 
+/** Envía el PDF de Términos y Condiciones (si existe el archivo). Devuelve true si se envió. */
+async function enviarCondicionesDoc(id) {
+  try {
+    if (!fs.existsSync(CONDICIONES_PDF)) return false;
+    const buf = fs.readFileSync(CONDICIONES_PDF);
+    lastBotSend.set(id, Date.now());
+    await sock.sendMessage(id, { document: buf, mimetype: 'application/pdf', fileName: 'Terminos y Condiciones - WIFIRED.pdf' });
+    return true;
+  } catch (e) { console.error('No pude enviar el PDF de condiciones:', e.message); return false; }
+}
+
+/** Resumen con los datos que el cliente entregó, para mostrarlos junto a las condiciones. */
+function resumenDatosCliente(d) {
+  d = d || {};
+  const rut = d.rut ? formateaRut(normalizaRut(d.rut) || d.rut) : '';
+  const lineas = [
+    d.plan ? `• *Plan:* ${d.plan}` : '',
+    d.nombre ? `• *Nombre:* ${d.nombre}` : '',
+    rut ? `• *RUT:* ${rut}` : '',
+    d.telefono ? `• *Teléfono:* ${d.telefono}` : '',
+    d.correo ? `• *Correo:* ${d.correo}` : '',
+    d.direccion ? `• *Dirección:* ${d.direccion}` : '',
+  ].filter(Boolean);
+  return lineas.join('\n');
+}
+
 /** Envía la pregunta de un paso (soporta condiciones dinámicas y preguntas como función). */
-async function enviarPregunta(id, paso) {
+async function enviarPregunta(id, paso, sess) {
   if (paso.esCondiciones) {
-    const cond = (botCfg.condiciones || '').trim();
-    if (cond) await botSend(id, '📄 *Términos y condiciones del servicio WIFIRED:*\n\n' + cond);
-    else await botSend(id, '📄 *Términos y condiciones del servicio.* (Un ejecutivo te los detallará al coordinar la instalación.)');
-    return botSend(id, 'Para *finalizar tu contratación*, ¿estás de acuerdo con las condiciones? Responde *SÍ* para aceptar, o *NO*. ✍️');
+    const enviado = await enviarCondicionesDoc(id);
+    if (!enviado) {
+      const cond = (botCfg.condiciones || '').trim();
+      if (cond) await botSend(id, '📄 *Términos y condiciones del servicio WIFIRED:*\n\n' + cond);
+      else await botSend(id, '📄 *Términos y condiciones del servicio.* (Un ejecutivo te los detallará al coordinar la instalación.)');
+    }
+    const resumen = resumenDatosCliente(sess && sess.data);
+    const intro = enviado ? '📄 Te envié el documento con los *Términos y Condiciones* del servicio.' : '';
+    const cuerpo = [intro, resumen ? 'Estos son los datos con los que quedará tu contratación:\n' + resumen : ''].filter(Boolean).join('\n\n');
+    if (cuerpo) await botSend(id, cuerpo);
+    return botSend(id, 'Para *finalizar tu contratación*, ¿estás de acuerdo con las condiciones y con estos datos? Responde *SÍ* para aceptar, o *NO*. ✍️');
   }
   const p = typeof paso.pregunta === 'function' ? paso.pregunta() : paso.pregunta;
   return botSend(id, p);
@@ -447,7 +482,7 @@ async function onMessage(m) {
       await botSend(id, '¡Excelente elección! 🎉 Vamos a *dejar todo listo para tu contratación*.');
       const cs = { opt: 'CONTRATO', idx: 0, data: { plan: text }, ts: Date.now(), telefono: info.telefono || telDig, telefono_original: info.telefono || telDig, pasos: PASOS_CONTRATO.slice() };
       sessions.set(id, cs);
-      return enviarPregunta(id, cs.pasos[0]);
+      return enviarPregunta(id, cs.pasos[0], cs);
     }
 
     // Selección del menú: SOLO un número solo (1-4), para no confundir con planes ni teléfonos.
@@ -484,7 +519,7 @@ async function startFlow(id, opt, info) {
   const pasos = telefono ? flow.pasos.slice() : [PASO_TELEFONO, ...flow.pasos];
   const sess = { opt, idx: 0, data: {}, ts: Date.now(), telefono, pasos };
   sessions.set(id, sess);
-  return enviarPregunta(id, pasos[0]);
+  return enviarPregunta(id, pasos[0], sess);
 }
 
 async function handleStep(id, sess, info) {
@@ -527,7 +562,7 @@ async function handleStep(id, sess, info) {
     if (!valor) return botSend(id, 'Necesito tu *ubicación* o tu *dirección*.\nToca 📎 → *Ubicación* → *Enviar ubicación actual*, o escríbeme tu dirección exacta.');
   } else {
     valor = (info.body || '').trim();
-    if (!valor) return enviarPregunta(id, paso);
+    if (!valor) return enviarPregunta(id, paso, sess);
   }
 
   sess.data[paso.campo] = valor;
@@ -537,7 +572,7 @@ async function handleStep(id, sess, info) {
   // ¿Quedan más pasos?
   if (sess.idx < pasos.length) {
     sessions.set(id, sess);
-    return enviarPregunta(id, pasos[sess.idx]);
+    return enviarPregunta(id, pasos[sess.idx], sess);
   }
 
   // Fin del flujo
