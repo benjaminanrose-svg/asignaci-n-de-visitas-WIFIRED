@@ -74,15 +74,17 @@ async function loadBotConfig() {
 function menuText() {
   return `¡Hola! 👋 Bienvenido a *${EMPRESA}*.
 ${botCfg.saludo}
-Responde con el *número* de la opción:
 
-1️⃣ Soporte técnico (internet lento, cortes, sin señal)
-2️⃣ Planes, precios y contratación
-3️⃣ Pagos y facturación
-4️⃣ Agendar o consultar una visita
-5️⃣ Hablar con un ejecutivo 🧑‍💼
+Para ayudarte, respóndeme con *un solo número* (del 1 al 5) 👇
 
-_Escribe *menú* en cualquier momento para volver aquí._`;
+*1* · Soporte técnico 🛠️ (internet lento, cortes, sin señal)
+*2* · Planes y contratar internet 📶
+*3* · Pagos y facturación 💳
+*4* · Agendar o consultar una visita 📅
+*5* · Hablar con una persona 🧑‍💼
+
+_Ejemplo: escribe *2* si quieres contratar._
+_Escribe *menú* cuando quieras volver aquí._`;
 }
 const CIERRE = '\n\n_Escribe *menú* si necesitas algo más._ 🙌';
 
@@ -126,8 +128,10 @@ const sessions = new Map();   // chatId -> { opt, idx, data, ts }
 const handoff = new Map();    // chatId -> timestamp hasta el cual el bot NO responde
 const lastBotSend = new Map();// chatId -> timestamp del último envío del bot
 const desbloqueados = new Map(); // (modo prueba) chatId -> ts, chats que dijeron la palabra clave
+const esperaPlan = new Map();    // teléfono (dígitos) -> ts límite: le enviamos planes y esperamos su elección
 const SESSION_TTL = 10 * 60 * 1000;      // 10 min sin actividad → se reinicia el flujo
 const HANDOFF_TTL = 3 * 60 * 60 * 1000;  // 3 h de silencio cuando entra un humano
+const PLAN_TTL = 12 * 60 * 60 * 1000;    // 12 h para reconocer la respuesta del cliente a los planes
 
 function resetSession(id) { sessions.delete(id); }
 
@@ -348,9 +352,27 @@ async function onMessage(m) {
   let sess = sessions.get(id);
   if (sess && now - sess.ts > SESSION_TTL) { sessions.delete(id); sess = null; }
 
-  // Sin flujo activo: interpretar selección del menú
+  // Sin flujo activo: primero vemos si está respondiendo a los planes que le enviamos.
   if (!sess) {
-    const opt = (text.match(/^([1-5])/) || [])[1];
+    const telDig = soloDigitos(info.telefono);
+    if (telDig && esperaPlan.has(telDig)) {
+      esperaPlan.delete(telDig);
+      try {
+        await crearTicket({
+          categoria: 'Contratación',
+          nombre: info.notifyName || '',
+          telefono: info.telefono || telDig,
+          mensaje: 'El cliente respondió a los planes: "' + text + '"',
+          factibilidad: 'planes_enviados',
+        });
+      } catch (e) { console.error('No se pudo registrar la elección de plan:', e.message); }
+      handoff.set(id, Date.now() + HANDOFF_TTL);
+      return botSend(id, '¡Excelente elección! 🎉\nUn ejecutivo te contactará muy pronto para coordinar tu *contratación e instalación*.\n\n_Gracias por preferir ' + EMPRESA + '._ 🙌');
+    }
+
+    // Selección del menú: SOLO un número solo (1-5), para no confundir con planes ni teléfonos.
+    const mOpt = text.match(/^\s*([1-5])[\s.)\-]*$/);
+    const opt = mOpt ? mOpt[1] : null;
     if (!opt) {
       if (fueraDeHorario() && botCfg.horario.mensaje) await botSend(id, botCfg.horario.mensaje);
       return botSend(id, menuText());
@@ -466,6 +488,10 @@ async function pollOutbox() {
       const chatId = toChatId(m.telefono);
       if (!chatId) { await api('/api/bot/outbox/' + m.id + '/sent', { method: 'POST' }); continue; }
       await botSend(chatId, m.texto || '');
+      // Recordamos que a este cliente le mandamos planes: su próxima respuesta
+      // se tratará como su elección (y NO como una opción del menú).
+      const telDig = soloDigitos(m.telefono);
+      if (telDig) esperaPlan.set(telDig, Date.now() + PLAN_TTL);
       await api('/api/bot/outbox/' + m.id + '/sent', { method: 'POST' });
       console.log(`[BOT] mensaje automático enviado a ${m.telefono}`);
     }
