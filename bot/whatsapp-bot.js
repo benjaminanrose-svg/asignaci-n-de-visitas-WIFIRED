@@ -179,6 +179,28 @@ function telefonoReal(m) {
   return '';
 }
 
+/**
+ * Intenta reconocer un teléfono chileno escrito por el cliente en texto libre.
+ * Acepta: "9 1234 5678", "+56 9 1234 5678", "56912345678", "912345678".
+ * Devuelve los dígitos normalizados (ej: "56912345678") o '' si no parece válido.
+ */
+function telefonoDeTexto(txt) {
+  const d = String(txt || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d.startsWith('569') && d.length === 11) return d;          // 56 9 XXXXXXXX
+  if (d.startsWith('9') && d.length === 9) return '56' + d;      // 9 XXXXXXXX
+  if (d.startsWith('56') && d.length === 11) return d;           // 56 + 9 dígitos
+  if (d.length === 8) return '569' + d;                          // XXXXXXXX (sin el 9)
+  return '';
+}
+
+/** Paso extra: pedir el teléfono cuando WhatsApp no nos entrega el número real (@lid). */
+const PASO_TELEFONO = {
+  campo: 'telefono',
+  esTelefono: true,
+  pregunta: 'Antes de continuar, ¿me confirmas tu *número de teléfono*? 📱\n\nEscríbelo con los 9 dígitos (ej: *9 1234 5678*), así podemos contactarte.',
+};
+
 /** Convierte un teléfono (dígitos) al JID de WhatsApp */
 function toChatId(tel) {
   let d = String(tel || '').replace(/\D/g, '');
@@ -239,10 +261,6 @@ async function start() {
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    // 🔎 Detector temporal: registra TODO lo que WhatsApp entrega, sin filtrar.
-    for (const mm of messages || []) {
-      console.log(`🔔 upsert type=${type} de=${mm && mm.key && mm.key.remoteJid} fromMe=${mm && mm.key && mm.key.fromMe} tieneMensaje=${!!(mm && mm.message)}`);
-    }
     if (type !== 'notify') return; // ignora sincronización de historial
     for (const m of messages) {
       try { await onMessage(m); } catch (e) { console.error('Error procesando mensaje:', e); }
@@ -315,7 +333,9 @@ async function onMessage(m) {
 
 async function startFlow(id, opt, info) {
   const nombre = info.notifyName || '';
-  const telefono = info.telefono || soloDigitos(id);
+  // Solo usamos el teléfono si WhatsApp nos lo entregó de verdad.
+  // Con el formato @lid, si no lo tenemos, lo pediremos dentro del flujo (NO inventamos un número).
+  const telefono = info.telefono || '';
 
   // Opción 5: pasar a un ejecutivo (silencia el bot y crea ticket)
   if (opt === '5') {
@@ -325,8 +345,8 @@ async function startFlow(id, opt, info) {
     return botSend(id, '🧑‍💼 ¡Con gusto! Un ejecutivo continuará esta conversación contigo lo antes posible.\n\n_Dejé de responder automáticamente para que puedas hablar con la persona._');
   }
 
-  // Opción 4: consultar el estado de la visita del cliente antes de seguir
-  if (opt === '4') {
+  // Opción 4: si conocemos el teléfono real, consultamos su visita antes de seguir
+  if (opt === '4' && telefono) {
     try {
       const r = await api('/api/bot/visita?telefono=' + encodeURIComponent(telefono));
       if (r && r.found) {
@@ -339,17 +359,27 @@ async function startFlow(id, opt, info) {
 
   const flow = FLOWS[opt];
   if (!flow) return botSend(id, menuText());
-  const sess = { opt, idx: 0, data: {}, ts: Date.now() };
+  // Si no tenemos el teléfono real, lo pedimos como primer paso del flujo.
+  const pasos = telefono ? flow.pasos.slice() : [PASO_TELEFONO, ...flow.pasos];
+  const sess = { opt, idx: 0, data: {}, ts: Date.now(), telefono, pasos };
   sessions.set(id, sess);
-  return botSend(id, flow.pasos[0].pregunta);
+  return botSend(id, pasos[0].pregunta);
 }
 
 async function handleStep(id, sess, info) {
   const flow = FLOWS[sess.opt];
-  const paso = flow.pasos[sess.idx];
+  const pasos = sess.pasos || flow.pasos;
+  const paso = pasos[sess.idx];
   let valor;
 
-  if (paso.esUbicacion) {
+  if (paso.esTelefono) {
+    const tel = telefonoDeTexto(info.body);
+    if (!tel) {
+      return botSend(id, 'No pude reconocer ese número. 🤔\nEscríbelo con los *9 dígitos*, por ejemplo: *9 1234 5678*.');
+    }
+    sess.telefono = tel;
+    valor = tel;
+  } else if (paso.esUbicacion) {
     if (info.location) {
       valor = `${info.location.latitude},${info.location.longitude}`;
     } else {
@@ -368,18 +398,21 @@ async function handleStep(id, sess, info) {
   sess.ts = Date.now();
 
   // ¿Quedan más pasos?
-  if (sess.idx < flow.pasos.length) {
+  if (sess.idx < pasos.length) {
     sessions.set(id, sess);
-    return botSend(id, flow.pasos[sess.idx].pregunta);
+    return botSend(id, pasos[sess.idx].pregunta);
   }
 
-  // Fin del flujo: crear el ticket
+  // Fin del flujo: separar dirección (texto) de ubicación GPS ("lat,lng")
   resetSession(id);
+  const ubic = (sess.data.ubicacion || '').trim();
+  const esCoords = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(ubic);
   const payload = {
     categoria: flow.categoria,
     nombre: sess.data.nombre || info.notifyName || '',
-    telefono: info.telefono || soloDigitos(id),
-    ubicacion: sess.data.ubicacion || '',
+    telefono: sess.telefono || info.telefono || '',
+    direccion: esCoords ? '' : ubic,   // dirección escrita → campo Dirección del panel
+    ubicacion: ubic,                    // coords o texto → enlace "Ver en mapa"
     mensaje: sess.data.mensaje || '',
   };
   try {
