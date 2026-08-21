@@ -216,6 +216,10 @@ async function start() {
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    // 🔎 Detector temporal: registra TODO lo que WhatsApp entrega, sin filtrar.
+    for (const mm of messages || []) {
+      console.log(`🔔 upsert type=${type} de=${mm && mm.key && mm.key.remoteJid} fromMe=${mm && mm.key && mm.key.fromMe} tieneMensaje=${!!(mm && mm.message)}`);
+    }
     if (type !== 'notify') return; // ignora sincronización de historial
     for (const m of messages) {
       try { await onMessage(m); } catch (e) { console.error('Error procesando mensaje:', e); }
