@@ -156,6 +156,29 @@ function getLocation(m) {
   return { latitude: loc.degreesLatitude, longitude: loc.degreesLongitude };
 }
 
+/** Extrae solo los dígitos de un JID o teléfono (quita @lid, @s.whatsapp.net, :device, etc.) */
+function soloDigitos(x) {
+  return String(x || '').split('@')[0].split(':')[0].replace(/\D/g, '');
+}
+
+/**
+ * Obtiene el teléfono REAL del cliente. Con el formato nuevo @lid, el remoteJid
+ * NO es el número; el número verdadero viene en otro campo de la clave del mensaje
+ * (varía según la versión de Baileys) o se resuelve con el mapeo lid→número.
+ */
+function telefonoReal(m) {
+  const k = (m && m.key) || {};
+  for (const j of [k.senderPn, k.participantPn, k.remoteJidAlt, k.participantAlt, k.remoteJid, k.participant]) {
+    if (j && String(j).endsWith(SUFIJO)) return soloDigitos(j);
+  }
+  try {
+    const map = sock && sock.signalRepository && sock.signalRepository.lidMapping;
+    const pn = map && map.getPNForLID && map.getPNForLID(k.remoteJid);
+    if (pn) return soloDigitos(pn);
+  } catch (e) { /* sin mapeo disponible */ }
+  return '';
+}
+
 /** Convierte un teléfono (dígitos) al JID de WhatsApp */
 function toChatId(tel) {
   let d = String(tel || '').replace(/\D/g, '');
@@ -231,7 +254,9 @@ async function onMessage(m) {
   if (!m || !m.message) return;
   const id = m.key && m.key.remoteJid;
   if (!id || id === 'status@broadcast') return;
-  if (!id.endsWith(SUFIJO)) return; // ignora grupos (@g.us) y difusiones
+  // Chats individuales: WhatsApp los entrega como @s.whatsapp.net (formato clásico)
+  // o como @lid (identidad enlazada, WhatsApp nuevo). Ignoramos grupos (@g.us) y difusiones.
+  if (!id.endsWith(SUFIJO) && !id.endsWith('@lid')) return;
 
   // Mensajes enviados por nosotros mismos: si los escribió un humano
   // (la coordinación) desde el teléfono, el bot se calla un rato.
@@ -250,8 +275,9 @@ async function onMessage(m) {
     body: getText(m),
     location: getLocation(m),
     notifyName: m.pushName || '',
+    telefono: telefonoReal(m),
   };
-  console.log(`📩 mensaje de ${id} · "${(info.body || (info.location ? '[ubicación]' : '')).slice(0, 40)}"`);
+  console.log(`📩 mensaje de ${id} (tel: ${info.telefono || '—'}) · "${(info.body || (info.location ? '[ubicación]' : '')).slice(0, 40)}"`);
 
   const now = Date.now();
 
@@ -289,7 +315,7 @@ async function onMessage(m) {
 
 async function startFlow(id, opt, info) {
   const nombre = info.notifyName || '';
-  const telefono = id.replace(SUFIJO, '');
+  const telefono = info.telefono || soloDigitos(id);
 
   // Opción 5: pasar a un ejecutivo (silencia el bot y crea ticket)
   if (opt === '5') {
@@ -352,7 +378,7 @@ async function handleStep(id, sess, info) {
   const payload = {
     categoria: flow.categoria,
     nombre: sess.data.nombre || info.notifyName || '',
-    telefono: id.replace(SUFIJO, ''),
+    telefono: info.telefono || soloDigitos(id),
     ubicacion: sess.data.ubicacion || '',
     mensaje: sess.data.mensaje || '',
   };
