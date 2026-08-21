@@ -14,6 +14,9 @@ export function visitFormModal(existing = null, prefill = {}) {
   const v = existing || {};
   const isNew = !existing;
   const node = document.createElement('div');
+  // Garantizamos que "Factibilidad" esté siempre disponible como tipo de visita.
+  const tipos = store.tipos().slice();
+  if (!tipos.some((t) => String(t).trim().toLowerCase() === 'factibilidad')) tipos.push('Factibilidad');
   node.innerHTML = `
     <div class="modal-head">
       <h3>${isNew ? 'Nueva visita' : 'Editar visita · ' + esc(v.id)}</h3>
@@ -23,7 +26,7 @@ export function visitFormModal(existing = null, prefill = {}) {
       <form id="visit-form">
         <div class="form-grid">
           ${isNew ? '' : `
-          <div class="field full">
+          <div class="field full" data-facti-hide>
             <label>N° de Orden de Trabajo (OT)</label>
             <input class="input" name="ot" value="${esc(v.id || '')}" placeholder="OT-MEL-2026-001" autocomplete="off" />
           </div>`}
@@ -31,15 +34,15 @@ export function visitFormModal(existing = null, prefill = {}) {
             <label>Nombre del cliente *</label>
             <input class="input" name="cliente" required value="${esc(v.cliente || prefill.cliente || '')}" placeholder="Nombre y apellidos" />
           </div>
-          <div class="field">
+          <div class="field" data-facti-hide>
             <label>RUT</label>
             <input class="input" name="rut" value="${esc(v.rut || prefill.rut || '')}" placeholder="12.345.678-9" inputmode="text" autocomplete="off" />
           </div>
-          <div class="field">
+          <div class="field" data-facti-hide>
             <label>Teléfono</label>
             <input class="input" name="telefono" value="${esc(v.telefono || prefill.telefono || '')}" placeholder="9 1234 5678" inputmode="tel" autocomplete="off" />
           </div>
-          <div class="field">
+          <div class="field" data-facti-hide>
             <label>Correo del cliente</label>
             <input class="input" type="email" name="email" value="${esc(v.email || prefill.email || '')}" placeholder="cliente@correo.com" autocomplete="off" />
           </div>
@@ -49,13 +52,13 @@ export function visitFormModal(existing = null, prefill = {}) {
           </div>
           <div class="field full">
             <label>Tipo de visita *</label>
-            <select class="select" name="tipo" required>${opt(store.tipos(), v.tipo, 'Seleccionar tipo…')}</select>
+            <select class="select" name="tipo" required>${opt(tipos, v.tipo, 'Seleccionar tipo…')}</select>
           </div>
-          <div class="field">
+          <div class="field" data-facti-hide>
             <label>Fecha</label>
             <input class="input" type="date" name="fecha" value="${esc(v.fecha || prefill.fecha || todayISO())}" />
           </div>
-          <div class="field">
+          <div class="field" data-facti-hide>
             <label>Bloque horario</label>
             <select class="select" name="bloque">${opt(store.bloques(), v.bloque || prefill.bloque, 'Sin bloque')}</select>
           </div>
@@ -63,11 +66,11 @@ export function visitFormModal(existing = null, prefill = {}) {
             <label>Técnico asignado</label>
             <select class="select" name="tecnico">${opt(store.tecnicos(), v.tecnico || prefill.tecnico, 'Sin asignar')}</select>
           </div>
-          <div class="field">
+          <div class="field" data-facti-hide>
             <label>Estado</label>
             <select class="select" name="estado">${opt(store.estados(), v.estado || 'Pendiente')}</select>
           </div>
-          <div class="field">
+          <div class="field" data-facti-hide>
             <label>Prioridad</label>
             <select class="select" name="prioridad">${opt(store.prioridades(), v.prioridad || 'Media')}</select>
           </div>
@@ -75,7 +78,7 @@ export function visitFormModal(existing = null, prefill = {}) {
             <label>Nodo</label>
             <select class="select" name="nodo">${opt(store.nodos(), v.nodo, 'Sin nodo')}</select>
           </div>
-          <div class="field full">
+          <div class="field full" data-facti-hide>
             <label>Detalle / problema</label>
             <textarea class="textarea" name="detalle" placeholder="Descripción del trabajo o falla reportada…">${esc(v.detalle || prefill.detalle || '')}</textarea>
           </div>
@@ -89,6 +92,15 @@ export function visitFormModal(existing = null, prefill = {}) {
     </div>`;
 
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+
+  // Tipo "Factibilidad": encoge el formulario y deja solo Nombre, Dirección, Asignación y Nodo.
+  const tipoSel = node.querySelector('[name=tipo]');
+  const aplicarModoFacti = () => {
+    const esFacti = String(tipoSel.value || '').trim().toLowerCase() === 'factibilidad';
+    node.querySelectorAll('[data-facti-hide]').forEach((el) => { el.style.display = esFacti ? 'none' : ''; });
+  };
+  tipoSel.addEventListener('change', aplicarModoFacti);
+  aplicarModoFacti(); // aplicar al abrir (por si se edita una visita de Factibilidad)
 
   // Validación en vivo (RUT chileno, teléfono y correo). Los campos son opcionales:
   // solo se valida cuando el usuario escribe algo.
