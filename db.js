@@ -31,6 +31,8 @@ const CONFIG = DEFAULT_CONFIG; // compat
 // Configuración por defecto del bot de WhatsApp (editable desde la app).
 const DEFAULT_BOT = {
   activo: true,
+  modo_prueba: true,
+  palabra_prueba: 'paralelepipedo',
   saludo: 'Soy el asistente virtual. ¿En qué te ayudo hoy?',
   planes: '📶 *Planes de Internet WIFIRED* 🚀\n\n*Solo Internet* (router Wi-Fi 6 doble banda, equipos en comodato):\n• *Básico* — 400 Mbps → $13.990/mes\n• *Medio* — 650 Mbps → $19.990/mes\n• *Full* — 940 Mbps → $29.990/mes\n\n*Internet + Televisión* 📺:\n• *Dúo Básico* — 400 Mbps → $21.990/mes\n• *Dúo Medio* — 650 Mbps → $27.990/mes\n• *Dúo Full* — 940 Mbps → $35.990/mes\n\n✅ Velocidad garantizada · Wi-Fi 6 · Equipos en comodato\n🎁 Los planes *Full* incluyen extensor ZTE AC 1200 sin costo (si se necesita).\n\n¿Cuál te interesa? Respóndeme con el *nombre del plan* (ej: *Full* o *Dúo Medio*) y un ejecutivo coordina tu instalación. 🙌',
   horario: {
@@ -46,6 +48,8 @@ function mergeBot(b) {
   const h = s.horario && typeof s.horario === 'object' ? s.horario : {};
   return {
     activo: s.activo !== false,
+    modo_prueba: s.modo_prueba !== false,
+    palabra_prueba: typeof s.palabra_prueba === 'string' && s.palabra_prueba.trim() ? s.palabra_prueba.trim() : DEFAULT_BOT.palabra_prueba,
     saludo: typeof s.saludo === 'string' && s.saludo.trim() ? s.saludo : DEFAULT_BOT.saludo,
     planes: typeof s.planes === 'string' && s.planes.trim() ? s.planes : DEFAULT_BOT.planes,
     horario: {

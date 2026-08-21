@@ -32,10 +32,18 @@ const AUTH_DIR = process.env.AUTH_DIR || path.join(__dirname, 'auth_wifired');
 // los clientes y solo atiende a quien escriba la palabra clave (por defecto
 // "paralelepipedo"). Ideal para probar sin molestar a nadie.
 //
-// Viene ENCENDIDO por defecto (estamos en pruebas). Para que atienda a TODOS,
-// se apaga con la variable MODO_PRUEBA=0 (o false/no/off).
-const MODO_PRUEBA = !/^(0|false|no|off)$/i.test(process.env.MODO_PRUEBA || '');
-const PALABRA_PRUEBA = (process.env.PALABRA_PRUEBA || 'paralelepipedo').toLowerCase();
+// Se controla desde la PÁGINA (Configuración → Bot). Si la página aún no lo definió,
+// se usa la variable MODO_PRUEBA (0/false/no/off para apagar); por defecto viene encendido.
+const MODO_PRUEBA_ENV = process.env.MODO_PRUEBA;
+const PALABRA_ENV = (process.env.PALABRA_PRUEBA || '').toLowerCase();
+function modoPruebaActivo() {
+  if (typeof botCfg.modo_prueba === 'boolean') return botCfg.modo_prueba;      // lo manda la página
+  if (MODO_PRUEBA_ENV != null && MODO_PRUEBA_ENV !== '') return !/^(0|false|no|off)$/i.test(MODO_PRUEBA_ENV);
+  return true; // por defecto, en pruebas
+}
+function palabraPrueba() {
+  return (botCfg.palabra_prueba || PALABRA_ENV || 'paralelepipedo').toLowerCase();
+}
 
 if (!BOT_API_KEY) {
   console.error('❌ Falta la variable BOT_API_KEY (debe ser la misma que configuraste en la app).');
@@ -261,8 +269,8 @@ async function start() {
       const miNumero = (sock.user && sock.user.id ? String(sock.user.id).split(':')[0].split('@')[0] : '') || '(desconocido)';
       console.log(`✅ Bot conectado y escuchando. API: ${API_URL}`);
       console.log(`📱 El bot ES el número: +${miNumero}`);
-      if (MODO_PRUEBA) {
-        console.log(`🧪 MODO PRUEBA ACTIVO — el bot solo responde a quien escriba: "${PALABRA_PRUEBA}"`);
+      if (modoPruebaActivo()) {
+        console.log(`🧪 MODO PRUEBA ACTIVO — el bot solo responde a quien escriba: "${palabraPrueba()}"`);
         console.log('👉 Para PROBARLO: escribe esa palabra a la empresa DESDE OTRO teléfono.');
       } else {
         console.log('👉 Para PROBARLO: escribe "hola" a ese número DESDE OTRO teléfono (un número distinto).');
@@ -333,8 +341,8 @@ async function onMessage(m) {
   const low = text.toLowerCase();
 
   // Modo prueba: solo atendemos a quien escriba la palabra clave; el resto se ignora.
-  if (MODO_PRUEBA) {
-    if (low === PALABRA_PRUEBA) {
+  if (modoPruebaActivo()) {
+    if (low === palabraPrueba()) {
       desbloqueados.set(id, Date.now());
       resetSession(id);
       return botSend(id, '🧪 *Modo prueba activado.* A partir de ahora te atiendo. 👇\n\n' + menuText());
