@@ -80,19 +80,25 @@ async function loadBotConfig() {
 
 // ---------- Textos ----------
 function menuText() {
-  return `¡Hola! 👋 Bienvenido a *${EMPRESA}*.
+  return `¡Hola! 👋 Bienvenido/a a *${EMPRESA}*.
 ${botCfg.saludo}
 
-Para ayudarte, respóndeme con *un solo número* (del 1 al 5) 👇
+Cuéntame en qué te puedo ayudar hoy. Respóndeme con *un solo número* (del 1 al 4) 👇
 
-*1* · Soporte técnico 🛠️ (internet lento, cortes, sin señal)
-*2* · Planes y contratar internet 📶
+*1* · Soporte técnico 🛠️
+    _Internet lento, cortes, sin señal o cualquier falla. Si hace falta, coordinamos una visita técnica a tu domicilio._
+
+*2* · Planes y contratación 📶
+    _Conoce nuestros planes y contrata internet nuevo._
+
 *3* · Pagos y facturación 💳
-*4* · Agendar o consultar una visita 📅
-*5* · Hablar con una persona 🧑‍💼
+    _Pagar, consultar tu deuda o enviar un comprobante._
 
-_Ejemplo: escribe *2* si quieres contratar._
-_Escribe *menú* cuando quieras volver aquí._`;
+*4* · Hablar con una persona 🧑‍💼
+    _Te comunicamos con un ejecutivo de WIFIRED._
+
+_Ejemplo: escribe *1* si tienes un problema con tu internet._
+_Escribe *menú* en cualquier momento para volver a este menú._`;
 }
 const CIERRE = '\n\n_Escribe *menú* si necesitas algo más._ 🙌';
 
@@ -101,33 +107,27 @@ const FLOWS = {
   '1': {
     categoria: 'Soporte',
     pasos: [
-      { campo: 'nombre', pregunta: 'Lamento el problema con tu servicio. 🛠️\n\nPara ayudarte, ¿cuál es tu *nombre completo*?' },
-      { campo: 'mensaje', pregunta: 'Gracias. Ahora cuéntame *qué está pasando* (ej: sin internet desde ayer, anda lento, sin señal…).' },
+      { campo: 'nombre', pregunta: 'Lamento mucho el problema con tu servicio. 🛠️ Te ayudo enseguida.\n\nPara empezar, ¿cuál es tu *nombre completo*?' },
+      { campo: 'ubicacion', esUbicacion: true, pregunta: 'Gracias. 🙌 ¿En qué *dirección* está ocurriendo el problema?\n\nEscríbela con *calle, número y sector*, o compárteme tu *ubicación*: toca el clip 📎 → *Ubicación* → *Enviar ubicación actual*.\n\n_Así el técnico sabe exactamente dónde ir si hace falta una visita._' },
+      { campo: 'mensaje', pregunta: 'Perfecto. Ahora, por favor, cuéntame *con el mayor detalle posible qué está pasando*:\n\n• ¿Estás *sin internet*, va *lento* o hay *cortes* que van y vuelven?\n• ¿*Desde cuándo* ocurre?\n• ¿Afecta a *todos* los dispositivos o solo a algunos?\n• ¿Las *luces del router* están encendidas o alguna parpadea/está apagada?\n\n_Mientras más me cuentes, más rápido lo resolvemos._' },
     ],
-    confirma: (n) => `✅ ¡Listo! Registramos tu solicitud de *soporte* con el N° *${n}*.\nUn técnico revisará tu caso a la brevedad.`,
+    confirma: (n) => `✅ ¡Listo! Registramos tu solicitud de *soporte técnico* con el N° *${n}*.\n\nNuestro equipo revisará tu caso y, si es necesario, *coordinará una visita técnica* a tu domicilio para solucionarlo. Te contactaremos a la brevedad. 🛠️🙌`,
   },
   '2': {
     categoria: 'Contratación',
     pasos: [
-      { campo: 'ubicacion', esUbicacion: true, pregunta: '¡Genial! 📶 Primero revisemos si tenemos *cobertura* en tu sector.\n\nPor favor compárteme tu *ubicación*:\ntoca el clip 📎 → *Ubicación* → *Enviar tu ubicación actual*.\n\n_Si prefieres, también puedes escribirme tu dirección exacta (calle, número y sector)._' },
-      { campo: 'nombre', pregunta: '¡Perfecto! Por último, ¿cuál es tu *nombre*?' },
+      { campo: 'ubicacion', esUbicacion: true, pregunta: '¡Qué bueno que quieras ser parte de *WIFIRED*! 📶\n\nLo primero es revisar si tenemos *cobertura* en tu sector. Para eso necesito saber dónde vives:\n\n📎 Compárteme tu *ubicación* (toca el clip → *Ubicación* → *Enviar ubicación actual*),\no escríbeme tu *dirección exacta*: calle, número, sector o parcela y alguna referencia.' },
+      { campo: 'nombre', pregunta: '¡Perfecto! 🙌 ¿Cuál es tu *nombre completo*?' },
     ],
-    confirma: (n) => `✅ ¡Recibido! Estamos revisando la *factibilidad* en tu sector (N° *${n}*).\nTe confirmamos pronto si podemos llevarte internet y te enviamos los planes. 📶`,
+    confirma: (n) => `✅ ¡Recibido! Registramos tu solicitud de *contratación* con el N° *${n}*.\n\nAhora nuestro equipo revisará la *factibilidad* (si nuestra red llega a tu sector). En cuanto la confirmemos, te enviaremos los *planes disponibles* y coordinaremos la *instalación*. 📶\n\nTe contactaremos muy pronto. ¡Gracias por preferirnos!`,
   },
   '3': {
     categoria: 'Pagos',
     pasos: [
-      { campo: 'nombre', pregunta: '💳 Con gusto. ¿Cuál es el *nombre o RUT del titular*?' },
-      { campo: 'mensaje', pregunta: '¿En qué te ayudamos? (ej: quiero pagar, consultar mi deuda, enviar comprobante).' },
+      { campo: 'nombre', pregunta: '💳 Con gusto te ayudo con pagos y facturación.\n\n¿Cuál es el *nombre completo o el RUT del titular* de la cuenta?' },
+      { campo: 'mensaje', pregunta: '¿Qué necesitas exactamente? Por ejemplo:\n\n• *Pagar* mi mensualidad\n• *Consultar* mi deuda o mi estado de cuenta\n• *Enviar un comprobante* de pago\n• Corregir un dato de mi *boleta/factura*\n\nCuéntame con detalle para poder ayudarte mejor. 🙌' },
     ],
-    confirma: (n) => `✅ ¡Gracias! Tu consulta de *pagos* quedó registrada con el N° *${n}*.\nTe contactaremos a la brevedad. 💳`,
-  },
-  '4': {
-    categoria: 'Visita',
-    pasos: [
-      { campo: 'mensaje', pregunta: '¿Quieres *agendar* una nueva visita o *consultar* algo puntual? Cuéntame, e incluye tu *dirección* si es una visita nueva.' },
-    ],
-    confirma: (n) => `✅ ¡Listo! Tu solicitud quedó registrada con el N° *${n}*.\nCoordinación te contactará para confirmar. 📅`,
+    confirma: (n) => `✅ ¡Gracias! Tu solicitud de *pagos y facturación* quedó registrada con el N° *${n}*.\n\nUn ejecutivo revisará tu caso y te contactará a la brevedad para ayudarte. 💳🙌`,
   },
 };
 
@@ -401,8 +401,8 @@ async function onMessage(m) {
       return botSend(id, '¡Excelente elección! 🎉\nUn ejecutivo te contactará muy pronto para coordinar tu *contratación e instalación*.\n\n_Gracias por preferir ' + EMPRESA + '._ 🙌');
     }
 
-    // Selección del menú: SOLO un número solo (1-5), para no confundir con planes ni teléfonos.
-    const mOpt = text.match(/^\s*([1-5])[\s.)\-]*$/);
+    // Selección del menú: SOLO un número solo (1-4), para no confundir con planes ni teléfonos.
+    const mOpt = text.match(/^\s*([1-4])[\s.)\-]*$/);
     const opt = mOpt ? mOpt[1] : null;
     if (!opt) {
       if (fueraDeHorario() && botCfg.horario.mensaje) await botSend(id, botCfg.horario.mensaje);
@@ -421,24 +421,12 @@ async function startFlow(id, opt, info) {
   // Con el formato @lid, si no lo tenemos, lo pediremos dentro del flujo (NO inventamos un número).
   const telefono = info.telefono || '';
 
-  // Opción 5: pasar a un ejecutivo (silencia el bot y crea ticket)
-  if (opt === '5') {
+  // Opción 4: pasar a un ejecutivo (silencia el bot y crea ticket)
+  if (opt === '4') {
     try { await crearTicket({ categoria: 'Ejecutivo', nombre, telefono, mensaje: 'El cliente solicitó hablar con un ejecutivo.' }); } catch (e) { console.error(e.message); }
     handoff.set(id, Date.now() + HANDOFF_TTL);
     resetSession(id);
-    return botSend(id, '🧑‍💼 ¡Con gusto! Un ejecutivo continuará esta conversación contigo lo antes posible.\n\n_Dejé de responder automáticamente para que puedas hablar con la persona._');
-  }
-
-  // Opción 4: si conocemos el teléfono real, consultamos su visita antes de seguir
-  if (opt === '4' && telefono) {
-    try {
-      const r = await api('/api/bot/visita?telefono=' + encodeURIComponent(telefono));
-      if (r && r.found) {
-        const t = r.tecnico ? ` con *${r.tecnico}*` : '';
-        const f = r.fecha ? ` para el *${r.fecha}*` : '';
-        await botSend(id, `📅 Encontré una visita a tu nombre: *${r.estado}*${f}${t}.`);
-      }
-    } catch (e) { /* si falla la consulta, seguimos igual */ }
+    return botSend(id, '🧑‍💼 ¡Con gusto! En un momento un *ejecutivo de WIFIRED* continuará esta conversación contigo.\n\n_Dejé de responder automáticamente para que puedas hablar directamente con la persona. Si necesitas volver al menú, escribe *menú*._');
   }
 
   const flow = FLOWS[opt];
