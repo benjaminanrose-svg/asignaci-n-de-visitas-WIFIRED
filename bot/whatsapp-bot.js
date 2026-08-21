@@ -143,8 +143,9 @@ const PASOS_CONTRATO = [
   { campo: 'telefono', esTelefono: true, pregunta: '3️⃣ ¿Cuál es tu *número de teléfono de contacto*? (9 dígitos, ej: 9 1234 5678)' },
   { campo: 'correo', esCorreo: true, pregunta: '4️⃣ ¿Cuál es tu *correo electrónico*? (ej: nombre@correo.com)' },
   { campo: 'direccion', esUbicacion: true, pregunta: '5️⃣ ¿Cuál es la *dirección exacta de instalación*?\n\nEscríbela (calle, número, sector o parcela y una referencia), o compárteme tu *ubicación* 📎.' },
-  { campo: 'carnet_frente', esFoto: true, pregunta: '6️⃣ Ahora necesito una *foto del FRENTE de tu carnet de identidad* 📷 (el lado con tu foto).\n\nTómale una foto clara y envíamela como imagen.' },
-  { campo: 'carnet_reverso', esFoto: true, pregunta: '7️⃣ ¡Perfecto! Ahora una *foto del REVERSO de tu carnet* 📷 (el lado de atrás).' },
+  { campo: 'carnet_consentimiento', esConsentimiento: true, pregunta: '6️⃣ Antes de pedirte las fotos de tu carnet, necesito tu *autorización* 🔒.\n\nUsaremos las imágenes de tu carnet *solo* para validar tu identidad y gestionar tu contratación, conforme a la *Ley N° 19.628* sobre protección de datos personales. No se comparten con terceros.\n\n¿Nos autorizas a solicitarte y guardar las fotos de tu carnet? Responde *SÍ* para continuar, o *NO*. ✍️' },
+  { campo: 'carnet_frente', esFoto: true, pregunta: '7️⃣ ¡Gracias! Ahora necesito una *foto del FRENTE de tu carnet de identidad* 📷 (el lado con tu foto).\n\nTómale una foto clara y envíamela como imagen.' },
+  { campo: 'carnet_reverso', esFoto: true, pregunta: '8️⃣ ¡Perfecto! Ahora una *foto del REVERSO de tu carnet* 📷 (el lado de atrás).' },
   { campo: 'condiciones', esCondiciones: true, pregunta: '' },
 ];
 
@@ -545,6 +546,17 @@ async function handleStep(id, sess, info) {
     const foto = await getFotoDataUri(info.raw);
     if (!foto) return botSend(id, 'Necesito una *foto* 📷. Toma una foto clara con tu cámara y envíamela *como imagen* (no como texto).');
     valor = foto;
+  } else if (paso.esConsentimiento) {
+    const low = (info.body || '').toLowerCase();
+    const si = /^(s[ií]|si|sí|acepto|autorizo|de acuerdo|estoy de acuerdo|ok|dale|confirmo|👍)/.test(low);
+    const no = /^(no|rechazo|no acepto|no autorizo|no estoy)/.test(low);
+    if (!si && !no) return botSend(id, 'Para continuar necesito tu respuesta: responde *SÍ* para *autorizar*, o *NO*. ✍️');
+    if (no) {
+      resetSession(id);
+      handoff.set(id, Date.now() + HANDOFF_TTL);
+      return botSend(id, 'Entendido. 🙏 Sin tu autorización no podemos solicitar las fotos del carnet por aquí, así que no es posible continuar la contratación por este medio.\n\nSi cambias de opinión, escribe *menú*. Un ejecutivo queda atento para resolver tus dudas.');
+    }
+    valor = 'autorizado';
   } else if (paso.esCondiciones) {
     const low = (info.body || '').toLowerCase();
     const si = /^(s[ií]|si|sí|acepto|de acuerdo|estoy de acuerdo|ok|dale|confirmo|👍)/.test(low);
@@ -615,6 +627,7 @@ async function finalizarContrato(id, sess, info) {
     ubicacion: ubic,
     carnet_frente: d.carnet_frente || '',
     carnet_reverso: d.carnet_reverso || '',
+    carnet_consentimiento: d.carnet_consentimiento === 'autorizado' ? 'autorizado' : '',
     condiciones: d.condiciones === 'aceptadas' ? 'aceptadas' : '',
   };
   try { await api('/api/bot/contratacion-datos', { method: 'POST', body: JSON.stringify(payload) }); }

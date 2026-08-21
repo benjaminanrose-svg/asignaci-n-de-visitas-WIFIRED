@@ -555,6 +555,7 @@ api.post('/bot/contratacion-datos', requireBotKey, wrap(async (req, res) => {
     b.rut ? `RUT: ${b.rut}` : '',
     b.telefono_declarado ? `Teléfono de contacto: ${b.telefono_declarado}` : '',
     b.correo ? `Correo: ${b.correo}` : '',
+    b.carnet_consentimiento === 'autorizado' ? 'Carnet (uso de datos): AUTORIZADO ✅' : 'Carnet (uso de datos): sin autorizar',
     b.condiciones === 'aceptadas' ? 'Condiciones: ACEPTADAS ✅' : 'Condiciones: sin aceptar',
     adjuntos.length ? `Carnet: ${adjuntos.length} foto(s) adjunta(s)` : 'Carnet: sin fotos',
   ].filter(Boolean).join('\n');
