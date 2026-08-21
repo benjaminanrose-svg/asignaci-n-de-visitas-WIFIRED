@@ -277,6 +277,11 @@ async function start() {
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    // 🔎 Detector: muestra TODO lo que WhatsApp entrega, sin filtrar (diagnóstico).
+    for (const mm of messages || []) {
+      const k = (mm && mm.key) || {};
+      console.log(`🔔 SEÑAL type=${type} de=${k.remoteJid} fromMe=${k.fromMe} descifrado=${!!(mm && mm.message)}`);
+    }
     if (type !== 'notify') return; // ignora sincronización de historial
     for (const m of messages) {
       try { await onMessage(m); } catch (e) { console.error('Error procesando mensaje:', e); }
