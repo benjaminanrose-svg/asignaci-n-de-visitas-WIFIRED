@@ -98,6 +98,21 @@ export function waLink(phone, msg) {
   return n ? `https://wa.me/${n}${msg ? '?text=' + encodeURIComponent(msg) : ''}` : '';
 }
 
+/**
+ * Enlace a Google Maps a partir de una dirección.
+ * - Si son coordenadas ("lat,lng"): enlaza directo al punto (NO agrega ciudad, o las rompe).
+ * - Si es un enlace (http…): lo usa tal cual.
+ * - Si es texto: busca la dirección agregando la comuna para ubicarla mejor.
+ */
+export function mapsHref(dir) {
+  const s = String(dir || '').trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  const c = s.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (c) return `https://www.google.com/maps?q=${c[1]},${c[2]}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s + ', Melipilla, Chile')}`;
+}
+
 // ============================================================
 // Validación de datos (Chile): RUT, teléfono y correo
 // ============================================================

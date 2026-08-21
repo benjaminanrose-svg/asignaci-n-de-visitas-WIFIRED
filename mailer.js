@@ -10,6 +10,15 @@
 const PDFDocument = require('pdfkit');
 
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** Enlace a Google Maps: coordenadas → punto directo (sin ciudad, o las rompe); texto → búsqueda con comuna. */
+function mapsHref(dir) {
+  const s = String(dir || '').trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  const c = s.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (c) return `https://www.google.com/maps?q=${c[1]},${c[2]}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s + ', Melipilla, Chile')}`;
+}
 const LEGAL = 'Con mi firma, declaro recibir conforme el servicio técnico contratado, validando que la instalación (cableado, perforaciones y canalizado) se realizó a mi entera satisfacción. Asimismo, constato que los equipos quedan operativos, con los parámetros de navegación (velocidad y señal Wi-Fi) verificados y aceptados en mi presencia.';
 
 function fromAddress() { return process.env.MAIL_FROM || process.env.GMAIL_USER || 'no-reply@wifired.cl'; }
@@ -241,7 +250,7 @@ async function sendClienteAviso(v, company, kind) {
     : 'Su visita técnica con <b>WIFIRED</b> ha quedado agendada con los siguientes datos:';
   const linea = (k, val) => val ? `<tr><td style="padding:6px 12px 6px 0;color:#666;white-space:nowrap;vertical-align:top">${esc(k)}</td><td style="padding:6px 0;font-weight:600;color:#111">${esc(val)}</td></tr>` : '';
   const mapa = v.direccion
-    ? `<div style="margin:14px 0"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v.direccion + ', Melipilla, Chile')}" style="color:#0b5cff;text-decoration:none">📍 Ver la dirección en el mapa ›</a></div>` : '';
+    ? `<div style="margin:14px 0"><a href="${mapsHref(v.direccion)}" style="color:#0b5cff;text-decoration:none">📍 Ver la dirección en el mapa ›</a></div>` : '';
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111;font-size:14px;max-width:560px;margin:auto">
     <p>Estimado/a ${esc(v.cliente || '')},</p>
     <p>${intro}</p>
