@@ -210,7 +210,7 @@ const COMPANY = {
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '20mb' })); // amplio para fotos (carnet en contratación, evidencias)
 
 const wrap = (fn) => (req, res) => fn(req, res).catch((e) => { console.error(e); res.status(500).json({ error: 'Error interno del servidor' }); });
 
@@ -535,6 +535,46 @@ api.post('/bot/plan-elegido', requireBotKey, wrap(async (req, res) => {
   const t = await s.addTicket({ categoria: 'Contratación', canal: 'whatsapp', estado: 'En proceso',
     factibilidad: 'planes_enviados', nombre: b.nombre || '', telefono: b.telefono || '', mensaje: nota });
   console.log(`[BOT] ticket ${t.num} creado (sin previo) · plan elegido · ${b.telefono || ''}`);
+  res.status(201).json({ ok: true, actualizado: false, num: t.num });
+}));
+
+// El cliente completó el proceso de contratación por el bot: guardamos TODOS sus datos
+// (nombre, rut, teléfono, correo, dirección, fotos del carnet y aceptación de condiciones)
+// en su ticket de Contratación existente.
+api.post('/bot/contratacion-datos', requireBotKey, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.addTicket !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  const b = req.body || {};
+  const tel = normFono(b.telefono || '');
+  const adjuntos = [];
+  if (b.carnet_frente) adjuntos.push({ tipo: 'Carnet (frente)', data: b.carnet_frente });
+  if (b.carnet_reverso) adjuntos.push({ tipo: 'Carnet (reverso)', data: b.carnet_reverso });
+  const resumen = [
+    `📋 *Contratación por WhatsApp*`,
+    b.plan ? `Plan elegido: ${b.plan}` : '',
+    b.rut ? `RUT: ${b.rut}` : '',
+    b.telefono_declarado ? `Teléfono de contacto: ${b.telefono_declarado}` : '',
+    b.correo ? `Correo: ${b.correo}` : '',
+    b.condiciones === 'aceptadas' ? 'Condiciones: ACEPTADAS ✅' : 'Condiciones: sin aceptar',
+    adjuntos.length ? `Carnet: ${adjuntos.length} foto(s) adjunta(s)` : 'Carnet: sin fotos',
+  ].filter(Boolean).join('\n');
+  const patch = {
+    nombre: b.nombre || '', telefono: b.telefono || '', direccion: b.direccion || '', ubicacion: b.ubicacion || '',
+    rut: b.rut || '', email: b.correo || '', adjuntos, mensaje: resumen,
+    estado: 'En proceso', factibilidad: 'planes_enviados',
+  };
+  let ticket = null;
+  if (tel && typeof s.listTickets === 'function') {
+    const abiertos = (await s.listTickets()).filter((t) => t.categoria === 'Contratación' && normFono(t.telefono) === tel && t.estado !== 'Cerrado');
+    ticket = abiertos[0] || null;
+  }
+  if (ticket && typeof s.updateTicket === 'function') {
+    const upd = await s.updateTicket(ticket._uid, patch);
+    console.log(`[BOT] contratación completada · ticket ${upd.num} · ${b.telefono || ''}`);
+    return res.json({ ok: true, actualizado: true, num: upd.num });
+  }
+  const t = await s.addTicket({ categoria: 'Contratación', canal: 'whatsapp', ...patch });
+  console.log(`[BOT] contratación completada · ticket ${t.num} (nuevo) · ${b.telefono || ''}`);
   res.status(201).json({ ok: true, actualizado: false, num: t.num });
 }));
 

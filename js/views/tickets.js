@@ -256,10 +256,24 @@ function detailHtml(t) {
         <div class="tk-row"><span class="tk-lbl">Ubicación</span><span class="tk-val">${
           t.ubicacion ? `${esc(t.ubicacion)} ${maps ? `<a class="tk-link" href="${maps}" target="_blank" rel="noopener">📍 Ver en mapa</a>` : ''}` : '—'
         }</span></div>
+        ${t.rut ? `<div class="tk-row"><span class="tk-lbl">RUT</span><span class="tk-val">${esc(t.rut)}</span></div>` : ''}
+        ${t.email ? `<div class="tk-row"><span class="tk-lbl">Correo</span><span class="tk-val">${esc(t.email)}</span></div>` : ''}
         <div class="tk-row"><span class="tk-lbl">Recibido</span><span class="tk-val">${esc(fmtTs(t.created_at))}</span></div>
       </div>
 
       ${t.mensaje ? `<div class="tk-quote">${esc(t.mensaje)}</div>` : ''}
+
+      ${Array.isArray(t.adjuntos) && t.adjuntos.length ? `
+        <div class="tk-section">
+          <label class="tk-section-lbl">📷 Documentos del cliente (carnet)</label>
+          <div class="row" style="gap:10px; flex-wrap:wrap; margin-top:6px">
+            ${t.adjuntos.map((a) => `
+              <a href="${esc(a.data)}" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">
+                <img src="${esc(a.data)}" alt="${esc(a.tipo || 'documento')}" style="width:150px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block">
+                <span class="muted-sm" style="display:block;margin-top:4px">${esc(a.tipo || 'Documento')} · abrir ›</span>
+              </a>`).join('')}
+          </div>
+        </div>` : ''}
 
       ${esContrat ? `
         <div class="tk-section">

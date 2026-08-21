@@ -260,6 +260,7 @@ function renderBotConfig(root) {
   const bot = cfg.bot || {};
   const bh = bot.horario || {};
   const cvv = bot.confirma_visita || {};
+  const cond = bot.condiciones || '';
   const sw = 'display:flex;align-items:center;gap:10px;cursor:pointer';
   const cb = 'width:18px;height:18px';
 
@@ -305,6 +306,14 @@ function renderBotConfig(root) {
         <p class="muted-sm">Este texto se le envía al cliente con el botón “Enviar planes por WhatsApp” del ticket. Usa *asteriscos* para negrita.</p>
         <div class="field full" style="margin-top:8px">
           <textarea class="textarea" data-b="planes" style="min-height:180px" placeholder="Estos son nuestros planes…">${esc(bot.planes || '')}</textarea></div>
+      </div>
+
+      <div class="card cfg-card">
+        <h3 class="cfg-title">📄 Términos y condiciones de contratación</h3>
+        <p class="muted-sm">Cuando un cliente elige un plan, el bot recoge sus datos (nombre, RUT, teléfono, correo, dirección y foto del carnet) y le envía este texto para que lo <b>acepte</b> antes de finalizar. Pega aquí tus condiciones.</p>
+        <div class="field full" style="margin-top:8px">
+          <textarea class="textarea" data-b="condiciones" style="min-height:150px" placeholder="Ej: 1) El servicio se cobra mensualmente… 2) La permanencia mínima es… 3) Los equipos se entregan en comodato…">${esc(cond)}</textarea>
+        </div>
       </div>
 
       <div class="card cfg-card">
@@ -378,6 +387,7 @@ function renderBotConfig(root) {
           hora: parseInt(q('[data-b="cv_hora"]').value, 10) || 18,
           mensaje: q('[data-b="cv_mensaje"]').value.trim(),
         },
+        condiciones: q('[data-b="condiciones"]').value.trim(),
       },
     };
     root.querySelectorAll('[data-savebot]').forEach((b) => { b.disabled = true; });

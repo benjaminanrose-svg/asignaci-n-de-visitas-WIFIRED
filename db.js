@@ -46,6 +46,8 @@ const DEFAULT_BOT = {
     hora: 18,
     mensaje: 'Hola {nombre} 👋 Le recordamos su *visita técnica de WIFIRED* para *mañana* ({fecha}), en el bloque {bloque}.\n\n¿Confirma la visita? Responda *SÍ* para confirmarla o *NO* para cancelarla. 🙌',
   },
+  // Términos y condiciones que el bot envía al cliente durante la contratación (se editan en la página).
+  condiciones: '',
 };
 /** Fusiona la config del bot guardada sobre los valores por defecto */
 function mergeBot(b) {
@@ -72,6 +74,7 @@ function mergeBot(b) {
         mensaje: typeof cv.mensaje === 'string' && cv.mensaje.trim() ? cv.mensaje : DEFAULT_BOT.confirma_visita.mensaje,
       };
     })(),
+    condiciones: typeof s.condiciones === 'string' ? s.condiciones : '',
   };
 }
 /** Fusiona la config guardada (settings.config) sobre los valores por defecto */
@@ -132,7 +135,7 @@ const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'te
 
 // Campos de un ticket de atención (WhatsApp / manual). Se clasifican por
 // categoría y estado; 'factibilidad' aplica a los de contratación.
-const TICKET_FIELDS = ['categoria', 'estado', 'factibilidad', 'nombre', 'telefono', 'direccion', 'ubicacion', 'mensaje', 'canal', 'notas', 'historial'];
+const TICKET_FIELDS = ['categoria', 'estado', 'factibilidad', 'nombre', 'telefono', 'direccion', 'ubicacion', 'mensaje', 'canal', 'notas', 'historial', 'rut', 'email', 'adjuntos'];
 /** Normaliza el historial (arreglo o texto) a JSON en texto para guardar */
 function evStr(v) { return Array.isArray(v) ? JSON.stringify(v) : (v || '[]'); }
 
@@ -197,8 +200,8 @@ function memoryStore() {
   const credsOf = (tid) => { const u = users.find((x) => x.tecnico_id == tid); return { username: u ? u.username : '', password: u ? (u.pass_plain || '') : '' }; };
   const outT = (t) => ({ ...t, display: displayTecnico(t.rol, t.nombre), ...credsOf(t.id) });
   const outV = (v) => { const o = { _uid: String(v.id), id: v.ot, ...pick(v) }; o.prioridad = o.prioridad || 'Media'; o.evidencias = parseEv(o.evidencias); o.historial = parseEv(o.historial); return o; };
-  const pickTk = (d) => { const o = {}; TICKET_FIELDS.forEach((f) => (o[f] = d[f] || '')); o.historial = evStr(d.historial); return o; };
-  const outTk = (t) => { const o = { _uid: String(t.id), num: 'T-' + String(t.id).padStart(4, '0'), created_at: t.created_at, updated_at: t.updated_at, ...pickTk(t) }; o.estado = o.estado || 'Nuevo'; o.categoria = o.categoria || 'Otros'; o.canal = o.canal || 'manual'; o.historial = parseEv(o.historial); return o; };
+  const pickTk = (d) => { const o = {}; TICKET_FIELDS.forEach((f) => (o[f] = d[f] || '')); o.historial = evStr(d.historial); o.adjuntos = evStr(d.adjuntos); return o; };
+  const outTk = (t) => { const o = { _uid: String(t.id), num: 'T-' + String(t.id).padStart(4, '0'), created_at: t.created_at, updated_at: t.updated_at, ...pickTk(t) }; o.estado = o.estado || 'Nuevo'; o.categoria = o.categoria || 'Otros'; o.canal = o.canal || 'manual'; o.historial = parseEv(o.historial); o.adjuntos = parseEv(o.adjuntos); return o; };
   const uniqUser = (base, exceptId) => { let u = base || 'tecnico', b = u, i = 2; while (users.some((x) => x.username === u && x.id !== exceptId)) u = `${b}${i++}`; return u; };
 
   return {
@@ -260,7 +263,7 @@ function memoryStore() {
     },
     async updateTicket(id, patch) {
       const t = tickets.find((x) => x.id == id); if (!t) return null;
-      TICKET_FIELDS.forEach((k) => { if (k in patch) t[k] = (k === 'historial') ? evStr(patch[k]) : patch[k]; });
+      TICKET_FIELDS.forEach((k) => { if (k in patch) t[k] = (k === 'historial' || k === 'adjuntos') ? evStr(patch[k]) : patch[k]; });
       t.updated_at = new Date().toISOString();
       return outTk(t);
     },
@@ -325,6 +328,7 @@ function pgStore(url) {
     nombre: r.nombre || '', telefono: r.telefono || '', direccion: r.direccion || '',
     ubicacion: r.ubicacion || '', mensaje: r.mensaje || '', canal: r.canal || 'manual',
     notas: r.notas || '', historial: parseEv(r.historial),
+    rut: r.rut || '', email: r.email || '', adjuntos: parseEv(r.adjuntos),
   });
   async function credsOf(tid) {
     const { rows } = await pool.query('SELECT username, pass_plain FROM usuarios WHERE tecnico_id=$1', [tid]);
@@ -410,6 +414,9 @@ function pgStore(url) {
           created_at TIMESTAMPTZ DEFAULT now(),
           updated_at TIMESTAMPTZ DEFAULT now()
         );`);
+      await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS rut TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS email TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS adjuntos TEXT DEFAULT '[]';`);
       await pool.query(`
         CREATE TABLE IF NOT EXISTS bot_outbox (
           id SERIAL PRIMARY KEY,
@@ -565,7 +572,7 @@ function pgStore(url) {
     },
     async updateTicket(id, patch) {
       const cols = [], vals = []; let i = 1;
-      TICKET_FIELDS.forEach((k) => { if (k in patch) { cols.push(`${k}=$${i++}`); vals.push(k === 'historial' ? evStr(patch[k]) : patch[k]); } });
+      TICKET_FIELDS.forEach((k) => { if (k in patch) { cols.push(`${k}=$${i++}`); vals.push((k === 'historial' || k === 'adjuntos') ? evStr(patch[k]) : patch[k]); } });
       if (!cols.length) return null;
       cols.push('updated_at=now()'); vals.push(id);
       const { rows } = await pool.query(`UPDATE tickets SET ${cols.join(', ')} WHERE id=$${i} RETURNING *`, vals);
