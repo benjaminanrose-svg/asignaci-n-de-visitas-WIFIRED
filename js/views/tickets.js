@@ -39,6 +39,57 @@ const FACTS = [
 ];
 function factMeta(v) { return FACTS.find((f) => f.v === v); }
 
+/** ¿Qué tiene que hacer AHORA el coordinador con este ticket? (null si nada pendiente) */
+function accionPendiente(t) {
+  if (t.estado === 'Cerrado' || t.estado === 'Resuelto') return null;
+  if (t.categoria === 'Contratación') {
+    const f = t.factibilidad || 'pendiente';
+    if (f === 'pendiente') return { l: 'Revisar factibilidad', color: '#f59e0b' };
+    if (f === 'factible') return { l: 'Enviar planes', color: '#2563eb' };
+    if (f === 'planes_enviados') return { l: 'Cerrar la venta', color: '#06b6d4' };
+    return null; // no_factible: nada más que hacer
+  }
+  if (t.estado === 'Nuevo') return { l: 'Atender', color: '#2563eb' };
+  return null;
+}
+
+/** Orden: lo que necesita acción va arriba; luego lo más nuevo primero */
+function prioridadTicket(t) {
+  if (t.estado === 'Cerrado') return 6;
+  if (t.estado === 'Resuelto') return 5;
+  const a = accionPendiente(t);
+  if (a) return t.categoria === 'Contratación' ? 0 : 1;
+  if (t.estado === 'En proceso') return 3;
+  return 4;
+}
+
+/** Guía visual paso a paso para tickets de Contratación */
+function guiaContratacionHtml(t) {
+  const f = t.factibilidad || 'pendiente';
+  const pasos = ['Factibilidad', 'Enviar planes', 'Coordinar instalación'];
+  let activo = 0, banner = '';
+  if (f === 'pendiente') { activo = 0; banner = '📍 <strong>Ahora:</strong> revisa la ubicación en el mapa y marca <strong>Factible</strong> o <strong>No factible</strong> abajo.'; }
+  else if (f === 'factible') { activo = 1; banner = '✅ <strong>Es factible.</strong> Ahora envíale los planes con el botón <strong>“Enviar planes por WhatsApp”</strong>.'; }
+  else if (f === 'planes_enviados') { activo = 2; banner = '📤 <strong>Planes enviados.</strong> Cuando el cliente elija su plan, el bot lo registra y avisa. Luego coordina con <strong>“Convertir en visita”</strong>.'; }
+  else if (f === 'no_factible') { activo = -1; banner = '❌ <strong>Sin cobertura.</strong> Avísale al cliente y marca el ticket como <strong>Cerrado</strong>.'; }
+  const stepper = pasos.map((p, i) => {
+    const done = activo > i && activo !== -1;
+    const now = activo === i;
+    const bg = now ? '#2563eb' : done ? '#10b981' : 'transparent';
+    const fg = (now || done) ? '#fff' : 'var(--text-3)';
+    const bd = now ? '#2563eb' : done ? '#10b981' : 'var(--border)';
+    return `<div style="display:flex;align-items:center;gap:6px">
+        <span style="width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:${bg};color:${fg};border:1px solid ${bd}">${done ? '✓' : i + 1}</span>
+        <span style="font-size:12px;color:${now ? 'var(--text)' : 'var(--text-3)'};font-weight:${now ? '700' : '400'}">${p}</span>
+      </div>`;
+  }).join('<span style="flex:1;height:1px;background:var(--border);min-width:10px"></span>');
+  return `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:9px">${stepper}</div>
+      <div style="font-size:13px;line-height:1.45;color:var(--text)">${banner}</div>
+    </div>`;
+}
+
 /** Chip de color (tinte suave) */
 function chip(text, color) {
   return `<span class="tag" style="background:color-mix(in srgb, ${color} 16%, transparent); border-color:color-mix(in srgb, ${color} 40%, var(--border)); color:${color}">${text}</span>`;
@@ -101,8 +152,9 @@ export function renderTickets(root) {
     const stats = root.querySelector('#tk-stats');
     const nuevos = list.filter((t) => t.estado === 'Nuevo').length;
     const proceso = list.filter((t) => t.estado === 'En proceso').length;
+    const porAtender = list.filter((t) => accionPendiente(t)).length;
     stats.innerHTML = list.length
-      ? `${chip(`${nuevos} nuevo${nuevos === 1 ? '' : 's'}`, '#2563eb')} ${chip(`${proceso} en proceso`, '#f59e0b')} <span class="muted-sm">· ${list.length} en total</span>`
+      ? `${porAtender ? chip(`🔔 ${porAtender} por atender`, '#ef4444') + ' ' : ''}${chip(`${nuevos} nuevo${nuevos === 1 ? '' : 's'}`, '#2563eb')} ${chip(`${proceso} en proceso`, '#f59e0b')} <span class="muted-sm">· ${list.length} en total</span>`
       : '';
 
     if (local.cat) list = list.filter((t) => t.categoria === local.cat);
@@ -111,6 +163,9 @@ export function renderTickets(root) {
       list = list.filter((t) => [t.nombre, t.telefono, t.mensaje, t.direccion, t.num]
         .some((f) => (f || '').toLowerCase().includes(local.q)));
     }
+
+    // Ordena: lo que requiere acción del coordinador va arriba; dentro, lo más nuevo primero.
+    list.sort((a, b) => prioridadTicket(a) - prioridadTicket(b) || (b.created_at || '').localeCompare(a.created_at || ''));
 
     if (!list.length) {
       host.innerHTML = `<div class="empty-state"><div class="es-ico">🎫</div><p>${
@@ -131,8 +186,11 @@ function cardHtml(t) {
   const fm = t.categoria === 'Contratación' && t.factibilidad ? factMeta(t.factibilidad) : null;
   const tel = t.telefono ? `📞 ${esc(t.telefono)}` : '';
   const msg = (t.mensaje || '').trim();
+  const acc = accionPendiente(t);
+  const accent = acc ? acc.color : (t.estado === 'Nuevo' ? '#2563eb' : '');
+  const style = accent ? ` style="border-left:4px solid ${accent}"` : '';
   return `
-    <button class="card cli-card" data-open="${esc(t._uid)}">
+    <button class="card cli-card" data-open="${esc(t._uid)}"${style}>
       <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap">
         <span class="tk-num">${esc(t.num)}</span>
         ${catChip(t.categoria)}
@@ -144,6 +202,7 @@ function cardHtml(t) {
         ${tel ? `<div class="cell-sub truncate">${tel}</div>` : ''}
         ${msg ? `<div class="cell-sub tk-msg">${esc(msg)}</div>` : ''}
       </div>
+      ${acc ? `<div style="text-align:left;margin-top:8px;font-size:13px;font-weight:600;color:${acc.color}">👉 ${acc.l}</div>` : ''}
       <div class="cli-foot muted-sm">${t.canal === 'whatsapp' ? '🟢 WhatsApp' : '✍️ Manual'} · ${esc(fmtTs(t.created_at))}</div>
     </button>`;
 }
@@ -204,11 +263,11 @@ function detailHtml(t) {
 
       ${esContrat ? `
         <div class="tk-section">
-          <label class="tk-section-lbl">Factibilidad</label>
+          <label class="tk-section-lbl">Proceso de contratación</label>
+          ${guiaContratacionHtml(t)}
           <div class="row" style="gap:6px; flex-wrap:wrap">
             ${FACTS.map((f) => `<button class="btn btn-sm ${t.factibilidad === f.v ? 'btn-primary' : ''}" data-fact="${f.v}">${f.l}</button>`).join('')}
           </div>
-          <p class="muted-sm" style="margin-top:6px">Primero revisa la ubicación en el mapa. Marca <strong>Factible</strong> si le llega la red; luego usa el botón para enviarle los planes por WhatsApp.</p>
           <div style="margin-top:10px">
             <button class="btn btn-sm btn-primary" data-planes ${t.telefono ? '' : 'disabled title="El ticket no tiene teléfono"'}>📤 Enviar planes por WhatsApp</button>
           </div>
