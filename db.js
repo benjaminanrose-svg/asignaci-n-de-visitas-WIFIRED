@@ -32,7 +32,7 @@ const CONFIG = DEFAULT_CONFIG; // compat
 const DEFAULT_BOT = {
   activo: true,
   saludo: 'Soy el asistente virtual. ¿En qué te ayudo hoy?',
-  planes: 'Estos son nuestros planes de internet 📶\n\n• Plan 100 Megas — $[PRECIO]\n• Plan 200 Megas — $[PRECIO]\n• Plan 400 Megas — $[PRECIO]\n\n¿Cuál te interesa? Con gusto te ayudo a contratarlo. 🙂',
+  planes: '📶 *Planes de Internet WIFIRED* 🚀\n\n*Solo Internet* (router Wi-Fi 6 doble banda, equipos en comodato):\n• *Básico* — 400 Mbps → $13.990/mes\n• *Medio* — 650 Mbps → $19.990/mes\n• *Full* — 940 Mbps → $29.990/mes\n\n*Internet + Televisión* 📺:\n• *Dúo Básico* — 400 Mbps → $21.990/mes\n• *Dúo Medio* — 650 Mbps → $27.990/mes\n• *Dúo Full* — 940 Mbps → $35.990/mes\n\n✅ Velocidad garantizada · Wi-Fi 6 · Equipos en comodato\n🎁 Los planes *Full* incluyen extensor ZTE AC 1200 sin costo (si se necesita).\n\n¿Cuál te interesa? Respóndeme con el *nombre del plan* (ej: *Full* o *Dúo Medio*) y un ejecutivo coordina tu instalación. 🙌',
   horario: {
     activo: false,
     desde: '09:00',
