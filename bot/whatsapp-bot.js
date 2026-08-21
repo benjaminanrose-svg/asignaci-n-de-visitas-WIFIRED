@@ -358,12 +358,9 @@ async function onMessage(m) {
     if (telDig && esperaPlan.has(telDig)) {
       esperaPlan.delete(telDig);
       try {
-        await crearTicket({
-          categoria: 'Contratación',
-          nombre: info.notifyName || '',
-          telefono: info.telefono || telDig,
-          mensaje: 'El cliente respondió a los planes: "' + text + '"',
-          factibilidad: 'planes_enviados',
+        await api('/api/bot/plan-elegido', {
+          method: 'POST',
+          body: JSON.stringify({ telefono: info.telefono || telDig, nombre: info.notifyName || '', eleccion: text }),
         });
       } catch (e) { console.error('No se pudo registrar la elección de plan:', e.message); }
       handoff.set(id, Date.now() + HANDOFF_TTL);

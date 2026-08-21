@@ -468,6 +468,33 @@ api.post('/bot/ticket', requireBotKey, wrap(async (req, res) => {
   res.status(201).json(t);
 }));
 
+// El cliente eligió un plan tras recibir la lista: ACTUALIZA su ticket de
+// Contratación existente (no crea uno nuevo). Si no hay ninguno abierto, crea uno.
+api.post('/bot/plan-elegido', requireBotKey, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.addTicket !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  const b = req.body || {};
+  const tel = normFono(b.telefono || '');
+  const eleccion = String(b.eleccion || '').slice(0, 300);
+  const nota = `Cliente eligió: ${eleccion}`;
+  let ticket = null;
+  if (tel && typeof s.listTickets === 'function') {
+    const abiertos = (await s.listTickets()).filter((t) =>
+      t.categoria === 'Contratación' && normFono(t.telefono) === tel && t.estado !== 'Cerrado');
+    ticket = abiertos[0] || null; // listTickets viene del más nuevo al más viejo
+  }
+  if (ticket && typeof s.updateTicket === 'function') {
+    const mensaje = ticket.mensaje ? `${ticket.mensaje}\n${nota}` : nota;
+    const upd = await s.updateTicket(ticket._uid, { mensaje, estado: 'En proceso' });
+    console.log(`[BOT] ticket ${upd.num} actualizado · plan elegido · ${b.telefono || ''}`);
+    return res.json({ ok: true, actualizado: true, num: upd.num });
+  }
+  const t = await s.addTicket({ categoria: 'Contratación', canal: 'whatsapp', estado: 'En proceso',
+    factibilidad: 'planes_enviados', nombre: b.nombre || '', telefono: b.telefono || '', mensaje: nota });
+  console.log(`[BOT] ticket ${t.num} creado (sin previo) · plan elegido · ${b.telefono || ''}`);
+  res.status(201).json({ ok: true, actualizado: false, num: t.num });
+}));
+
 // El bot lee la configuración (saludo, planes, horario) desde la app
 api.get('/bot/config', requireBotKey, wrap(async (req, res) => {
   const c = await (await getStore()).getConfig();
