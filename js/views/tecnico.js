@@ -106,6 +106,7 @@ function card(v) {
   const cancel = v.estado === 'Cancelada';
   const cerrada = done || cancel;
   const pedida = !!v.reagenda_solicitada;
+  const esFacti = String(v.tipo || '').trim().toLowerCase() === 'factibilidad';
   const nFotos = (v.evidencias || []).length;
   const tel = (v.telefono || '').split('/')[0].replace(/\s/g, '');
   return `
@@ -127,9 +128,9 @@ function card(v) {
     ${nFotos ? `<button class="tec-fotos" data-act="ver-fotos" data-uid="${esc(v._uid)}">📷 ${nFotos} foto${nFotos === 1 ? '' : 's'} de evidencia</button>` : ''}
     <div class="tec-actions">
       ${cerrada || pedida ? '' : `<button class="btn btn-primary btn-sm" data-act="completar" data-uid="${esc(v._uid)}">✓ Completar</button>`}
-      ${cerrada || pedida ? '' : `<button class="btn btn-sm" data-act="solicitar" data-uid="${esc(v._uid)}">↻ Reagenda</button>`}
-      ${cerrada || pedida ? '' : `<button class="btn btn-sm btn-danger" data-act="cancelar" data-uid="${esc(v._uid)}">✕ Cancelar</button>`}
-      <button class="btn btn-sm" data-act="nota" data-uid="${esc(v._uid)}">📝 Nota</button>
+      ${cerrada || pedida || esFacti ? '' : `<button class="btn btn-sm" data-act="solicitar" data-uid="${esc(v._uid)}">↻ Reagenda</button>`}
+      ${cerrada || pedida || esFacti ? '' : `<button class="btn btn-sm btn-danger" data-act="cancelar" data-uid="${esc(v._uid)}">✕ Cancelar</button>`}
+      ${esFacti ? '' : `<button class="btn btn-sm" data-act="nota" data-uid="${esc(v._uid)}">📝 Nota</button>`}
     </div>
   </div>`;
 }
@@ -141,9 +142,52 @@ function attachPicker(node) {
   return picker;
 }
 
+// ---------- Completar FACTIBILIDAD (firma + nota + resultado sí/no) ----------
+function completarFactibilidadModal(uid, v) {
+  const node = document.createElement('div');
+  node.innerHTML = `
+    <div class="modal-head"><h3>Completar factibilidad</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-body">
+      <p class="muted-sm" style="margin-bottom:14px">${esc(v.id)} · ${esc(v.cliente)} · 📶 Factibilidad</p>
+      <div class="field"><label>Nota / observación</label>
+        <textarea class="textarea" name="detalle" style="min-height:110px" placeholder="Observaciones de la revisión de factibilidad…">${esc(v.detalle || '')}</textarea></div>
+      <div class="field" style="margin-top:14px"><label>Firma *</label><div data-sig></div></div>
+      <p class="muted-sm" style="margin-top:16px;font-weight:600;color:var(--text)">¿El sector tiene factibilidad?</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-close>Cancelar</button>
+      <div class="grow"></div>
+      <button class="btn btn-danger" data-no>✕ No hay factibilidad</button>
+      <button class="btn btn-primary" data-si>✅ Hay factibilidad</button>
+    </div>`;
+  node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+  const sig = createSignaturePad('Firma');
+  node.querySelector('[data-sig]').appendChild(sig.element);
+
+  const guardar = (resultado) => {
+    if (sig.isEmpty()) { toast('Falta la firma', 'info'); return; }
+    const nota = node.querySelector('[name=detalle]').value.trim();
+    const firma = sig.getData();
+    const etiqueta = resultado === 'si' ? 'HAY FACTIBILIDAD' : 'NO HAY FACTIBILIDAD';
+    const detFinal = nota ? `${etiqueta} — ${nota}` : etiqueta;
+    store.updateVisita(uid, {
+      estado: 'Completada',
+      detalle: detFinal,
+      firma_cliente: firma,
+      historial: histJSON(v, { tipo: 'factibilidad', resultado, estado: 'Completada', detalle: detFinal, firma_cliente: firma }),
+    });
+    toast(resultado === 'si' ? 'Factibilidad registrada ✓' : 'Sin factibilidad registrado ✓');
+    closeModal();
+  };
+  node.querySelector('[data-si]').onclick = () => guardar('si');
+  node.querySelector('[data-no]').onclick = () => guardar('no');
+  openModal(node, 'md', { dismissable: false });
+}
+
 // ---------- Completar (observación + evidencia + firmas + código de validación) ----------
 function completarModal(uid) {
   const v = store.byUid(uid); if (!v) return;
+  if (String(v.tipo || '').trim().toLowerCase() === 'factibilidad') return completarFactibilidadModal(uid, v);
   const node = document.createElement('div');
   node.innerHTML = `
     <div class="modal-head"><h3>Completar y validar visita</h3><button class="icon-btn" data-close>✕</button></div>

@@ -123,12 +123,15 @@ function displayTecnico(rol, nombre) {
   return (nombre ? `${rol} ${nombre}` : rol).trim();
 }
 
-function nextOt(existing) {
+function nextOt(existing, tipo) {
+  const facti = String(tipo || '').trim().toLowerCase() === 'factibilidad';
+  const prefix = facti ? 'OT-FAC-2026-' : 'OT-MEL-2026-';
   const nums = existing
+    .filter((ot) => (facti ? String(ot).startsWith('OT-FAC-') : !String(ot).startsWith('OT-FAC-')))
     .map((ot) => parseInt((String(ot).match(/(\d+)\s*$/) || [])[1] || '0', 10))
     .filter((n) => !isNaN(n));
   const n = (nums.length ? Math.max(...nums) : 0) + 1;
-  return `OT-MEL-2026-${String(n).padStart(3, '0')}`;
+  return `${prefix}${String(n).padStart(3, '0')}`;
 }
 
 const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por', 'reagenda_solicitada', 'reagenda_motivo', 'prioridad', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'orden_enviada', 'nodo', 'historial', 'validada', 'aviso_agendada', 'recordatorio_enviado', 'confirmacion', 'confirmacion_enviada'];
@@ -240,7 +243,7 @@ function memoryStore() {
       return sig;
     },
     async addVisita(d) {
-      const ot = nextOt(visitas.map((x) => x.ot));
+      const ot = nextOt(visitas.map((x) => x.ot), d.tipo);
       const v = { id: ++vSeq, ot, ...pick(d) };
       if (!v.estado) v.estado = 'Pendiente';
       visitas.unshift(v); return outV(v);
@@ -541,7 +544,7 @@ function pgStore(url) {
     },
     async addVisita(d) {
       const { rows: ex } = await pool.query('SELECT ot FROM visitas');
-      const ot = nextOt(ex.map((r) => r.ot));
+      const ot = nextOt(ex.map((r) => r.ot), d.tipo);
       const { rows } = await pool.query(
         `INSERT INTO visitas (ot,estado,tipo,fecha,bloque,cliente,rut,telefono,direccion,gps,detalle,tecnico,asignado_por,prioridad,email,nodo)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
