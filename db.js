@@ -41,6 +41,11 @@ const DEFAULT_BOT = {
     hasta: '19:00',
     mensaje: 'En este momento estamos fuera de nuestro horario de atención, pero igual registramos tu solicitud y te respondemos apenas volvamos. 🙌',
   },
+  confirma_visita: {
+    activo: false,
+    hora: 18,
+    mensaje: 'Hola {nombre} 👋 Le recordamos su *visita técnica de WIFIRED* para *mañana* ({fecha}), en el bloque {bloque}.\n\n¿Confirma la visita? Responda *SÍ* para confirmarla o *NO* para cancelarla. 🙌',
+  },
 };
 /** Fusiona la config del bot guardada sobre los valores por defecto */
 function mergeBot(b) {
@@ -58,6 +63,15 @@ function mergeBot(b) {
       hasta: h.hasta || DEFAULT_BOT.horario.hasta,
       mensaje: typeof h.mensaje === 'string' && h.mensaje.trim() ? h.mensaje : DEFAULT_BOT.horario.mensaje,
     },
+    confirma_visita: (() => {
+      const cv = s.confirma_visita && typeof s.confirma_visita === 'object' ? s.confirma_visita : {};
+      const hora = parseInt(cv.hora, 10);
+      return {
+        activo: !!cv.activo,
+        hora: Number.isFinite(hora) && hora >= 0 && hora <= 23 ? hora : DEFAULT_BOT.confirma_visita.hora,
+        mensaje: typeof cv.mensaje === 'string' && cv.mensaje.trim() ? cv.mensaje : DEFAULT_BOT.confirma_visita.mensaje,
+      };
+    })(),
   };
 }
 /** Fusiona la config guardada (settings.config) sobre los valores por defecto */
@@ -114,7 +128,7 @@ function nextOt(existing) {
   return `OT-MEL-2026-${String(n).padStart(3, '0')}`;
 }
 
-const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por', 'reagenda_solicitada', 'reagenda_motivo', 'prioridad', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'orden_enviada', 'nodo', 'historial', 'validada', 'aviso_agendada', 'recordatorio_enviado'];
+const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por', 'reagenda_solicitada', 'reagenda_motivo', 'prioridad', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'orden_enviada', 'nodo', 'historial', 'validada', 'aviso_agendada', 'recordatorio_enviado', 'confirmacion', 'confirmacion_enviada'];
 
 // Campos de un ticket de atención (WhatsApp / manual). Se clasifican por
 // categoría y estado; 'factibilidad' aplica a los de contratación.
@@ -251,8 +265,8 @@ function memoryStore() {
       return outTk(t);
     },
     async deleteTicket(id) { tickets = tickets.filter((x) => x.id != id); },
-    async addOutbox(telefono, texto) {
-      const o = { id: ++oSeq, telefono: telefono || '', texto: texto || '', estado: 'pendiente', created_at: new Date().toISOString(), sent_at: null };
+    async addOutbox(telefono, texto, tipo) {
+      const o = { id: ++oSeq, telefono: telefono || '', texto: texto || '', tipo: tipo || '', estado: 'pendiente', created_at: new Date().toISOString(), sent_at: null };
       outbox.push(o); return o;
     },
     async listOutboxPending() { return outbox.filter((o) => o.estado === 'pendiente').map((o) => ({ ...o })); },
@@ -301,6 +315,7 @@ function pgStore(url) {
     email: r.email || '', firma_cliente: r.firma_cliente || '', firma_tecnico: r.firma_tecnico || '', orden_enviada: r.orden_enviada || '',
     nodo: r.nodo || '', historial: parseEv(r.historial), validada: r.validada || '',
     aviso_agendada: r.aviso_agendada || '', recordatorio_enviado: r.recordatorio_enviado || '',
+    confirmacion: r.confirmacion || '', confirmacion_enviada: r.confirmacion_enviada || '',
   });
   const outU = (r) => r ? { id: r.id, username: r.username, pass: r.pass, rol: r.rol, nombre: r.nombre, tecnico_id: r.tecnico_id } : null;
   const outTk = (r) => ({
@@ -363,6 +378,8 @@ function pgStore(url) {
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS pin_ts TIMESTAMPTZ;`);
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS aviso_agendada TEXT DEFAULT '';`);
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS recordatorio_enviado TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS confirmacion TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS confirmacion_enviada TEXT DEFAULT '';`);
       await pool.query(`
         CREATE TABLE IF NOT EXISTS usuarios (
           id SERIAL PRIMARY KEY,
@@ -402,6 +419,7 @@ function pgStore(url) {
           created_at TIMESTAMPTZ DEFAULT now(),
           sent_at TIMESTAMPTZ
         );`);
+      await pool.query(`ALTER TABLE bot_outbox ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT '';`);
 
       // Reset opcional de técnicos (poner RESET_TECNICOS=1 una vez y redeploy)
       if (process.env.RESET_TECNICOS === '1') {
@@ -554,13 +572,13 @@ function pgStore(url) {
       return rows[0] ? outTk(rows[0]) : null;
     },
     async deleteTicket(id) { await pool.query('DELETE FROM tickets WHERE id=$1', [id]); },
-    async addOutbox(telefono, texto) {
+    async addOutbox(telefono, texto, tipo) {
       const { rows } = await pool.query(
-        `INSERT INTO bot_outbox (telefono, texto, estado) VALUES ($1,$2,'pendiente') RETURNING *`, [telefono || '', texto || '']);
+        `INSERT INTO bot_outbox (telefono, texto, tipo, estado) VALUES ($1,$2,$3,'pendiente') RETURNING *`, [telefono || '', texto || '', tipo || '']);
       return rows[0];
     },
     async listOutboxPending() {
-      const { rows } = await pool.query(`SELECT id, telefono, texto, estado, created_at FROM bot_outbox WHERE estado='pendiente' ORDER BY id ASC LIMIT 50`);
+      const { rows } = await pool.query(`SELECT id, telefono, texto, tipo, estado, created_at FROM bot_outbox WHERE estado='pendiente' ORDER BY id ASC LIMIT 50`);
       return rows;
     },
     async markOutboxSent(id) { await pool.query(`UPDATE bot_outbox SET estado='enviado', sent_at=now() WHERE id=$1`, [id]); },

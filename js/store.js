@@ -151,6 +151,11 @@ export async function enviarOrden(uid) {
   return rawApi('POST', '/visitas/' + uid + '/enviar-orden');
 }
 
+/** Pide al cliente (por WhatsApp, vía bot) que confirme su visita — ahora mismo */
+export async function pedirConfirmacionVisita(uid) {
+  return rawApi('POST', '/visitas/' + uid + '/confirmar-ahora');
+}
+
 /** Envía el código (PIN) de validación al correo del cliente */
 export async function enviarPin(uid, email) {
   return rawApi('POST', '/visitas/' + uid + '/enviar-pin', email ? { email } : undefined);

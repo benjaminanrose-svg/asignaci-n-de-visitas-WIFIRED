@@ -102,6 +102,49 @@ async function correrRecordatorios() {
   } catch (e) { console.warn('[RECORDATORIO] error:', e.message); }
 }
 
+// ---------- Confirmación automática de visitas por WhatsApp ----------
+let ultimaConfirmacion = ''; // día (Chile) en que ya se corrió el envío de confirmaciones
+
+/** Fecha legible en español a partir de "YYYY-MM-DD" (ej: "viernes 22 de agosto") */
+function fechaLegible(iso) {
+  try { return new Date(iso + 'T12:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Santiago' }); }
+  catch (e) { return iso || ''; }
+}
+/** Rellena la plantilla de confirmación con los datos de la visita */
+function plantillaConfirma(tpl, v) {
+  return String(tpl || '')
+    .replace(/\{nombre\}/gi, (v.cliente || '').trim().split(/\s+/)[0] || '')
+    .replace(/\{fecha\}/gi, fechaLegible(v.fecha))
+    .replace(/\{bloque\}/gi, v.bloque || '');
+}
+
+/** Revisa si toca pedir confirmación de las visitas de mañana y encola los WhatsApp una vez al día */
+async function correrConfirmaciones() {
+  try {
+    const s = await getStore();
+    if (typeof s.addOutbox !== 'function') return;
+    const cfg = await s.getConfig();
+    const cv = (cfg.bot && cfg.bot.confirma_visita) || {};
+    if (!cv.activo) return;                          // desactivado desde la página
+    const hoy = hoyChile();
+    if (ultimaConfirmacion === hoy) return;          // ya se corrió hoy
+    const hora = Number.isFinite(cv.hora) ? cv.hora : 18;
+    if (horaChile() < hora) return;                  // aún no es la hora
+    ultimaConfirmacion = hoy;
+    const manana = sumaDiasISO(hoy, 1);
+    const visitas = await s.listVisitas();
+    const pendientes = visitas.filter((v) => v.fecha === manana && v.telefono
+      && ESTADOS_ACTIVOS.includes(v.estado) && v.confirmacion_enviada !== manana);
+    let ok = 0;
+    for (const v of pendientes) {
+      await s.addOutbox(v.telefono, plantillaConfirma(cv.mensaje, v), 'confirmacion');
+      await s.updateVisita(v._uid, { confirmacion_enviada: manana, confirmacion: '' });
+      ok++;
+    }
+    if (pendientes.length) console.log(`[CONFIRMACION] ${ok}/${pendientes.length} solicitudes encoladas para ${manana}`);
+  } catch (e) { console.warn('[CONFIRMACION] error:', e.message); }
+}
+
 // ---------- Respaldo de datos ----------
 /**
  * Arma un respaldo con todos los registros operativos.
@@ -495,6 +538,44 @@ api.post('/bot/plan-elegido', requireBotKey, wrap(async (req, res) => {
   res.status(201).json({ ok: true, actualizado: false, num: t.num });
 }));
 
+// El cliente respondió SÍ/NO a la confirmación de su visita.
+// SÍ → marca confirmada; NO → cancela la visita.
+api.post('/bot/confirmar-visita', requireBotKey, wrap(async (req, res) => {
+  const s = await getStore();
+  const b = req.body || {};
+  const tel = normFono(b.telefono || '');
+  const resp = String(b.respuesta || '').toLowerCase();
+  if (!tel || typeof s.listVisitas !== 'function') return res.json({ found: false });
+  const cand = (await s.listVisitas())
+    .filter((v) => normFono(v.telefono) === tel && v.confirmacion_enviada && !v.confirmacion && ESTADOS_ACTIVOS.includes(v.estado))
+    .sort((a, b2) => (a.fecha || '').localeCompare(b2.fecha || ''));
+  const v = cand[0];
+  if (!v) return res.json({ found: false });
+  if (resp === 'no') {
+    await s.updateVisita(v._uid, { confirmacion: 'no', estado: 'Cancelada', reagenda_motivo: 'Cliente canceló al confirmar por WhatsApp' });
+    console.log(`[CONFIRMACION] visita ${v.id} CANCELADA por el cliente`);
+    return res.json({ found: true, accion: 'cancelada', fecha: v.fecha });
+  }
+  await s.updateVisita(v._uid, { confirmacion: 'si' });
+  console.log(`[CONFIRMACION] visita ${v.id} CONFIRMADA por el cliente`);
+  return res.json({ found: true, accion: 'confirmada', fecha: v.fecha });
+}));
+
+// Enviar la confirmación de una visita AHORA (manual, para probar sin esperar la hora)
+api.post('/visitas/:id/confirmar-ahora', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.addOutbox !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  const v = (await s.listVisitas()).find((x) => x._uid === String(req.params.id));
+  if (!v) return res.status(404).json({ error: 'Visita no encontrada' });
+  if (!v.telefono) return res.status(400).json({ error: 'La visita no tiene teléfono del cliente' });
+  const cfg = await s.getConfig();
+  const cv = (cfg.bot && cfg.bot.confirma_visita) || {};
+  await s.addOutbox(v.telefono, plantillaConfirma(cv.mensaje, v), 'confirmacion');
+  await s.updateVisita(req.params.id, { confirmacion_enviada: v.fecha || hoyChile(), confirmacion: '' });
+  console.log(`[CONFIRMACION] solicitud manual encolada · visita ${v.id}`);
+  res.json({ ok: true });
+}));
+
 // El bot lee la configuración (saludo, planes, horario) desde la app
 api.get('/bot/config', requireBotKey, wrap(async (req, res) => {
   const c = await (await getStore()).getConfig();
@@ -560,7 +641,7 @@ getStore()
     console.log(`WIFIRED Agenda — servidor en http://0.0.0.0:${PORT}`);
     // Recordatorios del día antes + respaldo automático: se revisan cada 30 min y
     // se ejecutan una vez al día (según hora de Chile). Sin nada configurado, no hacen nada.
-    const tick = () => { correrRecordatorios(); correrRespaldo(); };
+    const tick = () => { correrRecordatorios(); correrConfirmaciones(); correrRespaldo(); };
     tick();
     setInterval(tick, 30 * 60 * 1000);
   }))
