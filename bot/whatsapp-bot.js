@@ -198,7 +198,10 @@ async function start() {
     }
     if (connection === 'open') {
       loadBotConfig();
+      const miNumero = (sock.user && sock.user.id ? String(sock.user.id).split(':')[0].split('@')[0] : '') || '(desconocido)';
       console.log(`✅ Bot conectado y escuchando. API: ${API_URL}`);
+      console.log(`📱 El bot ES el número: +${miNumero}`);
+      console.log('👉 Para PROBARLO: escribe "hola" a ese número DESDE OTRO teléfono (un número distinto).');
     }
     if (connection === 'close') {
       const code = (lastDisconnect && lastDisconnect.error && lastDisconnect.error.output && lastDisconnect.error.output.statusCode) || 0;
