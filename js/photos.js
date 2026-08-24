@@ -51,11 +51,16 @@ export function createPhotoPicker() {
   const wrap = document.createElement('div');
   wrap.className = 'photo-picker';
   wrap.innerHTML = `
-    <label class="photo-btn">📷 Agregar foto o video
-      <input type="file" accept="image/*,video/*" multiple hidden>
-    </label>
+    <div class="photo-btns">
+      <label class="photo-btn">📷 Tomar foto / grabar
+        <input type="file" accept="image/*,video/*" capture="environment" hidden>
+      </label>
+      <label class="photo-btn photo-btn-2">🖼️ Galería
+        <input type="file" accept="image/*,video/*" multiple hidden>
+      </label>
+    </div>
     <div class="photo-previews"></div>`;
-  const input = wrap.querySelector('input');
+  const inputs = wrap.querySelectorAll('input');
   const prev = wrap.querySelector('.photo-previews');
   const photos = [];
 
@@ -75,9 +80,9 @@ export function createPhotoPicker() {
     prev.appendChild(t);
   };
 
-  input.onchange = async () => {
-    const label = wrap.querySelector('.photo-btn');
-    label.classList.add('loading');
+  const procesar = async (input) => {
+    const btns = wrap.querySelector('.photo-btns');
+    btns.classList.add('loading');
     for (const file of Array.from(input.files)) {
       if (file.type.startsWith('video/')) {
         const dur = await videoDuracion(file);
@@ -91,8 +96,9 @@ export function createPhotoPicker() {
       }
     }
     input.value = '';
-    label.classList.remove('loading');
+    btns.classList.remove('loading');
   };
+  inputs.forEach((input) => { input.onchange = () => procesar(input); });
 
   return { element: wrap, getPhotos: () => photos.slice() };
 }
