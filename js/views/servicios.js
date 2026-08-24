@@ -77,7 +77,7 @@ function cardHtml(s) {
         ${badge}
       </div>
       <div class="row" style="gap:8px; margin-top:12px">
-        <button class="btn btn-sm ${cortado ? 'btn-primary' : 'btn-danger'}" data-toggle="${esc(s._uid)}" data-estado="${esc(s.estado)}"${s.pppoe_user ? '' : ' disabled title="Falta usuario PPPoE"'}>${cortado ? '▶ Activar internet' : '⛔ Cortar internet'}</button>
+        <button class="btn btn-sm ${cortado ? 'btn-primary' : 'btn-danger'}" data-toggle="${esc(s._uid)}" data-estado="${esc(s.estado)}">${cortado ? '▶ Activar internet' : '⛔ Cortar internet'}</button>
         <button class="btn btn-sm" data-edit="${esc(s._uid)}">✎ Editar</button>
       </div>
     </div>`;
@@ -86,6 +86,8 @@ function cardHtml(s) {
 async function accion(uid, acc, host, root) {
   const s = local.servicios.find((x) => x._uid === uid);
   if (!s) return;
+  if (!s.pppoe_user) { toast('Primero agrega el usuario PPPoE (toca Editar)', 'info'); formModal(s, root); return; }
+  if (!local.router) { toast('El router no está configurado en el servidor (faltan datos del MikroTik)', 'info'); return; }
   const verbo = acc === 'cortar' ? 'CORTAR' : 'ACTIVAR';
   if (!confirm(`¿${verbo} el internet de "${s.nombre}" (usuario ${s.pppoe_user})?`)) return;
   const btn = host.querySelector(`[data-toggle="${uid}"]`);
