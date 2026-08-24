@@ -79,3 +79,43 @@ con un cliente de prueba.
 NOTA DE SEGURIDAD: estas claves NUNCA van en el código; solo en las
 variables de entorno de Coolify.
 ============================================================
+
+
+============================================================
+ ACTUALIZACIÓN · Modo LOCAL / VPN (como MikroWisp) — sin abrir puertos a internet
+============================================================
+El sistema ya funciona con RouterOS v6 y v7.
+
+Idea: la app corre en un servidor que alcanza al MikroTik por la RED
+LOCAL o por la VPN, y le habla por la API (igual que MikroWisp). NO se
+abre ningún puerto a internet.
+
+FLUJO
+  App WIFIRED (server local o dentro de la VPN)
+      -> API MikroTik (puerto 8728)  ->  corta/activa PPPoE
+
+LO QUE HACE EL TÉCNICO EN EL ROUTER
+1) Crear el usuario para el sistema:
+   /user group add name=apiwifired policy=read,write,api,test
+   /user add name=wifired-api group=apiwifired password=PONER_UNA_CLAVE
+
+2) Habilitar la API y restringirla SOLO a la IP de nuestro servidor
+   (en la red local o en la VPN). Nada expuesto a internet:
+   /ip service enable api
+   /ip service set api address=IP_DE_NUESTRO_SERVIDOR/32
+   (puerto por defecto 8728. Si prefiere cifrado: usar 'api-ssl' 8729)
+
+3) Confirmar que nuestro servidor llega al router:
+   - Opción A: mismo LAN que el MikroTik.
+   - Opción B: nuestro servidor entra a la VPN del router (entregar
+     perfil/credenciales de VPN; ideal WireGuard en v7).
+
+DATOS A DEVOLVER
+   MIKROTIK_HOST = IP interna del router (LAN o VPN)
+   MIKROTIK_USER = wifired-api
+   MIKROTIK_PASS = la clave
+   MIKROTIK_PORT = 8728   (o 8729 si usa api-ssl)
+
+PRUEBA (desde nuestro servidor, ya en la LAN/VPN)
+   nc -vz IP_DEL_ROUTER 8728      -> debe decir "succeeded/open"
+============================================================
