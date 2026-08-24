@@ -309,7 +309,11 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
     CAMPOS_TECNICO.forEach((k) => { if (k in body) patch[k] = body[k]; });
     // el técnico sólo puede marcar Cancelada libremente; Completada exige PIN válido
     if (body.estado === 'Cancelada') patch.estado = 'Cancelada';
-    if (body.estado === 'Completada') {
+    const esFactibilidad = String(own.tipo || '').trim().toLowerCase() === 'factibilidad';
+    if (body.estado === 'Completada' && esFactibilidad) {
+      // Factibilidad se cierra con firma/observación, sin código PIN
+      patch.estado = 'Completada';
+    } else if (body.estado === 'Completada') {
       // Requiere el código (PIN) que el cliente recibió por correo
       const stored = await (s.getPin ? s.getPin(req.params.id) : Promise.resolve({ pin: '', ts: 0 }));
       const ingresado = String(body.pin_ingresado || '').trim();
