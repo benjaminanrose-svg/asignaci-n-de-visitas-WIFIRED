@@ -108,6 +108,16 @@ const DEFAULT_FLUJO = {
       ],
       confirma: '✅ ¡Recibido! Registramos tu solicitud de *contratación* con el N° *{num}*.\n\nAhora nuestro equipo revisará la *factibilidad* (si nuestra red llega a tu sector). En cuanto la confirmemos, te enviaremos los *planes disponibles* y coordinaremos la *instalación*. 📶\n\nTe contactaremos muy pronto. ¡Gracias por preferirnos!',
     },
+    {
+      n: '3', titulo: 'Cancelar servicio / retiro de equipos 📦', categoria: 'Retiro',
+      desc: 'Solicita dar de baja tu servicio y coordinar el retiro de los equipos.',
+      pasos: [
+        { campo: 'nombre', tipo: 'texto', pregunta: 'Lamentamos que quieras irte. 😔 Te ayudo a gestionar la *baja* y el *retiro de los equipos*.\n\nPara empezar, ¿cuál es tu *nombre completo* (titular del servicio)?' },
+        { campo: 'ubicacion', tipo: 'ubicacion', pregunta: 'Gracias. 🙌 ¿En qué *dirección* están instalados los equipos?\n\nEscríbela con *calle, número y sector*, o compárteme tu *ubicación*: toca el clip 📎 → *Ubicación* → *Enviar ubicación actual*.\n\n_Así coordinamos el retiro en el lugar correcto._' },
+        { campo: 'mensaje', tipo: 'texto', pregunta: 'Entendido. Por último, cuéntame:\n\n• ¿*Motivo* de la cancelación?\n• ¿Desde qué *fecha* quieres dar de baja?\n• ¿Qué *días u horarios* te acomodan para el retiro?\n\n_Con esto coordinamos internamente el retiro de los equipos._' },
+      ],
+      confirma: '✅ Registramos tu solicitud de *cancelación y retiro de equipos* con el N° *{num}*.\n\nNuestro equipo *coordinará internamente el retiro* y te contactará para agendar día y hora. 📦\n\nGracias por haber sido parte de *WIFIRED*. 🙌',
+    },
   ],
 };
 

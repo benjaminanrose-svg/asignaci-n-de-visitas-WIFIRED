@@ -52,6 +52,16 @@ const DEFAULT_FLUJO_APP = {
       ],
       confirma: '✅ ¡Recibido! Registramos tu solicitud de *contratación* con el N° *{num}*.\n\nRevisaremos la *factibilidad* y te enviaremos los *planes disponibles*. ¡Gracias por preferirnos! 📶',
     },
+    {
+      titulo: 'Cancelar servicio / retiro de equipos 📦', categoria: 'Retiro',
+      desc: 'Solicita dar de baja tu servicio y coordinar el retiro de los equipos.',
+      pasos: [
+        { dato: 'nombre', pregunta: 'Lamentamos que quieras irte. 😔 Te ayudo a gestionar la *baja* y el *retiro de los equipos*.\n\nPara empezar, ¿cuál es tu *nombre completo* (titular del servicio)?' },
+        { dato: 'ubicacion', pregunta: 'Gracias. 🙌 ¿En qué *dirección* están instalados los equipos?\n\nEscríbela con *calle, número y sector*, o compárteme tu *ubicación* 📎.' },
+        { dato: 'mensaje', pregunta: 'Entendido. Por último: ¿*motivo* de la cancelación, desde qué *fecha* y qué *días/horarios* te acomodan para el retiro?' },
+      ],
+      confirma: '✅ Registramos tu solicitud de *cancelación y retiro de equipos* con el N° *{num}*.\n\nCoordinaremos internamente el retiro y te contactaremos para agendar. 📦 Gracias por haber sido parte de *WIFIRED*. 🙌',
+    },
   ],
 };
 /** Convierte el flujo guardado (con campo/tipo) al modelo del editor (con dato). */
