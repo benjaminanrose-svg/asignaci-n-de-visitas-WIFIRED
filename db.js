@@ -168,6 +168,8 @@ const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'te
 // Campos de un ticket de atención (WhatsApp / manual). Se clasifican por
 // categoría y estado; 'factibilidad' aplica a los de contratación.
 const TICKET_FIELDS = ['categoria', 'estado', 'factibilidad', 'nombre', 'telefono', 'direccion', 'ubicacion', 'mensaje', 'canal', 'notas', 'historial', 'rut', 'email', 'adjuntos'];
+// Servicios = perfil del cliente atado a su cuenta PPPoE del router (para cortar/activar internet)
+const SERVICE_FIELDS = ['nombre', 'rut', 'telefono', 'direccion', 'email', 'plan', 'pppoe_user', 'estado', 'notas', 'gps'];
 /** Normaliza el historial (arreglo o texto) a JSON en texto para guardar */
 function evStr(v) { return Array.isArray(v) ? JSON.stringify(v) : (v || '[]'); }
 
@@ -219,6 +221,8 @@ function memoryStore() {
   let kSeq = 0;
   let outbox = []; // mensajes automáticos que el bot debe enviar por WhatsApp
   let oSeq = 0;
+  let servicios = []; // perfiles de cliente con cuenta PPPoE
+  let sSeq = 0;
 
   function pick(v) {
     const o = {};
@@ -235,6 +239,8 @@ function memoryStore() {
   const pickTk = (d) => { const o = {}; TICKET_FIELDS.forEach((f) => (o[f] = d[f] || '')); o.historial = evStr(d.historial); o.adjuntos = evStr(d.adjuntos); return o; };
   const outTk = (t) => { const o = { _uid: String(t.id), num: 'T-' + String(t.id).padStart(4, '0'), created_at: t.created_at, updated_at: t.updated_at, ...pickTk(t) }; o.estado = o.estado || 'Nuevo'; o.categoria = o.categoria || 'Otros'; o.canal = o.canal || 'manual'; o.historial = parseEv(o.historial); o.adjuntos = parseEv(o.adjuntos); return o; };
   const uniqUser = (base, exceptId) => { let u = base || 'tecnico', b = u, i = 2; while (users.some((x) => x.username === u && x.id !== exceptId)) u = `${b}${i++}`; return u; };
+  const pickS = (d) => { const o = {}; SERVICE_FIELDS.forEach((f) => (o[f] = d[f] || '')); return o; };
+  const outS = (s) => ({ _uid: String(s.id), ...pickS(s), estado: s.estado || 'activo', created_at: s.created_at, updated_at: s.updated_at });
 
   return {
     async init() {},
@@ -308,6 +314,20 @@ function memoryStore() {
     async markOutboxSent(id) { const o = outbox.find((x) => x.id == id); if (o) { o.estado = 'enviado'; o.sent_at = new Date().toISOString(); } },
     async setPin(id, pin) { const v = visitas.find((x) => x.id == id); if (v) { v.pin = pin; v.pin_ts = pin ? Date.now() : 0; } },
     async getPin(id) { const v = visitas.find((x) => x.id == id); return v ? { pin: v.pin || '', ts: v.pin_ts || 0 } : { pin: '', ts: 0 }; },
+    async listServicios() { return servicios.slice().sort((a, b) => b.id - a.id).map(outS); },
+    async getServicio(id) { const s = servicios.find((x) => x.id == id); return s ? outS(s) : null; },
+    async addServicio(d) {
+      const now = new Date().toISOString();
+      const s = { id: ++sSeq, created_at: now, updated_at: now, ...pickS(d) };
+      if (!s.estado) s.estado = 'activo';
+      servicios.push(s); return outS(s);
+    },
+    async updateServicio(id, patch) {
+      const s = servicios.find((x) => x.id == id); if (!s) return null;
+      SERVICE_FIELDS.forEach((k) => { if (k in patch) s[k] = patch[k]; });
+      s.updated_at = new Date().toISOString(); return outS(s);
+    },
+    async deleteServicio(id) { servicios = servicios.filter((x) => x.id != id); },
     async getSetting(k) { return settings[k] ?? null; },
     async setSetting(k, v) { settings[k] = v; },
     async savePushSub(userId, sub) { pushSubs = pushSubs.filter((s) => s.endpoint !== sub.endpoint); pushSubs.push({ userId, endpoint: sub.endpoint, sub }); },
@@ -361,6 +381,11 @@ function pgStore(url) {
     ubicacion: r.ubicacion || '', mensaje: r.mensaje || '', canal: r.canal || 'manual',
     notas: r.notas || '', historial: parseEv(r.historial),
     rut: r.rut || '', email: r.email || '', adjuntos: parseEv(r.adjuntos),
+  });
+  const outS = (r) => ({
+    _uid: String(r.id), nombre: r.nombre || '', rut: r.rut || '', telefono: r.telefono || '', direccion: r.direccion || '',
+    email: r.email || '', plan: r.plan || '', pppoe_user: r.pppoe_user || '', estado: r.estado || 'activo',
+    notas: r.notas || '', gps: r.gps || '', created_at: r.created_at, updated_at: r.updated_at,
   });
   async function credsOf(tid) {
     const { rows } = await pool.query('SELECT username, pass_plain FROM usuarios WHERE tecnico_id=$1', [tid]);
@@ -459,6 +484,22 @@ function pgStore(url) {
           sent_at TIMESTAMPTZ
         );`);
       await pool.query(`ALTER TABLE bot_outbox ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT '';`);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS servicios (
+          id SERIAL PRIMARY KEY,
+          nombre TEXT DEFAULT '',
+          rut TEXT DEFAULT '',
+          telefono TEXT DEFAULT '',
+          direccion TEXT DEFAULT '',
+          email TEXT DEFAULT '',
+          plan TEXT DEFAULT '',
+          pppoe_user TEXT DEFAULT '',
+          estado TEXT DEFAULT 'activo',
+          notas TEXT DEFAULT '',
+          gps TEXT DEFAULT '',
+          created_at TIMESTAMPTZ DEFAULT now(),
+          updated_at TIMESTAMPTZ DEFAULT now()
+        );`);
 
       // Reset opcional de técnicos (poner RESET_TECNICOS=1 una vez y redeploy)
       if (process.env.RESET_TECNICOS === '1') {
@@ -545,6 +586,24 @@ function pgStore(url) {
     async deleteTecnico(id) { await pool.query('DELETE FROM tecnicos WHERE id=$1', [id]); },
     async getSetting(k) { const { rows } = await pool.query('SELECT value FROM settings WHERE key=$1', [k]); return rows[0] ? rows[0].value : null; },
     async setSetting(k, v) { await pool.query('INSERT INTO settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=$2', [k, v]); },
+    async listServicios() { const { rows } = await pool.query('SELECT * FROM servicios ORDER BY id DESC'); return rows.map(outS); },
+    async getServicio(id) { const { rows } = await pool.query('SELECT * FROM servicios WHERE id=$1', [id]); return rows[0] ? outS(rows[0]) : null; },
+    async addServicio(d) {
+      const { rows } = await pool.query(
+        `INSERT INTO servicios (nombre,rut,telefono,direccion,email,plan,pppoe_user,estado,notas,gps)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        [d.nombre || '', d.rut || '', d.telefono || '', d.direccion || '', d.email || '', d.plan || '', d.pppoe_user || '', d.estado || 'activo', d.notas || '', d.gps || '']);
+      return outS(rows[0]);
+    },
+    async updateServicio(id, patch) {
+      const cols = [], vals = []; let i = 1;
+      SERVICE_FIELDS.forEach((k) => { if (k in patch) { cols.push(`${k}=$${i++}`); vals.push(patch[k]); } });
+      if (!cols.length) return null;
+      cols.push('updated_at=now()'); vals.push(id);
+      const { rows } = await pool.query(`UPDATE servicios SET ${cols.join(', ')} WHERE id=$${i} RETURNING *`, vals);
+      return rows[0] ? outS(rows[0]) : null;
+    },
+    async deleteServicio(id) { await pool.query('DELETE FROM servicios WHERE id=$1', [id]); },
     async savePushSub(userId, sub) { await pool.query('INSERT INTO push_subs (user_id,endpoint,sub) VALUES ($1,$2,$3) ON CONFLICT (endpoint) DO UPDATE SET sub=$3, user_id=$1', [userId, sub.endpoint, JSON.stringify(sub)]); },
     async listPushSubsByTecnicoId(tid) { const { rows } = await pool.query('SELECT ps.sub FROM push_subs ps JOIN usuarios u ON u.id=ps.user_id WHERE u.tecnico_id=$1', [tid]); return rows.map((r) => { try { return JSON.parse(r.sub); } catch (e) { return null; } }).filter(Boolean); },
     async removePushSubByEndpoint(ep) { await pool.query('DELETE FROM push_subs WHERE endpoint=$1', [ep]); },

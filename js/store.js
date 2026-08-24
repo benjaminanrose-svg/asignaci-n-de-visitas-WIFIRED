@@ -265,6 +265,14 @@ export async function enviarPlanes(uid) {
   return r;
 }
 
+// ---------- Servicios (perfiles PPPoE + control del router) ----------
+export async function listServicios() { return rawApi('GET', '/servicios'); }
+export async function addServicio(data) { return rawApi('POST', '/servicios', data); }
+export async function updateServicio(id, patch) { return rawApi('PUT', '/servicios/' + id, patch); }
+export async function deleteServicio(id) { return rawApi('DELETE', '/servicios/' + id); }
+export async function servicioAccion(id, accion) { return rawApi('POST', '/servicios/' + id + '/' + accion); }
+export async function routerEstado() { return rawApi('GET', '/router/estado'); }
+
 // ---------- Configuración ----------
 export async function saveConfig(patch) {
   const nueva = await rawApi('PUT', '/config', patch);

@@ -11,6 +11,7 @@ import { renderCalendario } from './views/calendario.js';
 import { renderVisitas } from './views/visitas.js';
 import { renderClientes } from './views/clientes.js';
 import { renderTickets } from './views/tickets.js';
+import { renderServicios } from './views/servicios.js';
 import { renderTecnicos } from './views/tecnicos.js';
 import { renderConfig } from './views/config.js';
 import { renderTecnico } from './views/tecnico.js';
@@ -26,6 +27,7 @@ const ROUTES = {
   visitas:    { title: 'Historial de visitas', render: renderVisitas },
   clientes:   { title: 'Clientes',            render: renderClientes },
   tickets:    { title: 'Tickets de atención', render: renderTickets },
+  servicios:  { title: 'Servicios',            render: renderServicios },
   tecnicos:   { title: 'Técnicos',            render: renderTecnicos },
   config:     { title: 'Configuración',       render: renderConfig },
 };

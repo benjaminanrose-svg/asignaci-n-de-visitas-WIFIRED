@@ -8,6 +8,7 @@ const { getStore } = require('./db.js');
 const { verifyPassword, signToken, verifyToken } = require('./server-auth.js');
 const { sendOrden, sendPin, sendClienteAviso, sendRespaldo, ordenPDF, mailConfigured } = require('./mailer.js');
 const { publicKey, saveSubscription, notifyTecnicoById } = require('./push.js');
+const mikrotik = require('./mikrotik.js');
 
 /** Datos de empresa desde la configuración (con respaldo al valor por defecto) */
 async function companyInfo() {
@@ -429,6 +430,51 @@ api.put('/config', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
   if (typeof s.saveConfig !== 'function') return res.status(400).json({ error: 'Configuración no editable en este modo' });
   res.json(await s.saveConfig(req.body || {}));
+}));
+
+// --- Servicios (perfiles de cliente con cuenta PPPoE + control del router) ---
+const SERVICE_FIELDS = ['nombre', 'rut', 'telefono', 'direccion', 'email', 'plan', 'pppoe_user', 'notas', 'gps'];
+function pickServicio(body) { const o = {}; SERVICE_FIELDS.forEach((k) => { if (k in (body || {})) o[k] = body[k]; }); return o; }
+
+api.get('/servicios', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  res.json({ servicios: await s.listServicios(), router: mikrotik.configured() });
+}));
+api.post('/servicios', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (!req.body || !String(req.body.nombre || '').trim()) return res.status(400).json({ error: 'El nombre del cliente es obligatorio' });
+  res.json(await s.addServicio(pickServicio(req.body)));
+}));
+api.put('/servicios/:id', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const out = await s.updateServicio(req.params.id, pickServicio(req.body || {}));
+  if (!out) return res.status(404).json({ error: 'Servicio no encontrado' });
+  res.json(out);
+}));
+api.delete('/servicios/:id', auth, soloCoordinador, wrap(async (req, res) => {
+  await (await getStore()).deleteServicio(req.params.id);
+  res.json({ ok: true });
+}));
+// Cortar o activar el internet del cliente en el router MikroTik
+api.post('/servicios/:id/:accion(cortar|activar)', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const sv = await s.getServicio(req.params.id);
+  if (!sv) return res.status(404).json({ error: 'Servicio no encontrado' });
+  if (!mikrotik.configured()) return res.status(400).json({ error: 'El router no está configurado. Falta cargar MIKROTIK_HOST/USER/PASS en el servidor.' });
+  const cortar = req.params.accion === 'cortar';
+  try {
+    await (cortar ? mikrotik.cortar(sv.pppoe_user) : mikrotik.activar(sv.pppoe_user));
+  } catch (e) {
+    return res.status(502).json({ error: e.message || 'No se pudo comunicar con el router' });
+  }
+  const out = await s.updateServicio(req.params.id, { estado: cortar ? 'cortado' : 'activo' });
+  res.json(out);
+}));
+// Probar la conexión con el router (sólo coordinación)
+api.get('/router/estado', auth, soloCoordinador, wrap(async (req, res) => {
+  if (!mikrotik.configured()) return res.json({ configured: false });
+  try { res.json({ configured: true, ...(await mikrotik.ping()) }); }
+  catch (e) { res.json({ configured: true, ok: false, error: e.message }); }
 }));
 
 // Descargar un respaldo completo de los registros (sólo coordinación)
