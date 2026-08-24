@@ -1,8 +1,10 @@
 # WIFIRED — Reglas para Claude
 
-## REGLA IRROMPIBLE: ahorro máximo de tokens
+## REGLA IRROMPIBLE: ahorro máximo de tokens (MÁXIMA PRIORIDAD)
 Hacer las cosas bien pero lo más eficiente posible. Nada de vueltas, re-lecturas
 innecesarias, ni explicaciones largas. Respuestas cortas y al grano.
+Ahorrar tokens SIEMPRE al máximo: menos texto, menos tool-calls, editar en vez de
+reescribir archivos enteros, no repetir contexto. Regla permanente e inquebrantable.
 
 ## Idioma y trato
 - SIEMPRE responder en español.

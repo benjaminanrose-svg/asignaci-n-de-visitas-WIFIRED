@@ -492,144 +492,186 @@ function renderBotConfig(root) {
 // Editor visual del FLUJO del bot (menú → opciones → pasos)
 // Se abre desde la configuración del Bot. Guarda en bot.flujo.
 // ============================================================
+/** Formato tipo WhatsApp: *negrita* _cursiva_ ~tachado~ y saltos de línea → HTML. */
+function waFormat(t) {
+  let h = esc(t || '');
+  h = h.replace(/\*(.+?)\*/g, '<b>$1</b>').replace(/_(.+?)_/g, '<i>$1</i>').replace(/~(.+?)~/g, '<s>$1</s>');
+  return h.replace(/\n/g, '<br>');
+}
+const DATO_HINT = { nombre: 'Nombre y apellido', ubicacion: 'Dirección o ubicación 📎', mensaje: 'Su respuesta / detalle', telefono: 'Un teléfono' };
+
 function renderFlowEditor(root) {
   if (!store.isCoordinador()) { renderConfig(root); return; }
   const cfg = store.configFull() || {};
   const bot = cfg.bot || {};
-  // Modelo editable en memoria (se sincroniza con los inputs).
   let model = flujoAModelo(bot.flujo);
+  let openIdx = model.opciones.length ? 0 : -1; // acordeón: 1 opción abierta a la vez
+  let dirty = false;
+  const markDirty = () => { dirty = true; const b = root.querySelector('[data-dirty]'); if (b) b.style.display = ''; };
 
   const datoOptions = (sel) => DATOS.map((d) => `<option value="${d.v}"${d.v === sel ? ' selected' : ''}>${esc(d.l)}</option>`).join('');
 
-  function previewMenu() {
+  function menuText() {
     const nums = model.opciones.map((_, i) => i + 1);
     const rango = nums.length > 1 ? `${nums[0]} o ${nums[nums.length - 1]}` : (nums[0] || '1');
     const ops = model.opciones.map((o, i) => `*${i + 1}* · ${o.titulo || '(sin título)'}${o.desc ? `\n      ${o.desc}` : ''}`).join('\n\n');
     return `¡Hola! 👋 Bienvenido/a a *WIFIRED*.\n\n${(model.intro || '').trim()} Responde con *un solo número* (${rango}) 👇\n\n${ops}`;
   }
+  // Burbujas de chat de una opción: menú → cliente elige N → cada pregunta/respuesta → confirmación.
+  function chatBubbles(op, i) {
+    const b = [];
+    b.push(`<div class="wa-b wa-in">${waFormat(menuText())}</div>`);
+    b.push(`<div class="wa-b wa-out">${i + 1}</div>`);
+    op.pasos.forEach((p) => {
+      if (p.pregunta) b.push(`<div class="wa-b wa-in">${waFormat(p.pregunta)}</div>`);
+      b.push(`<div class="wa-b wa-out wa-ghost">${esc(DATO_HINT[p.dato] || 'Su respuesta')}</div>`);
+    });
+    if (op.confirma) b.push(`<div class="wa-b wa-in">${waFormat(op.confirma.replace(/\{num\}/g, '1042'))}</div>`);
+    return `<div class="wa-phone"><div class="wa-head">🤖 Bot WIFIRED</div><div class="wa-body">${b.join('')}</div></div>`;
+  }
+
+  function opCard(op, i) {
+    const abierto = i === openIdx;
+    const resumen = `${op.pasos.length} ${op.pasos.length === 1 ? 'pregunta' : 'preguntas'}`;
+    if (!abierto) return `
+      <div class="flow-op card flow-op-closed">
+        <div class="flow-op-head" data-toggle="${i}">
+          <span class="flow-badge">${i + 1}</span>
+          <div class="grow"><b>${esc(op.titulo || '(sin título)')}</b><div class="muted-sm">${resumen}</div></div>
+          <span class="flow-caret">▸</span>
+        </div>
+      </div>`;
+    const pasosHtml = op.pasos.map((p, j) => `
+      <div class="flow-step">
+        <div class="flow-step-top">
+          <span class="flow-step-n">Paso ${j + 1} · pide:</span>
+          <select class="input flow-dato" data-op="${i}" data-step="${j}">${datoOptions(p.dato)}</select>
+          <div class="flow-step-btns">
+            <button class="icon-btn" data-mv="up" data-op="${i}" data-step="${j}" title="Subir"${j === 0 ? ' disabled' : ''}>↑</button>
+            <button class="icon-btn" data-mv="down" data-op="${i}" data-step="${j}" title="Bajar"${j === op.pasos.length - 1 ? ' disabled' : ''}>↓</button>
+            <button class="icon-btn" data-delstep data-op="${i}" data-step="${j}" title="Quitar paso"${op.pasos.length <= 1 ? ' disabled' : ''}>✕</button>
+          </div>
+        </div>
+        <textarea class="textarea flow-preg" data-op="${i}" data-step="${j}" placeholder="Escribe la pregunta que hace el bot…">${esc(p.pregunta)}</textarea>
+      </div>`).join('');
+
+    return `
+      <div class="flow-op card flow-op-open">
+        <div class="flow-op-head" data-toggle="${i}">
+          <span class="flow-badge">${i + 1}</span>
+          <div class="grow"><b>${esc(op.titulo || '(sin título)')}</b></div>
+          <span class="flow-caret">▾</span>
+        </div>
+        <div class="field"><label>Título (lo que ve el cliente en el menú)</label>
+          <input class="input flow-titulo" data-op="${i}" value="${esc(op.titulo)}" placeholder="Ej: Soporte técnico 🛠️"></div>
+        <div class="field"><label>Descripción corta (debajo del título)</label>
+          <input class="input flow-desc" data-op="${i}" value="${esc(op.desc)}" placeholder="Ej: Internet lento, cortes o cualquier falla."></div>
+        <div class="flow-steps-label">Preguntas que hace el bot</div>
+        <div class="flow-steps">${pasosHtml || '<p class="muted-sm">Sin preguntas aún.</p>'}</div>
+        <button class="btn btn-sm" data-addstep data-op="${i}" style="margin-top:8px">＋ Agregar pregunta</button>
+        <div class="field" style="margin-top:14px"><label>Mensaje final (al crear el ticket). <b>{num}</b> = N° de ticket.</label>
+          <textarea class="textarea flow-confirma" data-op="${i}" placeholder="✅ ¡Listo! Registramos tu solicitud con el N° *{num}*…">${esc(op.confirma)}</textarea></div>
+        <div class="flow-op-tools">
+          <button class="btn btn-sm" data-opmv="up" data-op="${i}" title="Mover opción arriba"${i === 0 ? ' disabled' : ''}>↑ Subir</button>
+          <button class="btn btn-sm" data-opmv="down" data-op="${i}" title="Mover opción abajo"${i === model.opciones.length - 1 ? ' disabled' : ''}>↓ Bajar</button>
+          <button class="btn btn-sm" data-dupop data-op="${i}">⧉ Duplicar</button>
+          <button class="btn btn-sm btn-danger" data-delop data-op="${i}"${model.opciones.length <= 1 ? ' disabled' : ''}>🗑 Quitar</button>
+        </div>
+        <div class="flow-preview"><div class="flow-preview-label">👁 Así lo ve el cliente</div>${chatBubbles(op, i)}</div>
+      </div>`;
+  }
 
   function paint() {
-    const opsHtml = model.opciones.map((op, i) => {
-      const pasosHtml = op.pasos.map((p, j) => `
-        <div class="flow-step" data-op="${i}" data-step="${j}">
-          <div class="flow-step-top">
-            <span class="flow-step-n">Paso ${j + 1}</span>
-            <select class="input flow-dato" data-op="${i}" data-step="${j}">${datoOptions(p.dato)}</select>
-            <div class="flow-step-btns">
-              <button class="icon-btn" data-mv="up" data-op="${i}" data-step="${j}" title="Subir"${j === 0 ? ' disabled' : ''}>↑</button>
-              <button class="icon-btn" data-mv="down" data-op="${i}" data-step="${j}" title="Bajar"${j === op.pasos.length - 1 ? ' disabled' : ''}>↓</button>
-              <button class="icon-btn" data-delstep data-op="${i}" data-step="${j}" title="Quitar paso"${op.pasos.length <= 1 ? ' disabled' : ''}>✕</button>
-            </div>
-          </div>
-          <textarea class="textarea flow-preg" data-op="${i}" data-step="${j}" placeholder="¿Qué le pregunta el bot en este paso?">${esc(p.pregunta)}</textarea>
-        </div>`).join('<div class="flow-arrow">↓</div>');
-
-      return `
-        <div class="flow-op card">
-          <div class="flow-op-head">
-            <span class="flow-badge">${i + 1}</span>
-            <input class="input flow-titulo" data-op="${i}" value="${esc(op.titulo)}" placeholder="Título de la opción (ej: Soporte técnico 🛠️)">
-            <button class="icon-btn" data-delop data-op="${i}" title="Quitar opción"${model.opciones.length <= 1 ? ' disabled' : ''}>🗑</button>
-          </div>
-          <div class="field"><label>Descripción corta (debajo del título en el menú)</label>
-            <input class="input flow-desc" data-op="${i}" value="${esc(op.desc)}" placeholder="Ej: Internet lento, cortes o cualquier falla."></div>
-          <div class="flow-steps-label">Pasos que pide el bot</div>
-          <div class="flow-steps">
-            ${pasosHtml || '<p class="muted-sm">Sin pasos aún.</p>'}
-          </div>
-          <button class="btn btn-sm" data-addstep data-op="${i}" style="margin-top:8px">＋ Agregar paso</button>
-          <div class="field" style="margin-top:14px"><label>Mensaje de confirmación (al crear el ticket). Usa <b>{num}</b> para el N°.</label>
-            <textarea class="textarea flow-confirma" data-op="${i}" placeholder="✅ ¡Listo! Registramos tu solicitud con el N° *{num}*…">${esc(op.confirma)}</textarea></div>
-        </div>`;
-    }).join('<div class="flow-arrow flow-arrow-big">↓</div>');
-
     root.innerHTML = `
       <div class="section-head">
         <div>
-          <h2>🔀 Editor del flujo del bot</h2>
-          <span class="muted-sm">Arma el menú y los pasos. Se lee de arriba hacia abajo.</span>
+          <h2>🔀 Editor del flujo</h2>
+          <span class="muted-sm">Toca una opción para editarla. Abajo ves cómo queda el chat.</span>
         </div>
         <div class="row" style="gap:8px">
+          <span class="chip chip-warn" data-dirty style="display:none">● Sin guardar</span>
           <button class="btn" data-back>← Volver</button>
-          <button class="btn btn-primary" data-saveflow>Guardar flujo</button>
+          <button class="btn btn-primary" data-saveflow>Guardar</button>
         </div>
       </div>
 
       <div class="cfg-wrap flow-wrap">
-        <div class="flow-node flow-start">📱 El cliente escribe por WhatsApp</div>
-        <div class="flow-arrow flow-arrow-big">↓</div>
-
         <div class="card cfg-card">
-          <h3 class="cfg-title">📋 Menú (primer mensaje)</h3>
-          <div class="field full"><label>Frase de entrada del menú</label>
+          <h3 class="cfg-title">📋 Saludo del menú</h3>
+          <div class="field full"><label>Frase de entrada</label>
             <textarea class="textarea" data-intro placeholder="Cuéntame en qué te puedo ayudar hoy.">${esc(model.intro)}</textarea></div>
-          <div class="flow-preview"><div class="flow-preview-label">Vista previa del menú</div><pre class="flow-preview-box" data-preview>${esc(previewMenu())}</pre></div>
         </div>
 
-        <div class="flow-arrow flow-arrow-big">↓</div>
-        <div class="flow-node flow-dec">¿Qué número eligió el cliente?</div>
-        <div class="flow-arrow flow-arrow-big">↓</div>
-
-        ${opsHtml}
-
-        <button class="btn" data-addop style="margin-top:14px">＋ Agregar opción al menú</button>
+        <div class="flow-steps-label" style="margin:16px 0 6px">Opciones del menú</div>
+        ${model.opciones.map((op, i) => opCard(op, i)).join('')}
+        <button class="btn" data-addop style="margin-top:6px">＋ Agregar opción</button>
 
         <div class="card cfg-card" style="margin-top:22px">
-          <h3 class="cfg-title">🔒 Proceso de contratación (fijo)</h3>
-          <p class="muted-sm">Cuando el cliente elige un plan, el bot recoge RUT, correo, fotos del carnet y la aceptación de condiciones. Ese tramo es <b>fijo</b> por seguridad legal; sus textos (planes y condiciones) se editan en las tarjetas de la configuración del bot.</p>
+          <h3 class="cfg-title">🔒 Contratación (fijo)</h3>
+          <p class="muted-sm">Al elegir un plan, el bot pide RUT, correo, fotos del carnet y aceptación de condiciones. Ese tramo es <b>fijo</b> por seguridad legal; los textos de planes y condiciones se editan en las otras tarjetas del bot.</p>
         </div>
 
         <div class="cfg-footbar">
           <button class="btn" data-restore>↺ Restaurar por defecto</button>
           <div class="grow"></div>
-          <button class="btn btn-primary" data-saveflow>Guardar flujo</button>
+          <button class="btn btn-primary" data-saveflow>Guardar</button>
         </div>
       </div>`;
-
+    if (dirty) { const d = root.querySelector('[data-dirty]'); if (d) d.style.display = ''; }
     bind();
   }
 
-  function refreshPreview() {
-    const pv = root.querySelector('[data-preview]');
-    if (pv) pv.textContent = previewMenu();
+  function refreshChat(i) {
+    if (i !== openIdx) return;
+    const card = root.querySelectorAll('.flow-op')[i];
+    const box = card && card.querySelector('.flow-preview');
+    if (box) box.innerHTML = `<div class="flow-preview-label">👁 Así lo ve el cliente</div>${chatBubbles(model.opciones[i], i)}`;
   }
 
   function bind() {
-    root.querySelectorAll('[data-back]').forEach((b) => (b.onclick = () => renderBotConfig(root)));
+    root.querySelector('[data-back]').onclick = () => { if (dirty && !confirm('Tienes cambios sin guardar. ¿Salir igual?')) return; renderBotConfig(root); };
+    root.querySelectorAll('[data-toggle]').forEach((h) => (h.onclick = (e) => { if (e.target.closest('input,textarea,select,button')) return; const i = +h.dataset.toggle; openIdx = openIdx === i ? -1 : i; paint(); }));
 
     const intro = root.querySelector('[data-intro]');
-    if (intro) intro.oninput = () => { model.intro = intro.value; refreshPreview(); };
+    if (intro) intro.oninput = () => { model.intro = intro.value; markDirty(); refreshChat(openIdx); };
 
-    root.querySelectorAll('.flow-titulo').forEach((el) => (el.oninput = () => { model.opciones[+el.dataset.op].titulo = el.value; refreshPreview(); }));
-    root.querySelectorAll('.flow-desc').forEach((el) => (el.oninput = () => { model.opciones[+el.dataset.op].desc = el.value; refreshPreview(); }));
-    root.querySelectorAll('.flow-confirma').forEach((el) => (el.oninput = () => { model.opciones[+el.dataset.op].confirma = el.value; }));
-    root.querySelectorAll('.flow-preg').forEach((el) => (el.oninput = () => { model.opciones[+el.dataset.op].pasos[+el.dataset.step].pregunta = el.value; }));
-    root.querySelectorAll('.flow-dato').forEach((el) => (el.onchange = () => { model.opciones[+el.dataset.op].pasos[+el.dataset.step].dato = el.value; }));
+    root.querySelectorAll('.flow-titulo').forEach((el) => (el.oninput = () => { const i = +el.dataset.op; model.opciones[i].titulo = el.value; markDirty(); refreshChat(i); }));
+    root.querySelectorAll('.flow-desc').forEach((el) => (el.oninput = () => { const i = +el.dataset.op; model.opciones[i].desc = el.value; markDirty(); refreshChat(i); }));
+    root.querySelectorAll('.flow-confirma').forEach((el) => (el.oninput = () => { const i = +el.dataset.op; model.opciones[i].confirma = el.value; markDirty(); refreshChat(i); }));
+    root.querySelectorAll('.flow-preg').forEach((el) => (el.oninput = () => { const i = +el.dataset.op; model.opciones[i].pasos[+el.dataset.step].pregunta = el.value; markDirty(); refreshChat(i); }));
+    root.querySelectorAll('.flow-dato').forEach((el) => (el.onchange = () => { const i = +el.dataset.op; model.opciones[i].pasos[+el.dataset.step].dato = el.value; markDirty(); refreshChat(i); }));
 
-    root.querySelectorAll('[data-addstep]').forEach((b) => (b.onclick = () => { model.opciones[+b.dataset.op].pasos.push({ dato: 'nombre', pregunta: '' }); paint(); }));
-    root.querySelectorAll('[data-delstep]').forEach((b) => (b.onclick = () => { model.opciones[+b.dataset.op].pasos.splice(+b.dataset.step, 1); paint(); }));
+    root.querySelectorAll('[data-addstep]').forEach((b) => (b.onclick = () => { model.opciones[+b.dataset.op].pasos.push({ dato: 'nombre', pregunta: '' }); markDirty(); paint(); }));
+    root.querySelectorAll('[data-delstep]').forEach((b) => (b.onclick = () => { model.opciones[+b.dataset.op].pasos.splice(+b.dataset.step, 1); markDirty(); paint(); }));
     root.querySelectorAll('[data-mv]').forEach((b) => (b.onclick = () => {
       const i = +b.dataset.op, j = +b.dataset.step, arr = model.opciones[i].pasos;
       const k = b.dataset.mv === 'up' ? j - 1 : j + 1;
       if (k < 0 || k >= arr.length) return;
-      [arr[j], arr[k]] = [arr[k], arr[j]]; paint();
+      [arr[j], arr[k]] = [arr[k], arr[j]]; markDirty(); paint();
     }));
-    root.querySelectorAll('[data-delop]').forEach((b) => (b.onclick = () => { model.opciones.splice(+b.dataset.op, 1); paint(); }));
-    root.querySelector('[data-addop]').onclick = () => { model.opciones.push({ titulo: '', categoria: '', desc: '', confirma: '✅ ¡Listo! Registramos tu solicitud con el N° *{num}*. Te contactaremos pronto. 🙌', pasos: [{ dato: 'nombre', pregunta: '¿Cuál es tu *nombre completo*?' }] }); paint(); };
-    root.querySelector('[data-restore]').onclick = () => { model = JSON.parse(JSON.stringify(DEFAULT_FLUJO_APP)); paint(); toast('Flujo restaurado. Recuerda Guardar.', 'info'); };
+    root.querySelectorAll('[data-opmv]').forEach((b) => (b.onclick = () => {
+      const i = +b.dataset.op, k = b.dataset.opmv === 'up' ? i - 1 : i + 1, arr = model.opciones;
+      if (k < 0 || k >= arr.length) return;
+      [arr[i], arr[k]] = [arr[k], arr[i]]; openIdx = k; markDirty(); paint();
+    }));
+    root.querySelectorAll('[data-dupop]').forEach((b) => (b.onclick = () => { const i = +b.dataset.op; model.opciones.splice(i + 1, 0, JSON.parse(JSON.stringify(model.opciones[i]))); openIdx = i + 1; markDirty(); paint(); }));
+    root.querySelectorAll('[data-delop]').forEach((b) => (b.onclick = () => { const i = +b.dataset.op; model.opciones.splice(i, 1); if (openIdx >= model.opciones.length) openIdx = model.opciones.length - 1; markDirty(); paint(); }));
+    root.querySelector('[data-addop]').onclick = () => { model.opciones.push({ titulo: '', categoria: '', desc: '', confirma: '✅ ¡Listo! Registramos tu solicitud con el N° *{num}*. Te contactaremos pronto. 🙌', pasos: [{ dato: 'nombre', pregunta: '¿Cuál es tu *nombre completo*?' }] }); openIdx = model.opciones.length - 1; markDirty(); paint(); };
+    root.querySelector('[data-restore]').onclick = () => { if (!confirm('¿Restaurar el flujo de fábrica? Perderás los cambios.')) return; model = JSON.parse(JSON.stringify(DEFAULT_FLUJO_APP)); openIdx = 0; markDirty(); paint(); toast('Flujo restaurado. Recuerda Guardar.', 'info'); };
 
     root.querySelectorAll('[data-saveflow]').forEach((b) => (b.onclick = () => doSave()));
   }
 
   async function doSave() {
     const flujo = modeloAFlujo(model);
-    if (!flujo.opciones.length) { toast('Deja al menos una opción con título y un paso con pregunta', 'info'); return; }
+    if (!flujo.opciones.length) { toast('Deja al menos una opción con título y una pregunta', 'info'); return; }
     for (const op of flujo.opciones) {
-      if (!op.confirma) { toast(`La opción "${op.titulo}" necesita un mensaje de confirmación`, 'info'); return; }
+      if (!op.confirma) { toast(`La opción "${op.titulo}" necesita un mensaje final`, 'info'); return; }
     }
     root.querySelectorAll('[data-saveflow]').forEach((b) => { b.disabled = true; });
     try {
       await store.saveConfig({ bot: { flujo } });
+      dirty = false; const d = root.querySelector('[data-dirty]'); if (d) d.style.display = 'none';
       toast('Flujo guardado ✓ — el bot lo usará en menos de 1 minuto');
     } catch (e) {
       toast(e.message || 'No se pudo guardar', 'info');
