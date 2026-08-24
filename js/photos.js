@@ -52,8 +52,11 @@ export function createPhotoPicker() {
   wrap.className = 'photo-picker';
   wrap.innerHTML = `
     <div class="photo-btns">
-      <label class="photo-btn">📷 Tomar foto / grabar
-        <input type="file" accept="image/*,video/*" capture="environment" hidden>
+      <label class="photo-btn">📷 Tomar foto
+        <input type="file" accept="image/*" capture="environment" hidden>
+      </label>
+      <label class="photo-btn">🎥 Grabar video
+        <input type="file" accept="video/*" capture="environment" hidden>
       </label>
       <label class="photo-btn photo-btn-2">🖼️ Galería
         <input type="file" accept="image/*,video/*" multiple hidden>
