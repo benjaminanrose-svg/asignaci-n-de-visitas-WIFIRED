@@ -197,7 +197,7 @@ function completarModal(uid) {
         <input class="input" type="email" name="email" value="${esc(v.email || '')}" placeholder="cliente@correo.com"></div>
       <div class="field" style="margin-top:12px"><label>Observación del trabajo *</label>
         <textarea class="textarea" name="detalle" required placeholder="Trabajo realizado, equipos, mediciones…">${esc(v.detalle || '')}</textarea></div>
-      <div class="field" style="margin-top:12px"><label>Evidencia fotográfica * <span class="muted-sm">(al menos una foto)</span></label><div data-photos></div></div>
+      <div class="field" style="margin-top:12px"><label>Evidencia * <span class="muted-sm">(al menos una foto o video ≤30s)</span></label><div data-photos></div></div>
       <div class="field" style="margin-top:14px"><label>Firma del cliente *</label><div data-sig-cliente></div></div>
       <div class="field" style="margin-top:6px"><label>Firma del técnico</label><div data-sig-tecnico></div></div>
 
@@ -231,7 +231,7 @@ function completarModal(uid) {
   const faltaNotaFoto = () => {
     const detEl = node.querySelector('[name=detalle]');
     if (!detEl.value.trim()) { toast('Escribe la observación del trabajo', 'info'); detEl.focus(); return true; }
-    if (!picker.getPhotos().length) { toast('Agrega al menos una foto de evidencia', 'info'); return true; }
+    if (!picker.getPhotos().length) { toast('Agrega al menos una foto o video de evidencia', 'info'); return true; }
     return false;
   };
 
@@ -303,7 +303,7 @@ function cancelarModal(uid) {
       <p class="muted-sm" style="margin-bottom:14px">${esc(v.cliente)} · ${esc(v.tipo)}</p>
       <div class="field"><label>Motivo de la cancelación *</label>
         <textarea class="textarea" name="motivo" placeholder="Ej: cliente desistió, dirección inexistente…" required>${esc(v.detalle || '')}</textarea></div>
-      <div class="field" style="margin-top:12px"><label>Evidencia fotográfica * <span class="muted-sm">(al menos una foto)</span></label><div data-photos></div></div>
+      <div class="field" style="margin-top:12px"><label>Evidencia * <span class="muted-sm">(al menos una foto o video ≤30s)</span></label><div data-photos></div></div>
     </div>
     <div class="modal-foot"><button class="btn" data-close>Volver</button><button class="btn btn-danger" data-save>✕ Cancelar visita</button></div>`;
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
@@ -312,7 +312,7 @@ function cancelarModal(uid) {
     const motivo = node.querySelector('[name=motivo]').value.trim();
     if (!motivo) { toast('Escribe el motivo de la cancelación', 'info'); node.querySelector('[name=motivo]').focus(); return; }
     const fotos = picker.getPhotos();
-    if (!fotos.length) { toast('Agrega al menos una foto de evidencia', 'info'); return; }
+    if (!fotos.length) { toast('Agrega al menos una foto o video de evidencia', 'info'); return; }
     store.updateVisita(uid, { estado: 'Cancelada', detalle: motivo, evidencias: evJSON(v, fotos, 'cancelada'), historial: histJSON(v, { tipo: 'cancelada', estado: 'Cancelada', motivo, fotos }) });
     toast('Visita cancelada', 'info'); closeModal();
   };
@@ -329,7 +329,7 @@ function solicitarModal(uid) {
       <p class="muted-sm" style="margin-bottom:14px">${esc(v.cliente)} · ${esc(v.tipo)}</p>
       <div class="field"><label>Motivo de la solicitud *</label>
         <textarea class="textarea" name="motivo" placeholder="Ej: cliente no se encontraba, falta de poste, coordinar otro día…" required></textarea></div>
-      <div class="field" style="margin-top:12px"><label>Evidencia fotográfica * <span class="muted-sm">(al menos una foto)</span></label><div data-photos></div></div>
+      <div class="field" style="margin-top:12px"><label>Evidencia * <span class="muted-sm">(al menos una foto o video ≤30s)</span></label><div data-photos></div></div>
       <p class="muted-sm" style="margin-top:10px">Coordinación revisará tu solicitud y asignará una nueva fecha.</p>
     </div>
     <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-save>Enviar solicitud</button></div>`;
@@ -339,7 +339,7 @@ function solicitarModal(uid) {
     const motivo = node.querySelector('[name=motivo]').value.trim();
     if (!motivo) { toast('Escribe el motivo de la solicitud', 'info'); node.querySelector('[name=motivo]').focus(); return; }
     const fotos = picker.getPhotos();
-    if (!fotos.length) { toast('Agrega al menos una foto de evidencia', 'info'); return; }
+    if (!fotos.length) { toast('Agrega al menos una foto o video de evidencia', 'info'); return; }
     store.updateVisita(uid, { reagenda_solicitada: 'true', reagenda_motivo: motivo, estado: 'Pendiente', evidencias: evJSON(v, fotos, 'reagenda'), historial: histJSON(v, { tipo: 'reagenda', motivo, fotos }) });
     toast('Solicitud de reagenda enviada'); closeModal();
   };

@@ -149,7 +149,7 @@ function evidenciaHTMLDoc({ titulo, v, nota, fotos, firmaC, firmaT, evento }) {
       <div style="white-space:pre-wrap;background:#f6f7f9;border:1px solid #eee;padding:12px 14px;border-radius:8px;font-size:13px">${esc(nota || 'Sin observaciones')}</div>
       ${(firmaC || firmaT) ? `<h2 style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:26px 0 8px;border-bottom:1px solid #e2e2e2;padding-bottom:5px">Firmas</h2>${firma(firmaC, 'Firma del cliente')}${firma(firmaT, 'Firma del técnico')}` : ''}
       <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:26px 0 8px;border-bottom:1px solid #e2e2e2;padding-bottom:5px">Fotografías (${imgs.length})</h2>
-      ${imgs.length ? imgs.map((u, i) => `<figure style="margin:0 0 16px"><figcaption style="font-size:11px;color:#777;margin-bottom:4px">Foto ${i + 1}</figcaption><img style="max-width:100%;border:1px solid #ccc;border-radius:8px" src="${u}"></figure>`).join('') : '<p>Sin fotografías.</p>'}
+      ${imgs.length ? imgs.map((u, i) => { const vid = String(u).startsWith('data:video'); return `<figure style="margin:0 0 16px"><figcaption style="font-size:11px;color:#777;margin-bottom:4px">${vid ? 'Video' : 'Foto'} ${i + 1}</figcaption>${vid ? `<video controls style="max-width:100%;border:1px solid #ccc;border-radius:8px" src="${u}"></video>` : `<img style="max-width:100%;border:1px solid #ccc;border-radius:8px" src="${u}">`}</figure>`; }).join('') : '<p>Sin fotografías.</p>'}
     </body></html>`;
 }
 
