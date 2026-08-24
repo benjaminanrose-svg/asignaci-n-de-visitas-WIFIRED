@@ -86,19 +86,13 @@ function menuText() {
   return `¡Hola! 👋 Bienvenido/a a *${EMPRESA}*.
 ${botCfg.saludo}
 
-Cuéntame en qué te puedo ayudar hoy. Respóndeme con *un solo número* (del 1 al 4) 👇
+Cuéntame en qué te puedo ayudar hoy. Respóndeme con *un solo número* (1 o 2) 👇
 
 *1* · Soporte técnico 🛠️
     _Internet lento, cortes, sin señal o cualquier falla. Si hace falta, coordinamos una visita técnica a tu domicilio._
 
 *2* · Planes y contratación 📶
     _Conoce nuestros planes y contrata internet nuevo._
-
-*3* · Pagos y facturación 💳
-    _Pagar, consultar tu deuda o enviar un comprobante._
-
-*4* · Hablar con una persona 🧑‍💼
-    _Te comunicamos con un ejecutivo de WIFIRED._
 
 _Ejemplo: escribe *1* si tienes un problema con tu internet._
 _Escribe *menú* en cualquier momento para volver a este menú._`;
@@ -123,14 +117,6 @@ const FLOWS = {
       { campo: 'nombre', pregunta: '¡Perfecto! 🙌 ¿Cuál es tu *nombre completo*?' },
     ],
     confirma: (n) => `✅ ¡Recibido! Registramos tu solicitud de *contratación* con el N° *${n}*.\n\nAhora nuestro equipo revisará la *factibilidad* (si nuestra red llega a tu sector). En cuanto la confirmemos, te enviaremos los *planes disponibles* y coordinaremos la *instalación*. 📶\n\nTe contactaremos muy pronto. ¡Gracias por preferirnos!`,
-  },
-  '3': {
-    categoria: 'Pagos',
-    pasos: [
-      { campo: 'nombre', pregunta: '💳 Con gusto te ayudo con pagos y facturación.\n\n¿Cuál es el *nombre completo o el RUT del titular* de la cuenta?' },
-      { campo: 'mensaje', pregunta: '¿Qué necesitas exactamente? Por ejemplo:\n\n• *Pagar* mi mensualidad\n• *Consultar* mi deuda o mi estado de cuenta\n• *Enviar un comprobante* de pago\n• Corregir un dato de mi *boleta/factura*\n\nCuéntame con detalle para poder ayudarte mejor. 🙌' },
-    ],
-    confirma: (n) => `✅ ¡Gracias! Tu solicitud de *pagos y facturación* quedó registrada con el N° *${n}*.\n\nUn ejecutivo revisará tu caso y te contactará a la brevedad para ayudarte. 💳🙌`,
   },
 };
 
@@ -486,8 +472,8 @@ async function onMessage(m) {
       return enviarPregunta(id, cs.pasos[0], cs);
     }
 
-    // Selección del menú: SOLO un número solo (1-4), para no confundir con planes ni teléfonos.
-    const mOpt = text.match(/^\s*([1-4])[\s.)\-]*$/);
+    // Selección del menú: SOLO un número solo (1 o 2), para no confundir con planes ni teléfonos.
+    const mOpt = text.match(/^\s*([1-2])[\s.)\-]*$/);
     const opt = mOpt ? mOpt[1] : null;
     if (!opt) {
       if (fueraDeHorario() && botCfg.horario.mensaje) await botSend(id, botCfg.horario.mensaje);
@@ -505,14 +491,6 @@ async function startFlow(id, opt, info) {
   // Solo usamos el teléfono si WhatsApp nos lo entregó de verdad.
   // Con el formato @lid, si no lo tenemos, lo pediremos dentro del flujo (NO inventamos un número).
   const telefono = info.telefono || '';
-
-  // Opción 4: pasar a un ejecutivo (silencia el bot y crea ticket)
-  if (opt === '4') {
-    try { await crearTicket({ categoria: 'Ejecutivo', nombre, telefono, mensaje: 'El cliente solicitó hablar con un ejecutivo.' }); } catch (e) { console.error(e.message); }
-    handoff.set(id, Date.now() + HANDOFF_TTL);
-    resetSession(id);
-    return botSend(id, '🧑‍💼 ¡Con gusto! En un momento un *ejecutivo de WIFIRED* continuará esta conversación contigo.\n\n_Dejé de responder automáticamente para que puedas hablar directamente con la persona. Si necesitas volver al menú, escribe *menú*._');
-  }
 
   const flow = FLOWS[opt];
   if (!flow) return botSend(id, menuText());
