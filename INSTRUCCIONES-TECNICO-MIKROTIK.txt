@@ -1,0 +1,81 @@
+============================================================
+ WIFIRED · Conectar la app al MikroTik (cortar/activar internet)
+ Instrucciones para el TÉCNICO DE REDES — RouterOS v7
+============================================================
+
+QUÉ QUEREMOS
+------------
+Nuestro sistema web necesita CORTAR y ACTIVAR clientes por PPPoE en el
+MikroTik de forma automática, usando la REST API de RouterOS v7 (HTTPS).
+
+
+PASO 1 · Crear un usuario solo para el sistema
+----------------------------------------------
+En Winbox -> New Terminal, pegar:
+
+  /user group add name=apiwifired policy=read,write,api,rest-api,test
+  /user add name=wifired-api group=apiwifired password=PONER_UNA_CLAVE
+
+
+PASO 2 · Prender la REST API (servicio www-ssl, puerto 443)
+-----------------------------------------------------------
+  /ip service enable www-ssl
+  /ip service set www-ssl port=443
+
+Si el www-ssl no tiene certificado asignado, crear y asignar uno:
+
+  /certificate add name=rest-cert common-name=rest-cert
+  /certificate sign rest-cert
+  /ip service set www-ssl certificate=rest-cert
+
+
+PASO 3 · Restringir el acceso SOLO a nuestro servidor (seguridad)
+-----------------------------------------------------------------
+  /ip service set www-ssl address=IP_DE_NUESTRO_SERVIDOR/32
+
+(IP pública de salida de nuestro servidor Coolify — pedírsela a Benjamín)
+
+
+PASO 4 · Que la app pueda alcanzar el router
+--------------------------------------------
+- Si el router tiene IP pública: abrir/rutear el puerto 443 hacia el
+  MikroTik, permitido SOLO desde la IP de nuestro servidor.
+- Si NO hay IP pública o está detrás de CGNAT: montar una VPN/túnel
+  entre nuestro servidor y la red del router.
+
+
+DATOS QUE DEBE DEVOLVER EL TÉCNICO
+----------------------------------
+1) HOST  -> IP o dominio para conectarse al router
+2) USER  -> wifired-api
+3) PASS  -> la clave que puso
+4) PORT  -> 443
+5) Confirmar que los clientes usan PPPoE secrets
+   + un nombre de usuario de ejemplo de un cliente
+
+
+PRUEBA RÁPIDA (antes de entregar)
+---------------------------------
+Desde cualquier PC que llegue al router:
+
+  curl -k -u wifired-api:LA_CLAVE https://IP_DEL_ROUTER/rest/ppp/secret
+
+Si devuelve una lista [...] con los clientes = quedó perfecto.
+
+
+DÓNDE VAN LOS DATOS (lo hace Benjamín, NO el técnico)
+-----------------------------------------------------
+En Coolify (variables de entorno de la app):
+
+  MIKROTIK_HOST = (HOST del paso 1 de datos)
+  MIKROTIK_USER = wifired-api
+  MIKROTIK_PASS = (la clave)
+  MIKROTIK_PORT = 443
+
+Luego entrar a la app -> sección "Servicios". Si arriba dice
+"Router conectado", quedó enlazado. Recién ahí probar Cortar/Activar
+con un cliente de prueba.
+
+NOTA DE SEGURIDAD: estas claves NUNCA van en el código; solo en las
+variables de entorno de Coolify.
+============================================================
