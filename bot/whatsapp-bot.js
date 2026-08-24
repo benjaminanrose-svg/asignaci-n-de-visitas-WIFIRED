@@ -82,43 +82,86 @@ async function loadBotConfig() {
 }
 
 // ---------- Textos ----------
+const CIERRE = '\n\n_Escribe *menú* si necesitas algo más._ 🙌';
+
+// Flujo por defecto del menú (se usa si la coordinación no editó el flujo en la página).
+// Cada paso tiene un "tipo": texto | ubicacion | telefono | correo | rut | foto.
+const DEFAULT_FLUJO = {
+  intro: 'Cuéntame en qué te puedo ayudar hoy.',
+  opciones: [
+    {
+      n: '1', titulo: 'Soporte técnico 🛠️', categoria: 'Soporte',
+      desc: 'Internet lento, cortes, sin señal o cualquier falla. Si hace falta, coordinamos una visita técnica a tu domicilio.',
+      pasos: [
+        { campo: 'nombre', tipo: 'texto', pregunta: 'Lamento mucho el problema con tu servicio. 🛠️ Te ayudo enseguida.\n\nPara empezar, ¿cuál es tu *nombre completo*?' },
+        { campo: 'ubicacion', tipo: 'ubicacion', pregunta: 'Gracias. 🙌 ¿En qué *dirección* está ocurriendo el problema?\n\nEscríbela con *calle, número y sector*, o compárteme tu *ubicación*: toca el clip 📎 → *Ubicación* → *Enviar ubicación actual*.\n\n_Así el técnico sabe exactamente dónde ir si hace falta una visita._' },
+        { campo: 'mensaje', tipo: 'texto', pregunta: 'Perfecto. Ahora, por favor, cuéntame *con el mayor detalle posible qué está pasando*:\n\n• ¿Estás *sin internet*, va *lento* o hay *cortes* que van y vuelven?\n• ¿*Desde cuándo* ocurre?\n• ¿Afecta a *todos* los dispositivos o solo a algunos?\n• ¿Las *luces del router* están encendidas o alguna parpadea/está apagada?\n\n_Mientras más me cuentes, más rápido lo resolvemos._' },
+      ],
+      confirma: '✅ ¡Listo! Registramos tu solicitud de *soporte técnico* con el N° *{num}*.\n\nNuestro equipo revisará tu caso y, si es necesario, *coordinará una visita técnica* a tu domicilio para solucionarlo. Te contactaremos a la brevedad. 🛠️🙌',
+    },
+    {
+      n: '2', titulo: 'Planes y contratación 📶', categoria: 'Contratación',
+      desc: 'Conoce nuestros planes y contrata internet nuevo.',
+      pasos: [
+        { campo: 'ubicacion', tipo: 'ubicacion', pregunta: '¡Qué bueno que quieras ser parte de *WIFIRED*! 📶\n\nLo primero es revisar si tenemos *cobertura* en tu sector. Para eso necesito saber dónde vives:\n\n📎 Compárteme tu *ubicación* (toca el clip → *Ubicación* → *Enviar ubicación actual*),\no escríbeme tu *dirección exacta*: calle, número, sector o parcela y alguna referencia.' },
+        { campo: 'nombre', tipo: 'texto', pregunta: '¡Perfecto! 🙌 ¿Cuál es tu *nombre completo*?' },
+      ],
+      confirma: '✅ ¡Recibido! Registramos tu solicitud de *contratación* con el N° *{num}*.\n\nAhora nuestro equipo revisará la *factibilidad* (si nuestra red llega a tu sector). En cuanto la confirmemos, te enviaremos los *planes disponibles* y coordinaremos la *instalación*. 📶\n\nTe contactaremos muy pronto. ¡Gracias por preferirnos!',
+    },
+  ],
+};
+
+/** Devuelve el flujo editado en la página (botCfg.flujo) o el flujo por defecto. */
+function getFlujo() {
+  const f = botCfg && botCfg.flujo;
+  if (f && Array.isArray(f.opciones) && f.opciones.length) {
+    return { intro: (typeof f.intro === 'string' && f.intro.trim()) ? f.intro : DEFAULT_FLUJO.intro, opciones: f.opciones };
+  }
+  return DEFAULT_FLUJO;
+}
+
+/** Convierte un paso de la config (con "tipo") en un paso que entiende el motor (con esX). */
+function pasoDeConfig(p) {
+  const o = { campo: p.campo || 'campo', pregunta: p.pregunta || '' };
+  switch (p.tipo) {
+    case 'telefono': o.esTelefono = true; break;
+    case 'correo': o.esCorreo = true; break;
+    case 'rut': o.esRut = true; break;
+    case 'ubicacion': o.esUbicacion = true; break;
+    case 'foto': o.esFoto = true; break;
+    // 'texto' (o desconocido): respuesta libre
+  }
+  return o;
+}
+
+/** Arma los flujos del menú (1, 2, …) a partir del flujo configurado. */
+function getFlows() {
+  const out = {};
+  for (const op of getFlujo().opciones) {
+    if (!op || op.n == null) continue;
+    out[String(op.n)] = {
+      categoria: op.categoria || op.titulo || 'Consulta',
+      pasos: (Array.isArray(op.pasos) ? op.pasos : []).map(pasoDeConfig),
+      confirma: (num) => String(op.confirma || '').replace(/\{num\}/g, num),
+    };
+  }
+  return out;
+}
+
 function menuText() {
+  const fl = getFlujo();
+  const nums = fl.opciones.map((o) => String(o.n));
+  const rango = nums.length > 1 ? `${nums[0]} o ${nums[nums.length - 1]}` : nums[0];
+  const ops = fl.opciones.map((o) => `*${o.n}* · ${o.titulo}${o.desc ? `\n    _${o.desc}_` : ''}`).join('\n\n');
   return `¡Hola! 👋 Bienvenido/a a *${EMPRESA}*.
 ${botCfg.saludo}
 
-Cuéntame en qué te puedo ayudar hoy. Respóndeme con *un solo número* (1 o 2) 👇
+${fl.intro} Respóndeme con *un solo número* (${rango}) 👇
 
-*1* · Soporte técnico 🛠️
-    _Internet lento, cortes, sin señal o cualquier falla. Si hace falta, coordinamos una visita técnica a tu domicilio._
+${ops}
 
-*2* · Planes y contratación 📶
-    _Conoce nuestros planes y contrata internet nuevo._
-
-_Ejemplo: escribe *1* si tienes un problema con tu internet._
 _Escribe *menú* en cualquier momento para volver a este menú._`;
 }
-const CIERRE = '\n\n_Escribe *menú* si necesitas algo más._ 🙌';
-
-// Flujos guiados por categoría (preguntas paso a paso)
-const FLOWS = {
-  '1': {
-    categoria: 'Soporte',
-    pasos: [
-      { campo: 'nombre', pregunta: 'Lamento mucho el problema con tu servicio. 🛠️ Te ayudo enseguida.\n\nPara empezar, ¿cuál es tu *nombre completo*?' },
-      { campo: 'ubicacion', esUbicacion: true, pregunta: 'Gracias. 🙌 ¿En qué *dirección* está ocurriendo el problema?\n\nEscríbela con *calle, número y sector*, o compárteme tu *ubicación*: toca el clip 📎 → *Ubicación* → *Enviar ubicación actual*.\n\n_Así el técnico sabe exactamente dónde ir si hace falta una visita._' },
-      { campo: 'mensaje', pregunta: 'Perfecto. Ahora, por favor, cuéntame *con el mayor detalle posible qué está pasando*:\n\n• ¿Estás *sin internet*, va *lento* o hay *cortes* que van y vuelven?\n• ¿*Desde cuándo* ocurre?\n• ¿Afecta a *todos* los dispositivos o solo a algunos?\n• ¿Las *luces del router* están encendidas o alguna parpadea/está apagada?\n\n_Mientras más me cuentes, más rápido lo resolvemos._' },
-    ],
-    confirma: (n) => `✅ ¡Listo! Registramos tu solicitud de *soporte técnico* con el N° *${n}*.\n\nNuestro equipo revisará tu caso y, si es necesario, *coordinará una visita técnica* a tu domicilio para solucionarlo. Te contactaremos a la brevedad. 🛠️🙌`,
-  },
-  '2': {
-    categoria: 'Contratación',
-    pasos: [
-      { campo: 'ubicacion', esUbicacion: true, pregunta: '¡Qué bueno que quieras ser parte de *WIFIRED*! 📶\n\nLo primero es revisar si tenemos *cobertura* en tu sector. Para eso necesito saber dónde vives:\n\n📎 Compárteme tu *ubicación* (toca el clip → *Ubicación* → *Enviar ubicación actual*),\no escríbeme tu *dirección exacta*: calle, número, sector o parcela y alguna referencia.' },
-      { campo: 'nombre', pregunta: '¡Perfecto! 🙌 ¿Cuál es tu *nombre completo*?' },
-    ],
-    confirma: (n) => `✅ ¡Recibido! Registramos tu solicitud de *contratación* con el N° *${n}*.\n\nAhora nuestro equipo revisará la *factibilidad* (si nuestra red llega a tu sector). En cuanto la confirmemos, te enviaremos los *planes disponibles* y coordinaremos la *instalación*. 📶\n\nTe contactaremos muy pronto. ¡Gracias por preferirnos!`,
-  },
-};
 
 // Proceso de contratación: se inicia cuando el cliente elige un plan (tras recibir la lista).
 // Recoge todos los datos del contrato, paso a paso, incluidas las fotos del carnet y la
@@ -472,9 +515,10 @@ async function onMessage(m) {
       return enviarPregunta(id, cs.pasos[0], cs);
     }
 
-    // Selección del menú: SOLO un número solo (1 o 2), para no confundir con planes ni teléfonos.
-    const mOpt = text.match(/^\s*([1-2])[\s.)\-]*$/);
-    const opt = mOpt ? mOpt[1] : null;
+    // Selección del menú: SOLO un número solo (según las opciones del flujo), para no confundir con planes ni teléfonos.
+    const numsMenu = getFlujo().opciones.map((o) => String(o.n));
+    const mOpt = text.match(/^\s*(\d+)[\s.)\-]*$/);
+    const opt = mOpt && numsMenu.includes(mOpt[1]) ? mOpt[1] : null;
     if (!opt) {
       if (fueraDeHorario() && botCfg.horario.mensaje) await botSend(id, botCfg.horario.mensaje);
       return botSend(id, menuText());
@@ -492,17 +536,17 @@ async function startFlow(id, opt, info) {
   // Con el formato @lid, si no lo tenemos, lo pediremos dentro del flujo (NO inventamos un número).
   const telefono = info.telefono || '';
 
-  const flow = FLOWS[opt];
+  const flow = getFlows()[opt];
   if (!flow) return botSend(id, menuText());
   // Si no tenemos el teléfono real, lo pedimos como primer paso del flujo.
   const pasos = telefono ? flow.pasos.slice() : [PASO_TELEFONO, ...flow.pasos];
-  const sess = { opt, idx: 0, data: {}, ts: Date.now(), telefono, pasos };
+  const sess = { opt, idx: 0, data: {}, ts: Date.now(), telefono, pasos, flow };
   sessions.set(id, sess);
   return enviarPregunta(id, pasos[0], sess);
 }
 
 async function handleStep(id, sess, info) {
-  const flow = FLOWS[sess.opt];             // undefined en el proceso de contratación (usa sess.pasos)
+  const flow = sess.flow || getFlows()[sess.opt];   // undefined en el proceso de contratación (usa sess.pasos)
   const pasos = sess.pasos || (flow && flow.pasos) || [];
   const paso = pasos[sess.idx];
   let valor;

@@ -631,3 +631,27 @@ details[open] > .perf-head .perf-chev { transform: rotate(180deg); }
 
 /* ---- Caja de validación por PIN (técnico) ---- */
 .pin-box .btn-block { margin-top:0; }
+
+/* ---------- Editor visual del flujo del bot ---------- */
+.flow-wrap { max-width: 720px; }
+.flow-node { align-self: center; text-align: center; max-width: 90%; border-radius: 12px; padding: 12px 18px; font-weight: 600; font-size: 14px; }
+.flow-start { background: color-mix(in srgb, #10b981 16%, transparent); color: #0f9d68; border: 1px solid color-mix(in srgb, #10b981 40%, var(--border)); }
+.flow-dec { background: color-mix(in srgb, #f59e0b 16%, transparent); color: #b45309; border: 1px solid color-mix(in srgb, #f59e0b 40%, var(--border)); }
+.flow-arrow { text-align: center; color: var(--text-2); font-size: 16px; line-height: 1; margin: 6px 0; opacity: .7; }
+.flow-arrow-big { font-size: 20px; margin: 10px 0; }
+.flow-op { position: relative; border-left: 4px solid var(--brand-500, #6366f1); }
+.flow-op-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.flow-badge { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: var(--brand-500, #6366f1); color: #fff; font-size: 14px; }
+.flow-titulo { font-weight: 600; }
+.flow-steps-label { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); margin: 14px 0 8px; }
+.flow-steps { display: flex; flex-direction: column; }
+.flow-step { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.flow-step-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.flow-step-n { font-size: 12px; font-weight: 700; color: var(--text-2); }
+.flow-dato { flex: 1; min-width: 150px; height: 34px; padding: 4px 8px; }
+.flow-step-btns { display: flex; gap: 4px; margin-left: auto; }
+.flow-preg { min-height: 74px; }
+.flow-steps .flow-arrow { margin: 4px 0; }
+.flow-preview { margin-top: 12px; }
+.flow-preview-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); margin-bottom: 6px; }
+.flow-preview-box { white-space: pre-wrap; word-break: break-word; background: color-mix(in srgb, #10b981 8%, var(--surface-2)); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-family: inherit; font-size: 13.5px; line-height: 1.5; margin: 0; }

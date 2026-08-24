@@ -8,6 +8,82 @@ import * as store from '../store.js';
 import { esc, toast, bindField, validaEmail } from '../util.js';
 import { openModal, closeModal } from '../components.js';
 
+// ---------- Editor visual del flujo del bot ----------
+// Cada paso guarda un "dato" (qué información pide). De ahí se derivan el campo y la validación.
+const DATOS = [
+  { v: 'nombre', l: 'Nombre del cliente' },
+  { v: 'ubicacion', l: 'Dirección o ubicación' },
+  { v: 'mensaje', l: 'Detalle / mensaje' },
+  { v: 'telefono', l: 'Teléfono' },
+];
+const DATO_MAP = {
+  nombre: { campo: 'nombre', tipo: 'texto' },
+  ubicacion: { campo: 'ubicacion', tipo: 'ubicacion' },
+  mensaje: { campo: 'mensaje', tipo: 'texto' },
+  telefono: { campo: 'telefono', tipo: 'telefono' },
+};
+/** A partir de un paso guardado (campo/tipo) deduce el "dato" para el editor. */
+function datoDe(p) {
+  if (p.tipo === 'telefono' || p.campo === 'telefono') return 'telefono';
+  if (p.campo === 'ubicacion' || p.tipo === 'ubicacion') return 'ubicacion';
+  if (p.campo === 'mensaje') return 'mensaje';
+  return 'nombre';
+}
+// Flujo por defecto para el editor (refleja lo que trae el bot de fábrica).
+const DEFAULT_FLUJO_APP = {
+  intro: 'Cuéntame en qué te puedo ayudar hoy.',
+  opciones: [
+    {
+      titulo: 'Soporte técnico 🛠️', categoria: 'Soporte',
+      desc: 'Internet lento, cortes, sin señal o cualquier falla. Si hace falta, coordinamos una visita técnica a tu domicilio.',
+      pasos: [
+        { dato: 'nombre', pregunta: 'Lamento mucho el problema con tu servicio. 🛠️ Te ayudo enseguida.\n\nPara empezar, ¿cuál es tu *nombre completo*?' },
+        { dato: 'ubicacion', pregunta: 'Gracias. 🙌 ¿En qué *dirección* está ocurriendo el problema?\n\nEscríbela con *calle, número y sector*, o compárteme tu *ubicación* 📎.' },
+        { dato: 'mensaje', pregunta: 'Perfecto. Cuéntame *con el mayor detalle posible qué está pasando*:\n\n• ¿*Sin internet*, *lento* o *cortes*?\n• ¿*Desde cuándo*?\n• ¿Afecta a *todos* los equipos o solo a algunos?\n• ¿Las *luces del router* encendidas o parpadeando?' },
+      ],
+      confirma: '✅ ¡Listo! Registramos tu solicitud de *soporte técnico* con el N° *{num}*.\n\nNuestro equipo revisará tu caso y, si es necesario, *coordinará una visita técnica*. Te contactaremos a la brevedad. 🛠️🙌',
+    },
+    {
+      titulo: 'Planes y contratación 📶', categoria: 'Contratación',
+      desc: 'Conoce nuestros planes y contrata internet nuevo.',
+      pasos: [
+        { dato: 'ubicacion', pregunta: '¡Qué bueno que quieras ser parte de *WIFIRED*! 📶\n\nPrimero revisemos *cobertura* en tu sector. Compárteme tu *ubicación* 📎 o escríbeme tu *dirección exacta*: calle, número, sector y una referencia.' },
+        { dato: 'nombre', pregunta: '¡Perfecto! 🙌 ¿Cuál es tu *nombre completo*?' },
+      ],
+      confirma: '✅ ¡Recibido! Registramos tu solicitud de *contratación* con el N° *{num}*.\n\nRevisaremos la *factibilidad* y te enviaremos los *planes disponibles*. ¡Gracias por preferirnos! 📶',
+    },
+  ],
+};
+/** Convierte el flujo guardado (con campo/tipo) al modelo del editor (con dato). */
+function flujoAModelo(f) {
+  if (!f || !Array.isArray(f.opciones) || !f.opciones.length) return JSON.parse(JSON.stringify(DEFAULT_FLUJO_APP));
+  return {
+    intro: f.intro || DEFAULT_FLUJO_APP.intro,
+    opciones: f.opciones.map((op) => ({
+      titulo: op.titulo || '', categoria: op.categoria || op.titulo || 'Consulta', desc: op.desc || '',
+      confirma: op.confirma || '',
+      pasos: (Array.isArray(op.pasos) ? op.pasos : []).map((p) => ({ dato: datoDe(p), pregunta: p.pregunta || '' })),
+    })),
+  };
+}
+/** Convierte el modelo del editor al flujo que guarda la config (con campo/tipo, y numera 1..N). */
+function modeloAFlujo(m) {
+  return {
+    intro: (m.intro || '').trim(),
+    opciones: m.opciones.map((op, i) => ({
+      n: String(i + 1),
+      titulo: (op.titulo || '').trim(),
+      desc: (op.desc || '').trim(),
+      categoria: (op.categoria || op.titulo || 'Consulta').trim(),
+      confirma: (op.confirma || '').trim(),
+      pasos: op.pasos.map((p) => {
+        const map = DATO_MAP[p.dato] || DATO_MAP.nombre;
+        return { campo: map.campo, tipo: map.tipo, pregunta: (p.pregunta || '').trim() };
+      }).filter((p) => p.pregunta),
+    })).filter((op) => op.titulo && op.pasos.length),
+  };
+}
+
 /** Editor de lista simple: filas con input + botón eliminar, y "＋ Agregar" */
 function listEditor(key, items) {
   const row = (val = '') => `
@@ -296,6 +372,12 @@ function renderBotConfig(root) {
       </div>
 
       <div class="card cfg-card">
+        <h3 class="cfg-title">🔀 Flujo del menú (editor visual)</h3>
+        <p class="muted-sm">Mira y edita el recorrido del bot: las opciones del menú (Soporte, Contratación…), qué pregunta en cada paso y el mensaje de confirmación. Los cambios se aplican al bot en menos de 1 minuto.</p>
+        <button class="btn btn-primary" data-openflow style="margin-top:12px">🔀 Abrir editor del flujo →</button>
+      </div>
+
+      <div class="card cfg-card">
         <h3 class="cfg-title">💬 Saludo del menú</h3>
         <div class="field full"><label>Primera frase que ve el cliente al escribir</label>
           <textarea class="textarea" data-b="saludo" placeholder="Soy el asistente virtual…">${esc(bot.saludo || '')}</textarea></div>
@@ -368,6 +450,7 @@ function renderBotConfig(root) {
     </div>`;
 
   root.querySelectorAll('[data-back]').forEach((b) => (b.onclick = () => renderConfig(root)));
+  root.querySelector('[data-openflow]').onclick = () => renderFlowEditor(root);
 
   const doSaveBot = async () => {
     const q = (sel) => root.querySelector(sel);
@@ -403,4 +486,156 @@ function renderBotConfig(root) {
     }
   };
   root.querySelectorAll('[data-savebot]').forEach((b) => (b.onclick = doSaveBot));
+}
+
+// ============================================================
+// Editor visual del FLUJO del bot (menú → opciones → pasos)
+// Se abre desde la configuración del Bot. Guarda en bot.flujo.
+// ============================================================
+function renderFlowEditor(root) {
+  if (!store.isCoordinador()) { renderConfig(root); return; }
+  const cfg = store.configFull() || {};
+  const bot = cfg.bot || {};
+  // Modelo editable en memoria (se sincroniza con los inputs).
+  let model = flujoAModelo(bot.flujo);
+
+  const datoOptions = (sel) => DATOS.map((d) => `<option value="${d.v}"${d.v === sel ? ' selected' : ''}>${esc(d.l)}</option>`).join('');
+
+  function previewMenu() {
+    const nums = model.opciones.map((_, i) => i + 1);
+    const rango = nums.length > 1 ? `${nums[0]} o ${nums[nums.length - 1]}` : (nums[0] || '1');
+    const ops = model.opciones.map((o, i) => `*${i + 1}* · ${o.titulo || '(sin título)'}${o.desc ? `\n      ${o.desc}` : ''}`).join('\n\n');
+    return `¡Hola! 👋 Bienvenido/a a *WIFIRED*.\n\n${(model.intro || '').trim()} Responde con *un solo número* (${rango}) 👇\n\n${ops}`;
+  }
+
+  function paint() {
+    const opsHtml = model.opciones.map((op, i) => {
+      const pasosHtml = op.pasos.map((p, j) => `
+        <div class="flow-step" data-op="${i}" data-step="${j}">
+          <div class="flow-step-top">
+            <span class="flow-step-n">Paso ${j + 1}</span>
+            <select class="input flow-dato" data-op="${i}" data-step="${j}">${datoOptions(p.dato)}</select>
+            <div class="flow-step-btns">
+              <button class="icon-btn" data-mv="up" data-op="${i}" data-step="${j}" title="Subir"${j === 0 ? ' disabled' : ''}>↑</button>
+              <button class="icon-btn" data-mv="down" data-op="${i}" data-step="${j}" title="Bajar"${j === op.pasos.length - 1 ? ' disabled' : ''}>↓</button>
+              <button class="icon-btn" data-delstep data-op="${i}" data-step="${j}" title="Quitar paso"${op.pasos.length <= 1 ? ' disabled' : ''}>✕</button>
+            </div>
+          </div>
+          <textarea class="textarea flow-preg" data-op="${i}" data-step="${j}" placeholder="¿Qué le pregunta el bot en este paso?">${esc(p.pregunta)}</textarea>
+        </div>`).join('<div class="flow-arrow">↓</div>');
+
+      return `
+        <div class="flow-op card">
+          <div class="flow-op-head">
+            <span class="flow-badge">${i + 1}</span>
+            <input class="input flow-titulo" data-op="${i}" value="${esc(op.titulo)}" placeholder="Título de la opción (ej: Soporte técnico 🛠️)">
+            <button class="icon-btn" data-delop data-op="${i}" title="Quitar opción"${model.opciones.length <= 1 ? ' disabled' : ''}>🗑</button>
+          </div>
+          <div class="field"><label>Descripción corta (debajo del título en el menú)</label>
+            <input class="input flow-desc" data-op="${i}" value="${esc(op.desc)}" placeholder="Ej: Internet lento, cortes o cualquier falla."></div>
+          <div class="flow-steps-label">Pasos que pide el bot</div>
+          <div class="flow-steps">
+            ${pasosHtml || '<p class="muted-sm">Sin pasos aún.</p>'}
+          </div>
+          <button class="btn btn-sm" data-addstep data-op="${i}" style="margin-top:8px">＋ Agregar paso</button>
+          <div class="field" style="margin-top:14px"><label>Mensaje de confirmación (al crear el ticket). Usa <b>{num}</b> para el N°.</label>
+            <textarea class="textarea flow-confirma" data-op="${i}" placeholder="✅ ¡Listo! Registramos tu solicitud con el N° *{num}*…">${esc(op.confirma)}</textarea></div>
+        </div>`;
+    }).join('<div class="flow-arrow flow-arrow-big">↓</div>');
+
+    root.innerHTML = `
+      <div class="section-head">
+        <div>
+          <h2>🔀 Editor del flujo del bot</h2>
+          <span class="muted-sm">Arma el menú y los pasos. Se lee de arriba hacia abajo.</span>
+        </div>
+        <div class="row" style="gap:8px">
+          <button class="btn" data-back>← Volver</button>
+          <button class="btn btn-primary" data-saveflow>Guardar flujo</button>
+        </div>
+      </div>
+
+      <div class="cfg-wrap flow-wrap">
+        <div class="flow-node flow-start">📱 El cliente escribe por WhatsApp</div>
+        <div class="flow-arrow flow-arrow-big">↓</div>
+
+        <div class="card cfg-card">
+          <h3 class="cfg-title">📋 Menú (primer mensaje)</h3>
+          <div class="field full"><label>Frase de entrada del menú</label>
+            <textarea class="textarea" data-intro placeholder="Cuéntame en qué te puedo ayudar hoy.">${esc(model.intro)}</textarea></div>
+          <div class="flow-preview"><div class="flow-preview-label">Vista previa del menú</div><pre class="flow-preview-box" data-preview>${esc(previewMenu())}</pre></div>
+        </div>
+
+        <div class="flow-arrow flow-arrow-big">↓</div>
+        <div class="flow-node flow-dec">¿Qué número eligió el cliente?</div>
+        <div class="flow-arrow flow-arrow-big">↓</div>
+
+        ${opsHtml}
+
+        <button class="btn" data-addop style="margin-top:14px">＋ Agregar opción al menú</button>
+
+        <div class="card cfg-card" style="margin-top:22px">
+          <h3 class="cfg-title">🔒 Proceso de contratación (fijo)</h3>
+          <p class="muted-sm">Cuando el cliente elige un plan, el bot recoge RUT, correo, fotos del carnet y la aceptación de condiciones. Ese tramo es <b>fijo</b> por seguridad legal; sus textos (planes y condiciones) se editan en las tarjetas de la configuración del bot.</p>
+        </div>
+
+        <div class="cfg-footbar">
+          <button class="btn" data-restore>↺ Restaurar por defecto</button>
+          <div class="grow"></div>
+          <button class="btn btn-primary" data-saveflow>Guardar flujo</button>
+        </div>
+      </div>`;
+
+    bind();
+  }
+
+  function refreshPreview() {
+    const pv = root.querySelector('[data-preview]');
+    if (pv) pv.textContent = previewMenu();
+  }
+
+  function bind() {
+    root.querySelectorAll('[data-back]').forEach((b) => (b.onclick = () => renderBotConfig(root)));
+
+    const intro = root.querySelector('[data-intro]');
+    if (intro) intro.oninput = () => { model.intro = intro.value; refreshPreview(); };
+
+    root.querySelectorAll('.flow-titulo').forEach((el) => (el.oninput = () => { model.opciones[+el.dataset.op].titulo = el.value; refreshPreview(); }));
+    root.querySelectorAll('.flow-desc').forEach((el) => (el.oninput = () => { model.opciones[+el.dataset.op].desc = el.value; refreshPreview(); }));
+    root.querySelectorAll('.flow-confirma').forEach((el) => (el.oninput = () => { model.opciones[+el.dataset.op].confirma = el.value; }));
+    root.querySelectorAll('.flow-preg').forEach((el) => (el.oninput = () => { model.opciones[+el.dataset.op].pasos[+el.dataset.step].pregunta = el.value; }));
+    root.querySelectorAll('.flow-dato').forEach((el) => (el.onchange = () => { model.opciones[+el.dataset.op].pasos[+el.dataset.step].dato = el.value; }));
+
+    root.querySelectorAll('[data-addstep]').forEach((b) => (b.onclick = () => { model.opciones[+b.dataset.op].pasos.push({ dato: 'nombre', pregunta: '' }); paint(); }));
+    root.querySelectorAll('[data-delstep]').forEach((b) => (b.onclick = () => { model.opciones[+b.dataset.op].pasos.splice(+b.dataset.step, 1); paint(); }));
+    root.querySelectorAll('[data-mv]').forEach((b) => (b.onclick = () => {
+      const i = +b.dataset.op, j = +b.dataset.step, arr = model.opciones[i].pasos;
+      const k = b.dataset.mv === 'up' ? j - 1 : j + 1;
+      if (k < 0 || k >= arr.length) return;
+      [arr[j], arr[k]] = [arr[k], arr[j]]; paint();
+    }));
+    root.querySelectorAll('[data-delop]').forEach((b) => (b.onclick = () => { model.opciones.splice(+b.dataset.op, 1); paint(); }));
+    root.querySelector('[data-addop]').onclick = () => { model.opciones.push({ titulo: '', categoria: '', desc: '', confirma: '✅ ¡Listo! Registramos tu solicitud con el N° *{num}*. Te contactaremos pronto. 🙌', pasos: [{ dato: 'nombre', pregunta: '¿Cuál es tu *nombre completo*?' }] }); paint(); };
+    root.querySelector('[data-restore]').onclick = () => { model = JSON.parse(JSON.stringify(DEFAULT_FLUJO_APP)); paint(); toast('Flujo restaurado. Recuerda Guardar.', 'info'); };
+
+    root.querySelectorAll('[data-saveflow]').forEach((b) => (b.onclick = () => doSave()));
+  }
+
+  async function doSave() {
+    const flujo = modeloAFlujo(model);
+    if (!flujo.opciones.length) { toast('Deja al menos una opción con título y un paso con pregunta', 'info'); return; }
+    for (const op of flujo.opciones) {
+      if (!op.confirma) { toast(`La opción "${op.titulo}" necesita un mensaje de confirmación`, 'info'); return; }
+    }
+    root.querySelectorAll('[data-saveflow]').forEach((b) => { b.disabled = true; });
+    try {
+      await store.saveConfig({ bot: { flujo } });
+      toast('Flujo guardado ✓ — el bot lo usará en menos de 1 minuto');
+    } catch (e) {
+      toast(e.message || 'No se pudo guardar', 'info');
+    }
+    root.querySelectorAll('[data-saveflow]').forEach((b) => { b.disabled = false; });
+  }
+
+  paint();
 }

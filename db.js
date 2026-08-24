@@ -75,7 +75,36 @@ function mergeBot(b) {
       };
     })(),
     condiciones: typeof s.condiciones === 'string' ? s.condiciones : '',
+    // Flujo del menú editable desde la página (menú → opciones → pasos). Si no hay, el bot usa su flujo por defecto.
+    flujo: sanitizeFlujo(s.flujo),
   };
+}
+/** Valida/limpia el flujo editable del menú del bot. Devuelve null si no es válido (el bot usará el por defecto). */
+function sanitizeFlujo(f) {
+  if (!f || typeof f !== 'object' || !Array.isArray(f.opciones)) return null;
+  const TIPOS = ['texto', 'ubicacion', 'telefono', 'correo', 'rut', 'foto'];
+  const str = (x) => (typeof x === 'string' ? x : '');
+  const opciones = f.opciones.map((op) => {
+    op = op && typeof op === 'object' ? op : {};
+    const pasos = (Array.isArray(op.pasos) ? op.pasos : []).map((p) => {
+      p = p && typeof p === 'object' ? p : {};
+      return {
+        campo: str(p.campo).trim() || 'campo',
+        tipo: TIPOS.includes(p.tipo) ? p.tipo : 'texto',
+        pregunta: str(p.pregunta),
+      };
+    }).filter((p) => p.pregunta.trim());
+    return {
+      n: str(op.n).trim() || '',
+      titulo: str(op.titulo).trim(),
+      desc: str(op.desc),
+      categoria: str(op.categoria).trim() || str(op.titulo).trim() || 'Consulta',
+      confirma: str(op.confirma),
+      pasos,
+    };
+  }).filter((op) => op.n && op.titulo && op.pasos.length);
+  if (!opciones.length) return null;
+  return { intro: str(f.intro), opciones };
 }
 /** Fusiona la config guardada (settings.config) sobre los valores por defecto */
 async function loadConfig(getSetting) {
