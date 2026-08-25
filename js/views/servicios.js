@@ -21,6 +21,7 @@ export async function renderServicios(root) {
       </div>
       <div class="grow"></div>
       <span data-router class="muted-sm"></span>
+      <button class="btn btn-sm" data-import>⬆ Importar</button>
       <button class="btn btn-primary btn-sm" data-nuevo>＋ Nuevo servicio</button>
     </div>
     <div id="sv-host"><div class="muted-sm" style="padding:14px">Cargando…</div></div>`;
@@ -28,6 +29,7 @@ export async function renderServicios(root) {
   const host = root.querySelector('#sv-host');
   root.querySelector('[data-q]').oninput = (e) => { local.q = e.target.value.trim().toLowerCase(); paint(host); };
   root.querySelector('[data-nuevo]').onclick = () => formModal(null, root);
+  root.querySelector('[data-import]').onclick = () => importModal(root);
 
   try {
     const r = await store.listServicios();
@@ -156,5 +158,118 @@ function formModal(s, root) {
       local.servicios = local.servicios.filter((x) => x._uid !== s._uid);
       toast('Servicio eliminado ✓'); cerrar(); renderServicios(root);
     } catch (e) { toast(e.message || 'No se pudo eliminar', 'info'); }
+  };
+}
+
+// ---------- Importar (CSV de MikroWisp o plantilla propia) ----------
+// Mapea cabeceras conocidas (MikroWisp y las nuestras) a los campos del servicio.
+const COL_MAP = {
+  'nombre': 'nombre', 'name': 'nombre', 'cliente': 'nombre',
+  'cedula': 'rut', 'cédula': 'rut', 'rut': 'rut', 'dni': 'rut',
+  'movil': 'telefono', 'móvil': 'telefono', 'celular': 'telefono', 'telefono': 'telefono', 'teléfono': 'telefono', 'fono': 'telefono',
+  'user ppp/hotspot': 'pppoe_user', 'user ppp': 'pppoe_user', 'pppoe': 'pppoe_user', 'pppoe_user': 'pppoe_user', 'usuario': 'pppoe_user', 'usuario ppp': 'pppoe_user',
+  'plan': 'plan',
+  'dirección principal': 'direccion', 'direccion principal': 'direccion', 'dirección servicio': 'direccion', 'direccion servicio': 'direccion', 'direccion': 'direccion', 'dirección': 'direccion', 'direccion_servicio': 'direccion',
+  'router': 'nodo', 'nodo': 'nodo',
+  'ip': 'ip',
+  'dia pago': 'dia_pago', 'día pago': 'dia_pago', 'dia_pago': 'dia_pago', 'dia de pago': 'dia_pago',
+  'id': 'mikrowisp_id', 'mikrowisp_id': 'mikrowisp_id', 'id mikrowisp': 'mikrowisp_id',
+  'correo': 'email', 'email': 'email', 'e-mail': 'email',
+  'notas': 'notas', 'nota': 'notas', 'observaciones': 'notas',
+};
+/** Parser CSV mínimo con soporte de comillas. Detecta separador , o ; */
+function parseCSV(text) {
+  text = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const firstLine = text.slice(0, text.indexOf('\n') < 0 ? text.length : text.indexOf('\n'));
+  const sep = (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === sep) { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+    else cur += c;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter((r) => r.some((c) => (c || '').trim() !== ''));
+}
+/** Convierte filas CSV a objetos con nuestros campos, según la cabecera. */
+function csvAObjetos(text) {
+  const rows = parseCSV(text);
+  if (rows.length < 2) return [];
+  // busca la fila de cabecera (la que tenga 'nombre' o 'user ppp')
+  let h = 0;
+  for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    const low = rows[i].map((c) => (c || '').trim().toLowerCase());
+    if (low.some((c) => COL_MAP[c])) { h = i; break; }
+  }
+  const cols = rows[h].map((c) => COL_MAP[(c || '').trim().toLowerCase()] || null);
+  const out = [];
+  for (let i = h + 1; i < rows.length; i++) {
+    const o = {};
+    rows[i].forEach((val, j) => {
+      const field = cols[j]; const v = (val || '').trim();
+      if (field && v) o[field] = v; // valor no vacío pisa a anterior (prioridad por orden de columnas)
+    });
+    if (o.nombre || o.pppoe_user || o.rut) out.push(o);
+  }
+  return out;
+}
+
+function importModal(root) {
+  const box = document.createElement('div');
+  box.innerHTML = `
+    <div class="modal-head"><h3>Importar clientes</h3><button class="icon-btn" data-x>✕</button></div>
+    <div class="modal-body">
+      <p class="muted-sm">Sube el archivo <b>.csv</b> exportado de MikroWisp (o pega el contenido). Si un cliente ya existe, solo se rellenan sus datos faltantes; <b>no se pierde nada</b>.</p>
+      <div class="field"><label>Archivo CSV</label><input type="file" accept=".csv,text/csv" data-file></div>
+      <div class="field"><label>…o pega aquí el CSV</label><textarea class="textarea" data-paste placeholder="nombre,rut,telefono,pppoe_user,plan…" style="min-height:120px"></textarea></div>
+      <div class="muted-sm" data-prev></div>
+      <p class="muted-sm">💡 ¿Tienes el archivo en Excel (.xlsx)? Ábrelo → <b>Archivo → Guardar como → CSV</b>, y sube ese CSV.</p>
+    </div>
+    <div class="modal-foot">
+      <div class="grow"></div>
+      <button class="btn" data-x2>Cancelar</button>
+      <button class="btn btn-primary" data-go disabled>Importar</button>
+    </div>`;
+  openModal(box, 'md', { dismissable: false });
+  const cerrar = () => closeModal();
+  box.querySelector('[data-x]').onclick = cerrar;
+  box.querySelector('[data-x2]').onclick = cerrar;
+  const prev = box.querySelector('[data-prev]');
+  const go = box.querySelector('[data-go]');
+  let registros = [];
+
+  const analizar = (text) => {
+    try { registros = csvAObjetos(text); } catch (e) { registros = []; }
+    if (registros.length) { prev.innerHTML = `✅ Se detectaron <b>${registros.length}</b> clientes listos para importar.`; go.disabled = false; }
+    else { prev.innerHTML = '⚠️ No se detectaron filas válidas. Revisa que el archivo tenga cabeceras (Nombre, Cedula, Movil, User PPP/Hotspot…).'; go.disabled = true; }
+  };
+  box.querySelector('[data-file]').onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const rd = new FileReader(); rd.onload = () => { box.querySelector('[data-paste]').value = ''; analizar(String(rd.result || '')); }; rd.readAsText(f, 'utf-8');
+  };
+  box.querySelector('[data-paste]').oninput = (e) => analizar(e.target.value);
+
+  go.onclick = async () => {
+    if (!registros.length) return;
+    go.disabled = true;
+    const total = registros.length; let creados = 0, actualizados = 0, sinCambios = 0, hechos = 0;
+    try {
+      for (let i = 0; i < registros.length; i += 400) {
+        const lote = registros.slice(i, i + 400);
+        const r = await store.importServicios(lote);
+        creados += r.creados || 0; actualizados += r.actualizados || 0; sinCambios += r.sinCambios || 0;
+        hechos += lote.length;
+        prev.innerHTML = `Importando… ${hechos}/${total}`;
+      }
+      toast(`Importados ✓ — ${creados} nuevos, ${actualizados} actualizados`);
+      cerrar(); renderServicios(root);
+    } catch (e) {
+      toast(e.message || 'No se pudo importar', 'info'); go.disabled = false;
+    }
   };
 }

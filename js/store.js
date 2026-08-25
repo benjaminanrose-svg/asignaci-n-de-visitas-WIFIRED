@@ -271,6 +271,7 @@ export async function addServicio(data) { return rawApi('POST', '/servicios', da
 export async function updateServicio(id, patch) { return rawApi('PUT', '/servicios/' + id, patch); }
 export async function deleteServicio(id) { return rawApi('DELETE', '/servicios/' + id); }
 export async function servicioAccion(id, accion) { return rawApi('POST', '/servicios/' + id + '/' + accion); }
+export async function importServicios(rows) { return rawApi('POST', '/servicios/import', { rows }); }
 export async function routerEstado() { return rawApi('GET', '/router/estado'); }
 
 // ---------- Configuración ----------

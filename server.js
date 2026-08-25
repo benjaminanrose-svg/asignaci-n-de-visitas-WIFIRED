@@ -455,6 +455,44 @@ api.delete('/servicios/:id', auth, soloCoordinador, wrap(async (req, res) => {
   await (await getStore()).deleteServicio(req.params.id);
   res.json({ ok: true });
 }));
+// Importación masiva (ej: export de MikroWisp). Fusiona sin perder datos:
+// si el cliente ya existe (por mikrowisp_id / PPPoE / RUT / teléfono) sólo
+// rellena los campos que están vacíos; si no existe, lo crea.
+const IMPORT_FIELDS = ['nombre', 'rut', 'telefono', 'direccion', 'email', 'plan', 'pppoe_user', 'notas', 'gps', 'mikrowisp_id', 'nodo', 'ip', 'dia_pago'];
+const claveImp = (v) => (v == null ? '' : String(v)).trim().toLowerCase();
+api.post('/servicios/import', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : [];
+  if (!rows.length) return res.status(400).json({ error: 'No hay filas para importar' });
+  if (rows.length > 5000) return res.status(400).json({ error: 'Demasiadas filas de una vez (máx 5000 por tanda)' });
+  const existing = await s.listServicios();
+  const idx = { mikrowisp_id: new Map(), pppoe_user: new Map(), rut: new Map(), telefono: new Map() };
+  const indexar = (e) => { for (const k of Object.keys(idx)) if (e[k]) idx[k].set(claveImp(e[k]), e); };
+  existing.forEach(indexar);
+  let creados = 0, actualizados = 0, sinCambios = 0;
+  for (const raw of rows) {
+    const row = {};
+    IMPORT_FIELDS.forEach((c) => { row[c] = raw[c] == null ? '' : String(raw[c]).trim(); });
+    if (!row.nombre && !row.pppoe_user && !row.rut) continue; // fila vacía
+    const match = (row.mikrowisp_id && idx.mikrowisp_id.get(claveImp(row.mikrowisp_id)))
+      || (row.pppoe_user && idx.pppoe_user.get(claveImp(row.pppoe_user)))
+      || (row.rut && idx.rut.get(claveImp(row.rut)))
+      || (row.telefono && idx.telefono.get(claveImp(row.telefono))) || null;
+    if (match) {
+      const patch = {};
+      for (const c of IMPORT_FIELDS) if (row[c] && !String(match[c] || '').trim()) patch[c] = row[c];
+      if (Object.keys(patch).length) { const upd = await s.updateServicio(match._uid, patch); if (upd) { Object.assign(match, upd); indexar(match); } actualizados++; }
+      else sinCambios++;
+    } else {
+      if (!row.estado) row.estado = 'activo';
+      const created = await s.addServicio(row);
+      if (created) indexar(created);
+      creados++;
+    }
+  }
+  res.json({ creados, actualizados, sinCambios, total: rows.length });
+}));
+
 // Cortar o activar el internet del cliente en el router MikroTik
 api.post('/servicios/:id/:accion(cortar|activar)', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();

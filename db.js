@@ -169,7 +169,7 @@ const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'te
 // categoría y estado; 'factibilidad' aplica a los de contratación.
 const TICKET_FIELDS = ['categoria', 'estado', 'factibilidad', 'nombre', 'telefono', 'direccion', 'ubicacion', 'mensaje', 'canal', 'notas', 'historial', 'rut', 'email', 'adjuntos'];
 // Servicios = perfil del cliente atado a su cuenta PPPoE del router (para cortar/activar internet)
-const SERVICE_FIELDS = ['nombre', 'rut', 'telefono', 'direccion', 'email', 'plan', 'pppoe_user', 'estado', 'notas', 'gps'];
+const SERVICE_FIELDS = ['nombre', 'rut', 'telefono', 'direccion', 'email', 'plan', 'pppoe_user', 'estado', 'notas', 'gps', 'mikrowisp_id', 'nodo', 'ip', 'dia_pago'];
 /** Normaliza el historial (arreglo o texto) a JSON en texto para guardar */
 function evStr(v) { return Array.isArray(v) ? JSON.stringify(v) : (v || '[]'); }
 
@@ -385,7 +385,8 @@ function pgStore(url) {
   const outS = (r) => ({
     _uid: String(r.id), nombre: r.nombre || '', rut: r.rut || '', telefono: r.telefono || '', direccion: r.direccion || '',
     email: r.email || '', plan: r.plan || '', pppoe_user: r.pppoe_user || '', estado: r.estado || 'activo',
-    notas: r.notas || '', gps: r.gps || '', created_at: r.created_at, updated_at: r.updated_at,
+    notas: r.notas || '', gps: r.gps || '', mikrowisp_id: r.mikrowisp_id || '', nodo: r.nodo || '', ip: r.ip || '', dia_pago: r.dia_pago || '',
+    created_at: r.created_at, updated_at: r.updated_at,
   });
   async function credsOf(tid) {
     const { rows } = await pool.query('SELECT username, pass_plain FROM usuarios WHERE tecnico_id=$1', [tid]);
@@ -497,9 +498,16 @@ function pgStore(url) {
           estado TEXT DEFAULT 'activo',
           notas TEXT DEFAULT '',
           gps TEXT DEFAULT '',
+          mikrowisp_id TEXT DEFAULT '',
+          nodo TEXT DEFAULT '',
+          ip TEXT DEFAULT '',
+          dia_pago TEXT DEFAULT '',
           created_at TIMESTAMPTZ DEFAULT now(),
           updated_at TIMESTAMPTZ DEFAULT now()
         );`);
+      for (const col of ['mikrowisp_id', 'nodo', 'ip', 'dia_pago']) {
+        await pool.query(`ALTER TABLE servicios ADD COLUMN IF NOT EXISTS ${col} TEXT DEFAULT '';`);
+      }
 
       // Reset opcional de técnicos (poner RESET_TECNICOS=1 una vez y redeploy)
       if (process.env.RESET_TECNICOS === '1') {
@@ -590,9 +598,9 @@ function pgStore(url) {
     async getServicio(id) { const { rows } = await pool.query('SELECT * FROM servicios WHERE id=$1', [id]); return rows[0] ? outS(rows[0]) : null; },
     async addServicio(d) {
       const { rows } = await pool.query(
-        `INSERT INTO servicios (nombre,rut,telefono,direccion,email,plan,pppoe_user,estado,notas,gps)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-        [d.nombre || '', d.rut || '', d.telefono || '', d.direccion || '', d.email || '', d.plan || '', d.pppoe_user || '', d.estado || 'activo', d.notas || '', d.gps || '']);
+        `INSERT INTO servicios (nombre,rut,telefono,direccion,email,plan,pppoe_user,estado,notas,gps,mikrowisp_id,nodo,ip,dia_pago)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+        [d.nombre || '', d.rut || '', d.telefono || '', d.direccion || '', d.email || '', d.plan || '', d.pppoe_user || '', d.estado || 'activo', d.notas || '', d.gps || '', d.mikrowisp_id || '', d.nodo || '', d.ip || '', d.dia_pago || '']);
       return outS(rows[0]);
     },
     async updateServicio(id, patch) {
