@@ -196,9 +196,9 @@ function parseCSV(text) {
   if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
   return rows.filter((r) => r.some((c) => (c || '').trim() !== ''));
 }
-/** Convierte filas CSV a objetos con nuestros campos, según la cabecera. */
-function csvAObjetos(text) {
-  const rows = parseCSV(text);
+function csvAObjetos(text) { return filasAObjetos(parseCSV(text)); }
+/** Convierte filas (arreglo 2D) a objetos con nuestros campos, según la cabecera. */
+function filasAObjetos(rows) {
   if (rows.length < 2) return [];
   // busca la fila de cabecera (la que tenga 'nombre' o 'user ppp')
   let h = 0;
@@ -219,16 +219,83 @@ function csvAObjetos(text) {
   return out;
 }
 
+// ---------- Lector de .xlsx (sin librerías: unzip + parseo XML) ----------
+const _u16 = (d, o) => d[o] | (d[o + 1] << 8);
+const _u32 = (d, o) => (d[o] | (d[o + 1] << 8) | (d[o + 2] << 16) | (d[o + 3] << 24)) >>> 0;
+async function inflateRaw(bytes) {
+  if (typeof DecompressionStream === 'undefined') throw new Error('Tu navegador no puede abrir .xlsx aquí; usa CSV');
+  const ds = new DecompressionStream('deflate-raw');
+  const ab = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
+  return new Uint8Array(ab);
+}
+async function unzip(ab) {
+  const d = new Uint8Array(ab);
+  let i = d.length - 22;
+  for (; i >= 0; i--) if (d[i] === 0x50 && d[i + 1] === 0x4b && d[i + 2] === 0x05 && d[i + 3] === 0x06) break;
+  if (i < 0) throw new Error('Archivo .xlsx inválido');
+  const cnt = _u16(d, i + 10); let p = _u32(d, i + 16);
+  const files = {};
+  for (let n = 0; n < cnt && _u32(d, p) === 0x02014b50; n++) {
+    const method = _u16(d, p + 10), csize = _u32(d, p + 20);
+    const fnlen = _u16(d, p + 28), extralen = _u16(d, p + 30), commlen = _u16(d, p + 32);
+    const lho = _u32(d, p + 42);
+    const name = new TextDecoder().decode(d.slice(p + 46, p + 46 + fnlen));
+    const lfn = _u16(d, lho + 26), lex = _u16(d, lho + 28);
+    const dstart = lho + 30 + lfn + lex;
+    files[name] = { method, comp: d.slice(dstart, dstart + csize) };
+    p += 46 + fnlen + extralen + commlen;
+  }
+  return files;
+}
+async function fileText(files, name) {
+  const f = files[name]; if (!f) return null;
+  const bytes = f.method === 0 ? f.comp : await inflateRaw(f.comp);
+  return new TextDecoder('utf-8').decode(bytes);
+}
+function decodeXml(s) {
+  return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&amp;/g, '&');
+}
+function colToIdx(ref) { const m = (ref || '').match(/^[A-Z]+/); if (!m) return 0; let n = 0; for (const ch of m[0]) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; }
+async function xlsxAFilas(ab) {
+  const files = await unzip(ab);
+  const ssXml = await fileText(files, 'xl/sharedStrings.xml');
+  const shared = [];
+  if (ssXml) { let m; const re = /<si>([\s\S]*?)<\/si>/g; while ((m = re.exec(ssXml))) { const t = [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((x) => x[1]).join(''); shared.push(decodeXml(t)); } }
+  const sheetName = Object.keys(files).find((n) => /^xl\/worksheets\/sheet1\.xml$/.test(n)) || Object.keys(files).find((n) => /^xl\/worksheets\/.*\.xml$/.test(n));
+  const sheetXml = await fileText(files, sheetName);
+  if (!sheetXml) throw new Error('No se encontró la hoja del Excel');
+  const rows = []; let rm; const rowRe = /<row[^>]*>([\s\S]*?)<\/row>/g;
+  while ((rm = rowRe.exec(sheetXml))) {
+    const cells = []; let cm; const cRe = /<c\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
+    while ((cm = cRe.exec(rm[1]))) {
+      const attrs = cm[1], inner = cm[2] || '';
+      const col = colToIdx((attrs.match(/r="([A-Z]+)\d+"/) || [])[1] || '');
+      const t = (attrs.match(/t="([^"]+)"/) || [])[1] || '';
+      const vm = inner.match(/<v>([\s\S]*?)<\/v>/);
+      const im = inner.match(/<t[^>]*>([\s\S]*?)<\/t>/);
+      let val = '';
+      if (t === 's' && vm) val = shared[+vm[1]] || '';
+      else if (t === 'inlineStr' && im) val = decodeXml(im[1]);
+      else if (vm) val = decodeXml(vm[1]);
+      cells[col] = val;
+    }
+    for (let k = 0; k < cells.length; k++) if (cells[k] == null) cells[k] = '';
+    rows.push(cells);
+  }
+  return rows;
+}
+
 function importModal(root) {
   const box = document.createElement('div');
   box.innerHTML = `
     <div class="modal-head"><h3>Importar clientes</h3><button class="icon-btn" data-x>✕</button></div>
     <div class="modal-body">
-      <p class="muted-sm">Sube el archivo <b>.csv</b> exportado de MikroWisp (o pega el contenido). Si un cliente ya existe, solo se rellenan sus datos faltantes; <b>no se pierde nada</b>.</p>
-      <div class="field"><label>Archivo CSV</label><input type="file" accept=".csv,text/csv" data-file></div>
+      <p class="muted-sm">Sube el archivo <b>.xlsx</b> o <b>.csv</b> exportado de MikroWisp (o pega el contenido). Si un cliente ya existe, solo se rellenan sus datos faltantes; <b>no se pierde nada</b>.</p>
+      <div class="field"><label>Archivo (Excel .xlsx o CSV)</label><input type="file" accept=".xlsx,.csv,text/csv" data-file></div>
       <div class="field"><label>…o pega aquí el CSV</label><textarea class="textarea" data-paste placeholder="nombre,rut,telefono,pppoe_user,plan…" style="min-height:120px"></textarea></div>
       <div class="muted-sm" data-prev></div>
-      <p class="muted-sm">💡 ¿Tienes el archivo en Excel (.xlsx)? Ábrelo → <b>Archivo → Guardar como → CSV</b>, y sube ese CSV.</p>
+      <p class="muted-sm">✅ Puedes subir el Excel de MikroWisp tal cual, sin convertir nada.</p>
     </div>
     <div class="modal-foot">
       <div class="grow"></div>
@@ -248,9 +315,19 @@ function importModal(root) {
     if (registros.length) { prev.innerHTML = `✅ Se detectaron <b>${registros.length}</b> clientes listos para importar.`; go.disabled = false; }
     else { prev.innerHTML = '⚠️ No se detectaron filas válidas. Revisa que el archivo tenga cabeceras (Nombre, Cedula, Movil, User PPP/Hotspot…).'; go.disabled = true; }
   };
-  box.querySelector('[data-file]').onchange = (e) => {
+  box.querySelector('[data-file]').onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return;
-    const rd = new FileReader(); rd.onload = () => { box.querySelector('[data-paste]').value = ''; analizar(String(rd.result || '')); }; rd.readAsText(f, 'utf-8');
+    box.querySelector('[data-paste]').value = '';
+    const ab = await f.arrayBuffer();
+    const b = new Uint8Array(ab.slice(0, 2));
+    if (b[0] === 0x50 && b[1] === 0x4b) { // PK.. => .xlsx
+      prev.innerHTML = 'Leyendo Excel…';
+      try { registros = filasAObjetos(await xlsxAFilas(ab)); } catch (err) { registros = []; prev.innerHTML = '⚠️ ' + (err.message || 'No se pudo leer el Excel'); go.disabled = true; return; }
+      if (registros.length) { prev.innerHTML = `✅ Se detectaron <b>${registros.length}</b> clientes listos para importar.`; go.disabled = false; }
+      else { prev.innerHTML = '⚠️ No se detectaron filas válidas en el Excel.'; go.disabled = true; }
+    } else {
+      analizar(new TextDecoder('utf-8').decode(ab));
+    }
   };
   box.querySelector('[data-paste]').oninput = (e) => analizar(e.target.value);
 
