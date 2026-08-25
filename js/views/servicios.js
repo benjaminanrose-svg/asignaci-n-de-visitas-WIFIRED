@@ -483,3 +483,104 @@ function importModal(root) {
     }
   };
 }
+
+// ---------- Contactos: opt-in (quiénes escribieron) y BAJA (no quieren) ----------
+export async function contactosModal() {
+  let contactos = [], servicios = local.servicios || [];
+  try {
+    const [rc, rs] = await Promise.all([
+      store.listContactos(),
+      servicios.length ? Promise.resolve({ servicios }) : store.listServicios(),
+    ]);
+    contactos = rc.contactos || [];
+    servicios = rs.servicios || servicios;
+    local.servicios = servicios;
+  } catch (e) { toast('No se pudieron cargar los contactos', 'info'); return; }
+
+  const norm9 = (t) => (t || '').replace(/\D/g, '').slice(-9);
+  const nameOf = {};
+  for (const s of servicios) { const t = norm9(s.telefono); if (t && !nameOf[t]) nameOf[t] = s.nombre || ''; }
+  const fmtTel = (t) => (t && t.length === 9 ? `+56 ${t.slice(0, 1)} ${t.slice(1, 5)} ${t.slice(5)}` : t);
+
+  let q = '';
+  const box = document.createElement('div');
+  box.innerHTML = `
+    <div class="modal-head"><h3>👥 Contactos del bot</h3><button class="icon-btn" data-x>✕</button></div>
+    <div class="modal-body">
+      <div class="muted-sm" data-resumen style="margin-bottom:10px"></div>
+      <div class="field">
+        <label>Dar de BAJA un número a mano</label>
+        <div class="row" style="gap:8px">
+          <input class="input" data-addtel placeholder="9 1234 5678" inputmode="numeric" style="flex:1">
+          <button class="btn btn-danger btn-sm" data-addbaja>Dar BAJA</button>
+        </div>
+      </div>
+      <div class="search-box" style="margin:6px 0 10px">
+        <span class="search-ico">⌕</span>
+        <input type="search" class="input" data-q placeholder="Buscar por nombre o teléfono…" autocomplete="off">
+      </div>
+      <div data-lista style="max-height:48vh;overflow:auto"></div>
+    </div>
+    <div class="modal-foot"><div class="grow"></div><button class="btn" data-x2>Cerrar</button></div>`;
+  openModal(box, 'md');
+  box.querySelector('[data-x]').onclick = closeModal;
+  box.querySelector('[data-x2]').onclick = closeModal;
+
+  const listaEl = box.querySelector('[data-lista]');
+  const resumenEl = box.querySelector('[data-resumen]');
+
+  const marcar = async (tel, baja) => {
+    try {
+      await store.marcarContacto(tel, baja);
+      const t = norm9(tel);
+      const c = contactos.find((x) => norm9(x.telefono) === t);
+      if (c) { c.baja = baja; c.visto = true; }
+      else contactos.push({ telefono: t, visto: true, baja });
+      pintar();
+    } catch (e) { toast(e.message || 'No se pudo guardar', 'info'); }
+  };
+
+  const pintar = () => {
+    const optin = contactos.filter((c) => c.visto && !c.baja).length;
+    const bajas = contactos.filter((c) => c.baja).length;
+    resumenEl.innerHTML = `🟢 <b>${optin}</b> te escribieron (opt-in) &nbsp;·&nbsp; ⛔ <b>${bajas}</b> en BAJA`;
+
+    let list = contactos.slice();
+    if (q) list = list.filter((c) => (norm9(c.telefono).includes(q.replace(/\D/g, '')) || (nameOf[norm9(c.telefono)] || '').toLowerCase().includes(q)));
+    list.sort((a, b) => (b.baja - a.baja) || (nameOf[norm9(a.telefono)] || '').localeCompare(nameOf[norm9(b.telefono)] || '', 'es'));
+
+    if (!list.length) { listaEl.innerHTML = `<div class="empty-state" style="padding:20px"><p>${q ? 'Sin resultados.' : 'Aún no hay contactos registrados.<br><span class="muted-sm">Se llenan cuando la gente le escribe al bot o das una BAJA a mano.</span>'}</p></div>`; return; }
+
+    listaEl.innerHTML = list.map((c) => {
+      const t = norm9(c.telefono);
+      const nombre = nameOf[t] || 'Sin nombre en clientes';
+      const chip = c.baja
+        ? '<span class="tag" style="background:color-mix(in srgb,#ef4444 16%,transparent);border-color:color-mix(in srgb,#ef4444 40%,var(--border));color:#dc2626">⛔ BAJA</span>'
+        : '<span class="tag" style="background:color-mix(in srgb,#10b981 16%,transparent);border-color:color-mix(in srgb,#10b981 40%,var(--border));color:#0f9d68">🟢 Opt-in</span>';
+      const btn = c.baja
+        ? `<button class="btn btn-sm" data-alta="${esc(t)}">Quitar BAJA</button>`
+        : `<button class="btn btn-sm btn-danger" data-baja="${esc(t)}">Dar BAJA</button>`;
+      return `<div class="card" style="padding:10px 12px;margin-bottom:8px">
+        <div class="row" style="gap:10px;align-items:center">
+          <div style="flex:1;min-width:0">
+            <div class="cell-strong truncate">${esc(nombre)}</div>
+            <div class="cell-sub">📞 ${esc(fmtTel(t))}</div>
+          </div>
+          ${chip}${btn}
+        </div>
+      </div>`;
+    }).join('');
+
+    listaEl.querySelectorAll('[data-baja]').forEach((b) => b.onclick = () => marcar(b.dataset.baja, true));
+    listaEl.querySelectorAll('[data-alta]').forEach((b) => b.onclick = () => marcar(b.dataset.alta, false));
+  };
+
+  box.querySelector('[data-q]').oninput = (e) => { q = e.target.value.trim().toLowerCase(); pintar(); };
+  box.querySelector('[data-addbaja]').onclick = () => {
+    const tel = norm9(box.querySelector('[data-addtel]').value);
+    if (tel.length !== 9) { toast('Escribe un teléfono válido (9 dígitos)', 'info'); return; }
+    box.querySelector('[data-addtel]').value = '';
+    marcar(tel, true);
+  };
+  pintar();
+}

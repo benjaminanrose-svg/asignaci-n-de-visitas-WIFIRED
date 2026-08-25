@@ -276,6 +276,7 @@ export async function broadcast(payload) { return rawApi('POST', '/servicios/bro
 export async function reportarUbicacion(lat, lng) { return rawApi('POST', '/tecnico/ubicacion', { lat, lng }); }
 export async function ubicacionesTecnicos() { return rawApi('GET', '/tecnicos/ubicaciones'); }
 export async function listContactos() { return rawApi('GET', '/contactos'); }
+export async function marcarContacto(telefono, baja) { return rawApi('POST', '/contactos/marcar', { telefono, baja }); }
 export async function broadcastPendientes() { return rawApi('GET', '/servicios/broadcast/pendientes'); }
 export async function broadcastCancelar() { return rawApi('POST', '/servicios/broadcast/cancelar'); }
 export async function routerEstado() { return rawApi('GET', '/router/estado'); }

@@ -529,6 +529,16 @@ api.get('/contactos', auth, soloCoordinador, wrap(async (req, res) => {
   res.json({ contactos: c.map((x) => ({ telefono: x.telefono, visto: !!x.visto, baja: !!x.baja })) });
 }));
 
+// Marcar BAJA/ALTA a mano desde la app. Sólo coordinación.
+api.post('/contactos/marcar', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const tel = String((req.body && req.body.telefono) || '');
+  const baja = !!(req.body && req.body.baja);
+  if (!tel) return res.status(400).json({ error: 'Falta el teléfono' });
+  if (typeof s.marcarContacto === 'function') await s.marcarContacto(tel, baja);
+  res.json({ ok: true });
+}));
+
 // Cuántos mensajes de envío masivo están pendientes en la cola. Sólo coordinación.
 api.get('/servicios/broadcast/pendientes', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
