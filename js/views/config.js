@@ -7,6 +7,7 @@
 import * as store from '../store.js';
 import { esc, toast, bindField, validaEmail } from '../util.js';
 import { openModal, closeModal } from '../components.js';
+import { broadcastModal } from './servicios.js';
 
 // ---------- Editor visual del flujo del bot ----------
 // Cada paso guarda un "dato" (qué información pide). De ahí se derivan el campo y la validación.
@@ -388,6 +389,12 @@ function renderBotConfig(root) {
       </div>
 
       <div class="card cfg-card">
+        <h3 class="cfg-title">✉️ Envío masivo de WhatsApp</h3>
+        <p class="muted-sm">Envía un mensaje a todos los clientes de un <b>nodo</b> (o a todos). El bot los manda de a uno con pausa (15–45 seg) para no arriesgar el número.</p>
+        <button class="btn btn-primary" data-openbroadcast style="margin-top:12px">✉️ Redactar envío masivo →</button>
+      </div>
+
+      <div class="card cfg-card">
         <h3 class="cfg-title">💬 Saludo del menú</h3>
         <div class="field full"><label>Primera frase que ve el cliente al escribir</label>
           <textarea class="textarea" data-b="saludo" placeholder="Soy el asistente virtual…">${esc(bot.saludo || '')}</textarea></div>
@@ -461,6 +468,7 @@ function renderBotConfig(root) {
 
   root.querySelectorAll('[data-back]').forEach((b) => (b.onclick = () => renderConfig(root)));
   root.querySelector('[data-openflow]').onclick = () => renderFlowEditor(root);
+  root.querySelector('[data-openbroadcast]').onclick = () => broadcastModal();
 
   const doSaveBot = async () => {
     const q = (sel) => root.querySelector(sel);

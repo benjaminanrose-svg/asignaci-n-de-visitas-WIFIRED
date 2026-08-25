@@ -21,7 +21,6 @@ export async function renderServicios(root) {
       </div>
       <div class="grow"></div>
       <span data-router class="muted-sm"></span>
-      <button class="btn btn-sm" data-wa>✉️ WhatsApp masivo</button>
       <button class="btn btn-sm" data-import>⬆ Importar</button>
       <button class="btn btn-primary btn-sm" data-nuevo>＋ Nuevo servicio</button>
     </div>
@@ -31,7 +30,6 @@ export async function renderServicios(root) {
   root.querySelector('[data-q]').oninput = (e) => { local.q = e.target.value.trim().toLowerCase(); paint(host); };
   root.querySelector('[data-nuevo]').onclick = () => formModal(null, root);
   root.querySelector('[data-import]').onclick = () => importModal(root);
-  root.querySelector('[data-wa]').onclick = () => broadcastModal();
 
   try {
     const r = await store.listServicios();
@@ -181,8 +179,14 @@ export function editServicioModal(servicio, onSaved) {
 
 // ---------- Envío masivo de WhatsApp por nodo ----------
 const telValido = (t) => (t || '').replace(/\D/g, '').length >= 9;
-function broadcastModal() {
-  const nodos = [...new Set(local.servicios.map((s) => (s.nodo || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+export async function broadcastModal() {
+  let servicios = local.servicios;
+  if (!servicios || !servicios.length) {
+    try { const r = await store.listServicios(); servicios = r.servicios || []; local.servicios = servicios; }
+    catch (e) { toast('No se pudieron cargar los clientes', 'info'); return; }
+  }
+  if (!servicios.length) { toast('Aún no hay clientes cargados. Importa tu lista primero.', 'info'); return; }
+  const nodos = [...new Set(servicios.map((s) => (s.nodo || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
   const box = document.createElement('div');
   box.innerHTML = `
     <div class="modal-head"><h3>✉️ WhatsApp masivo</h3><button class="icon-btn" data-x>✕</button></div>
@@ -213,7 +217,7 @@ function broadcastModal() {
   const cnt = box.querySelector('[data-count]');
   const contar = () => {
     const nodo = sel.value;
-    const n = local.servicios.filter((s) => (nodo === '__todos__' || (s.nodo || '') === nodo) && telValido(s.telefono)).length;
+    const n = servicios.filter((s) => (nodo === '__todos__' || (s.nodo || '') === nodo) && telValido(s.telefono)).length;
     cnt.innerHTML = `📲 Llegará a <b>${n}</b> cliente${n === 1 ? '' : 's'} con teléfono válido.`;
     return n;
   };
