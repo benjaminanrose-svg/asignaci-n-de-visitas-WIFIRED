@@ -10,7 +10,7 @@
 // Requisitos: Node 18+ (usa fetch nativo), @whiskeysockets/baileys, qrcode-terminal.
 // Variables de entorno:
 //   BOT_API_KEY  (obligatoria) — la misma clave configurada en la app.
-//   API_URL      (opcional)    — URL local de la app. Por defecto http://localhost:8081
+//   API_URL      (opcional)    — URL local de la app. Por defecto http://127.0.0.1:8081
 //   EMPRESA      (opcional)    — nombre que saluda el bot.
 // ============================================================
 const path = require('path');
@@ -24,7 +24,9 @@ const {
 } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 
-const API_URL = (process.env.API_URL || 'http://localhost:8081').replace(/\/+$/, '');
+// Nota: usamos 127.0.0.1 (IPv4) y NO "localhost", porque el fetch de Node
+// resuelve "localhost" a IPv6 (::1) y falla si la app sólo escucha en IPv4.
+const API_URL = (process.env.API_URL || 'http://127.0.0.1:8081').replace(/\/+$/, '');
 const BOT_API_KEY = process.env.BOT_API_KEY || '';
 const EMPRESA = process.env.EMPRESA || 'TELECOMUNICACIONES WIFIRED';
 const AUTH_DIR = process.env.AUTH_DIR || path.join(__dirname, 'auth_wifired');
