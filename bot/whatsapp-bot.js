@@ -671,6 +671,10 @@ async function finalizarContrato(id, sess, info) {
 
 // ---------- Bandeja de salida: envía los mensajes automáticos (planes, etc.) ----------
 let poolingOut = false;
+// Ritmo controlado para envíos masivos (anti-baneo): 1 por ciclo, con pausa
+// aleatoria entre cada uno y un tope diario. Los mensajes normales no se frenan.
+const BC_MIN_MS = 15000, BC_MAX_MS = 45000, BC_MAX_DIA = 400;
+let bcNext = 0, bcHoy = 0, bcDia = '';
 async function pollOutbox() {
   if (poolingOut || !sock) return;
   poolingOut = true;
@@ -679,6 +683,18 @@ async function pollOutbox() {
     for (const m of pend || []) {
       const chatId = toChatId(m.telefono);
       if (!chatId) { await api('/api/bot/outbox/' + m.id + '/sent', { method: 'POST' }); continue; }
+      if (m.tipo === 'broadcast') {
+        const hoy = new Date().toISOString().slice(0, 10);
+        if (hoy !== bcDia) { bcDia = hoy; bcHoy = 0; }
+        if (bcHoy >= BC_MAX_DIA) continue;   // tope diario: se retoma mañana
+        if (Date.now() < bcNext) continue;   // aún en pausa entre mensajes
+        await botSend(chatId, m.texto || '');
+        await api('/api/bot/outbox/' + m.id + '/sent', { method: 'POST' });
+        bcHoy++;
+        bcNext = Date.now() + BC_MIN_MS + Math.random() * (BC_MAX_MS - BC_MIN_MS);
+        console.log(`[BOT] masivo enviado a ${m.telefono} (${bcHoy} hoy)`);
+        continue; // sólo 1 masivo por ciclo
+      }
       await botSend(chatId, m.texto || '');
       const telDig = soloDigitos(m.telefono);
       if (telDig && m.tipo === 'confirmacion') {

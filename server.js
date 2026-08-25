@@ -493,6 +493,28 @@ api.post('/servicios/import', auth, soloCoordinador, wrap(async (req, res) => {
   res.json({ creados, actualizados, sinCambios, total: rows.length });
 }));
 
+// Envío masivo de WhatsApp por nodo (encola en la cola del bot con tipo
+// 'broadcast'; el bot los envía a ritmo controlado). Sólo coordinación.
+api.post('/servicios/broadcast', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const texto = String((req.body && req.body.texto) || '').trim();
+  const nodo = String((req.body && req.body.nodo) || '').trim();
+  if (!texto) return res.status(400).json({ error: 'Escribe el mensaje a enviar' });
+  const servicios = await s.listServicios();
+  const norm = (t) => (t || '').replace(/\D/g, '').slice(-9);
+  const seen = new Set(); let encolados = 0, sinTelefono = 0;
+  for (const sv of servicios) {
+    if (nodo && nodo !== '__todos__' && (sv.nodo || '') !== nodo) continue;
+    const tel = norm(sv.telefono);
+    if (tel.length !== 9) { sinTelefono++; continue; }
+    if (seen.has(tel)) continue; seen.add(tel);
+    const msg = texto.replace(/\{nombre\}/gi, (sv.nombre || '').trim().split(/\s+/)[0] || '');
+    await s.addOutbox(tel, msg, 'broadcast');
+    encolados++;
+  }
+  res.json({ encolados, sinTelefono });
+}));
+
 // Cortar o activar el internet del cliente en el router MikroTik
 api.post('/servicios/:id/:accion(cortar|activar)', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();

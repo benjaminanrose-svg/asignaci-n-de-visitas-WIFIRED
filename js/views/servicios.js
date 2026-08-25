@@ -21,6 +21,7 @@ export async function renderServicios(root) {
       </div>
       <div class="grow"></div>
       <span data-router class="muted-sm"></span>
+      <button class="btn btn-sm" data-wa>✉️ WhatsApp masivo</button>
       <button class="btn btn-sm" data-import>⬆ Importar</button>
       <button class="btn btn-primary btn-sm" data-nuevo>＋ Nuevo servicio</button>
     </div>
@@ -30,6 +31,7 @@ export async function renderServicios(root) {
   root.querySelector('[data-q]').oninput = (e) => { local.q = e.target.value.trim().toLowerCase(); paint(host); };
   root.querySelector('[data-nuevo]').onclick = () => formModal(null, root);
   root.querySelector('[data-import]').onclick = () => importModal(root);
+  root.querySelector('[data-wa]').onclick = () => broadcastModal();
 
   try {
     const r = await store.listServicios();
@@ -175,6 +177,63 @@ function formModal(s, root, opts = {}) {
 /** Abre el formulario de un servicio desde otra vista (ej: ficha de Clientes). */
 export function editServicioModal(servicio, onSaved) {
   formModal(servicio, null, { onSaved: (out) => onSaved && onSaved(out), onDeleted: () => onSaved && onSaved(null) });
+}
+
+// ---------- Envío masivo de WhatsApp por nodo ----------
+const telValido = (t) => (t || '').replace(/\D/g, '').length >= 9;
+function broadcastModal() {
+  const nodos = [...new Set(local.servicios.map((s) => (s.nodo || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  const box = document.createElement('div');
+  box.innerHTML = `
+    <div class="modal-head"><h3>✉️ WhatsApp masivo</h3><button class="icon-btn" data-x>✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>¿A quién le enviamos?</label>
+        <select class="input" data-nodo>
+          <option value="__todos__">Todos los nodos</option>
+          ${nodos.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="muted-sm" data-count style="margin:-4px 0 10px"></div>
+      <div class="field"><label>Mensaje</label>
+        <textarea class="textarea" data-msg placeholder="Hola {nombre}, te saludamos de WIFIRED…" style="min-height:130px"></textarea>
+        <span class="muted-sm">Puedes usar <b>{nombre}</b> y se reemplaza por el nombre de cada cliente.</span>
+      </div>
+      <p class="muted-sm">⏱️ Se envían <b>de a uno con pausa</b> (15–45 seg entre cada uno) para no arriesgar el número. Puede tardar; el bot lo hace en segundo plano.</p>
+    </div>
+    <div class="modal-foot">
+      <div class="grow"></div>
+      <button class="btn" data-x2>Cancelar</button>
+      <button class="btn btn-primary" data-go>Enviar</button>
+    </div>`;
+  openModal(box, 'md', { dismissable: false });
+  const cerrar = () => closeModal();
+  box.querySelector('[data-x]').onclick = cerrar;
+  box.querySelector('[data-x2]').onclick = cerrar;
+  const sel = box.querySelector('[data-nodo]');
+  const cnt = box.querySelector('[data-count]');
+  const contar = () => {
+    const nodo = sel.value;
+    const n = local.servicios.filter((s) => (nodo === '__todos__' || (s.nodo || '') === nodo) && telValido(s.telefono)).length;
+    cnt.innerHTML = `📲 Llegará a <b>${n}</b> cliente${n === 1 ? '' : 's'} con teléfono válido.`;
+    return n;
+  };
+  sel.onchange = contar; contar();
+
+  box.querySelector('[data-go]').onclick = async () => {
+    const texto = box.querySelector('[data-msg]').value.trim();
+    const nodo = sel.value;
+    if (!texto) { toast('Escribe el mensaje', 'info'); return; }
+    const n = contar();
+    if (!n) { toast('No hay clientes con teléfono en esa selección', 'info'); return; }
+    const dest = nodo === '__todos__' ? 'TODOS los nodos' : `nodo "${nodo}"`;
+    if (!confirm(`¿Enviar este mensaje a ${n} clientes de ${dest}?\n\nSe envían despacio (15–45 seg c/u) para cuidar el número.`)) return;
+    const btn = box.querySelector('[data-go]'); btn.disabled = true; btn.textContent = 'Encolando…';
+    try {
+      const r = await store.broadcast({ texto, nodo });
+      toast(`✅ ${r.encolados} mensajes en cola. El bot los enviará de a poco.`);
+      cerrar();
+    } catch (e) { toast(e.message || 'No se pudo enviar', 'info'); btn.disabled = false; btn.textContent = 'Enviar'; }
+  };
 }
 
 // ---------- Importar (CSV de MikroWisp o plantilla propia) ----------
