@@ -680,6 +680,7 @@ async function pollOutbox() {
   poolingOut = true;
   try {
     const pend = await api('/api/bot/outbox');
+    if (pend && pend.length) console.log(`[BOT] cola: ${pend.length} pendientes (primero tipo=${pend[0].tipo || '-'} tel=${pend[0].telefono})`);
     for (const m of pend || []) {
       const chatId = toChatId(m.telefono);
       if (!chatId) { await api('/api/bot/outbox/' + m.id + '/sent', { method: 'POST' }); continue; }
@@ -707,7 +708,7 @@ async function pollOutbox() {
       await api('/api/bot/outbox/' + m.id + '/sent', { method: 'POST' });
       console.log(`[BOT] mensaje automático enviado a ${m.telefono}`);
     }
-  } catch (e) { /* se reintenta en el próximo ciclo */ }
+  } catch (e) { console.error('[BOT] error en pollOutbox:', e.message); }
   finally { poolingOut = false; }
 }
 
