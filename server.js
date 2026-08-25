@@ -522,6 +522,13 @@ api.post('/servicios/broadcast', auth, soloCoordinador, wrap(async (req, res) =>
   res.json({ encolados, sinTelefono, omitidosBaja, sinOptIn });
 }));
 
+// Lista de contactos (opt-in / BAJA) para calcular a cuántos llegará. Sólo coordinación.
+api.get('/contactos', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const c = typeof s.listContactos === 'function' ? await s.listContactos() : [];
+  res.json({ contactos: c.map((x) => ({ telefono: x.telefono, visto: !!x.visto, baja: !!x.baja })) });
+}));
+
 // Cuántos mensajes de envío masivo están pendientes en la cola. Sólo coordinación.
 api.get('/servicios/broadcast/pendientes', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();

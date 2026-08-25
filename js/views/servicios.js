@@ -223,13 +223,36 @@ export async function broadcastModal() {
   box.querySelector('[data-x2]').onclick = cerrar;
   const sel = box.querySelector('[data-nodo]');
   const cnt = box.querySelector('[data-count]');
+  const chkOptin = box.querySelector('[data-optin]');
+  const norm9 = (t) => (t || '').replace(/\D/g, '').slice(-9);
+  let bajaSet = new Set(), optinSet = new Set(); // se llenan al cargar contactos
   const contar = () => {
     const nodo = sel.value;
-    const n = servicios.filter((s) => (nodo === '__todos__' || (s.nodo || '') === nodo) && telValido(s.telefono)).length;
-    cnt.innerHTML = `📲 Llegará a <b>${n}</b> cliente${n === 1 ? '' : 's'} con teléfono válido.`;
-    return n;
+    const soloOptIn = chkOptin.checked;
+    const tels = new Set();
+    for (const s of servicios) {
+      if (nodo !== '__todos__' && (s.nodo || '') !== nodo) continue;
+      if (!telValido(s.telefono)) continue;
+      tels.add(norm9(s.telefono));
+    }
+    let recibiran = 0, enBaja = 0, sinOptin = 0;
+    for (const t of tels) {
+      if (bajaSet.has(t)) { enBaja++; continue; }
+      if (soloOptIn && !optinSet.has(t)) { sinOptin++; continue; }
+      recibiran++;
+    }
+    const notas = [];
+    if (enBaja) notas.push(`${enBaja} en BAJA`);
+    if (sinOptin) notas.push(`${sinOptin} sin opt-in`);
+    cnt.innerHTML = `📲 Recibirán el mensaje: <b>${recibiran}</b> de ${tels.size}${notas.length ? ` <span class="muted-sm">(excluidos: ${notas.join(', ')})</span>` : ''}.`;
+    return recibiran;
   };
-  sel.onchange = contar; contar();
+  sel.onchange = contar; chkOptin.onchange = contar; contar();
+  // Carga las bajas/opt-in y recalcula el número real.
+  store.listContactos().then((r) => {
+    for (const c of (r.contactos || [])) { const t = norm9(c.telefono); if (c.baja) bajaSet.add(t); if (c.visto) optinSet.add(t); }
+    contar();
+  }).catch(() => {});
 
   // Cola pendiente: avisa si quedaron mensajes sin enviar y permite vaciarla.
   const pendBox = box.querySelector('[data-pend]');
