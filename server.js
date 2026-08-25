@@ -773,6 +773,25 @@ api.get('/bot/visita', requireBotKey, wrap(async (req, res) => {
 
 // --- Técnicos (sólo coordinación administra) ---
 api.get('/tecnicos', auth, wrap(async (req, res) => res.json(await (await getStore()).listTecnicos())));
+
+// El técnico reporta su ubicación GPS (su app la envía cada ~1 min).
+api.post('/tecnico/ubicacion', auth, wrap(async (req, res) => {
+  if (req.user.rol !== 'tecnico' || !req.user.tecnico_id) return res.status(403).json({ error: 'Sólo técnicos' });
+  const lat = Number(req.body && req.body.lat), lng = Number(req.body && req.body.lng);
+  if (!isFinite(lat) || !isFinite(lng)) return res.status(400).json({ error: 'Coordenadas inválidas' });
+  const s = await getStore();
+  if (typeof s.setTecnicoUbicacion === 'function') await s.setTecnicoUbicacion(req.user.tecnico_id, lat, lng);
+  res.json({ ok: true });
+}));
+
+// Coordinación: ubicación actual de todos los técnicos (para el mapa en vivo).
+api.get('/tecnicos/ubicaciones', auth, soloCoordinador, wrap(async (req, res) => {
+  const tec = await (await getStore()).listTecnicos();
+  const ubic = tec
+    .filter((t) => t.ubic_lat != null && t.ubic_lng != null)
+    .map((t) => ({ id: t.id, nombre: t.display || t.nombre, lat: Number(t.ubic_lat), lng: Number(t.ubic_lng), ts: Number(t.ubic_ts) || 0, activo: t.activo }));
+  res.json({ tecnicos: ubic });
+}));
 api.post('/tecnicos', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
   if (!req.body || (!req.body.nombre && !req.body.rol)) return res.status(400).json({ error: 'Nombre o rol requerido' });

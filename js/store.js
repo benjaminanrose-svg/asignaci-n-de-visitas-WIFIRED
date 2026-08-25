@@ -273,6 +273,8 @@ export async function deleteServicio(id) { return rawApi('DELETE', '/servicios/'
 export async function servicioAccion(id, accion) { return rawApi('POST', '/servicios/' + id + '/' + accion); }
 export async function importServicios(rows) { return rawApi('POST', '/servicios/import', { rows }); }
 export async function broadcast(payload) { return rawApi('POST', '/servicios/broadcast', payload); }
+export async function reportarUbicacion(lat, lng) { return rawApi('POST', '/tecnico/ubicacion', { lat, lng }); }
+export async function ubicacionesTecnicos() { return rawApi('GET', '/tecnicos/ubicaciones'); }
 export async function broadcastPendientes() { return rawApi('GET', '/servicios/broadcast/pendientes'); }
 export async function broadcastCancelar() { return rawApi('POST', '/servicios/broadcast/cancelar'); }
 export async function routerEstado() { return rawApi('GET', '/router/estado'); }

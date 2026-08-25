@@ -24,7 +24,22 @@ function histJSON(v, entry) {
 
 const local = { filtro: 'hoy' };
 
+// --- Reporte de ubicación GPS (cada 1 min mientras el técnico tenga la app abierta) ---
+let geoStarted = false;
+function startGeoReport() {
+  if (geoStarted || !('geolocation' in navigator)) return;
+  geoStarted = true;
+  const enviar = () => navigator.geolocation.getCurrentPosition(
+    (p) => { store.reportarUbicacion(p.coords.latitude, p.coords.longitude).catch(() => {}); },
+    () => {}, // si no hay permiso, no molesta: simplemente no reporta
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 },
+  );
+  enviar();
+  setInterval(enviar, 60 * 1000);
+}
+
 export function renderTecnico(root) {
+  startGeoReport();
   const user = store.currentUser() || {};
   const all = store.visitas();
   const today = todayISO();

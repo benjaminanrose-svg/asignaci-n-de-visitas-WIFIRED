@@ -13,6 +13,7 @@ import { renderClientes } from './views/clientes.js';
 import { renderTickets } from './views/tickets.js';
 import { renderServicios } from './views/servicios.js';
 import { renderTecnicos } from './views/tecnicos.js';
+import { renderUbicaciones } from './views/ubicaciones.js';
 import { renderConfig } from './views/config.js';
 import { renderTecnico } from './views/tecnico.js';
 import { renderLogin, clearLogin } from './views/login.js';
@@ -29,6 +30,7 @@ const ROUTES = {
   tickets:    { title: 'Tickets de atención', render: renderTickets },
   servicios:  { title: 'Servicios',            render: renderServicios },
   tecnicos:   { title: 'Técnicos',            render: renderTecnicos },
+  ubicaciones:{ title: 'Ubicación técnicos',  render: renderUbicaciones },
   config:     { title: 'Configuración',       render: renderConfig },
 };
 const REACTIVE = ['panel', 'agenda', 'calendario', 'visitas', 'clientes', 'tickets', 'tecnicos', 'mis-visitas'];

@@ -270,6 +270,11 @@ function memoryStore() {
       return outT(t);
     },
     async deleteTecnico(id) { tecnicos = tecnicos.filter((x) => x.id != id); },
+    async setTecnicoUbicacion(id, lat, lng) {
+      const t = tecnicos.find((x) => x.id == id); if (!t) return null;
+      t.ubic_lat = lat; t.ubic_lng = lng; t.ubic_ts = Date.now();
+      return outT(t);
+    },
     async listVisitas() { return visitas.map(outV); },
     async revSignature(forTecnico) {
       const list = forTecnico ? visitas.filter((v) => v.tecnico === forTecnico) : visitas;
@@ -361,7 +366,7 @@ function pgStore(url) {
   const ssl = needsSsl(url) ? { rejectUnauthorized: false } : false;
   const pool = new Pool({ connectionString: url, ssl });
 
-  const outT = (r) => ({ id: r.id, rol: r.rol, nombre: r.nombre, telefono: r.telefono || '', activo: r.activo, display: displayTecnico(r.rol, r.nombre) });
+  const outT = (r) => ({ id: r.id, rol: r.rol, nombre: r.nombre, telefono: r.telefono || '', activo: r.activo, display: displayTecnico(r.rol, r.nombre), ubic_lat: r.ubic_lat, ubic_lng: r.ubic_lng, ubic_ts: r.ubic_ts ? Number(r.ubic_ts) : null });
   const outV = (r) => ({
     _uid: String(r.id), id: r.ot,
     estado: r.estado || '', tipo: r.tipo || '', fecha: r.fecha || '', bloque: r.bloque || '',
@@ -455,6 +460,9 @@ function pgStore(url) {
           tecnico_id INTEGER
         );`);
       await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pass_plain TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE tecnicos ADD COLUMN IF NOT EXISTS ubic_lat DOUBLE PRECISION;`);
+      await pool.query(`ALTER TABLE tecnicos ADD COLUMN IF NOT EXISTS ubic_lng DOUBLE PRECISION;`);
+      await pool.query(`ALTER TABLE tecnicos ADD COLUMN IF NOT EXISTS ubic_ts BIGINT;`);
       await pool.query(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);`);
       await pool.query(`CREATE TABLE IF NOT EXISTS push_subs (id SERIAL PRIMARY KEY, user_id INTEGER, endpoint TEXT UNIQUE, sub TEXT);`);
       await pool.query(`
@@ -594,6 +602,10 @@ function pgStore(url) {
       return enrich(t);
     },
     async deleteTecnico(id) { await pool.query('DELETE FROM tecnicos WHERE id=$1', [id]); },
+    async setTecnicoUbicacion(id, lat, lng) {
+      const { rows } = await pool.query('UPDATE tecnicos SET ubic_lat=$2, ubic_lng=$3, ubic_ts=$4 WHERE id=$1 RETURNING *', [id, lat, lng, Date.now()]);
+      return rows[0] ? outT(rows[0]) : null;
+    },
     async getSetting(k) { const { rows } = await pool.query('SELECT value FROM settings WHERE key=$1', [k]); return rows[0] ? rows[0].value : null; },
     async setSetting(k, v) { await pool.query('INSERT INTO settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=$2', [k, v]); },
     async listServicios() { const { rows } = await pool.query('SELECT * FROM servicios ORDER BY id DESC'); return rows.map(outS); },
