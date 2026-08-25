@@ -693,10 +693,11 @@ function pgStore(url) {
     async listTickets() { const { rows } = await pool.query('SELECT * FROM tickets ORDER BY id DESC'); return rows.map(outTk); },
     async addTicket(d) {
       const { rows } = await pool.query(
-        `INSERT INTO tickets (categoria,estado,factibilidad,nombre,telefono,direccion,ubicacion,mensaje,canal,notas,historial)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+        `INSERT INTO tickets (categoria,estado,factibilidad,nombre,telefono,direccion,ubicacion,mensaje,canal,notas,historial,rut,email,adjuntos)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
         [d.categoria || 'Otros', d.estado || 'Nuevo', d.factibilidad || '', d.nombre || '', d.telefono || '',
-         d.direccion || '', d.ubicacion || '', d.mensaje || '', d.canal || 'manual', d.notas || '', evStr(d.historial)]);
+         d.direccion || '', d.ubicacion || '', d.mensaje || '', d.canal || 'manual', d.notas || '', evStr(d.historial),
+         d.rut || '', d.email || '', evStr(d.adjuntos)]);
       return outTk(rows[0]);
     },
     async updateTicket(id, patch) {

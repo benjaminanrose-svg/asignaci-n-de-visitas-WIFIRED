@@ -12,20 +12,27 @@ import { broadcastModal, contactosModal } from './servicios.js';
 // ---------- Editor visual del flujo del bot ----------
 // Cada paso guarda un "dato" (qué información pide). De ahí se derivan el campo y la validación.
 const DATOS = [
-  { v: 'nombre', l: 'Nombre del cliente' },
-  { v: 'ubicacion', l: 'Dirección o ubicación' },
-  { v: 'mensaje', l: 'Detalle / mensaje' },
-  { v: 'telefono', l: 'Teléfono' },
+  { v: 'nombre', l: '👤 Nombre del cliente' },
+  { v: 'ubicacion', l: '📍 Dirección o ubicación' },
+  { v: 'telefono', l: '📞 Teléfono' },
+  { v: 'rut', l: '🪪 RUT / cédula' },
+  { v: 'correo', l: '📧 Correo electrónico' },
+  { v: 'mensaje', l: '📝 Detalle / mensaje' },
 ];
 const DATO_MAP = {
   nombre: { campo: 'nombre', tipo: 'texto' },
   ubicacion: { campo: 'ubicacion', tipo: 'ubicacion' },
   mensaje: { campo: 'mensaje', tipo: 'texto' },
   telefono: { campo: 'telefono', tipo: 'telefono' },
+  rut: { campo: 'rut', tipo: 'rut' },
+  correo: { campo: 'correo', tipo: 'correo' },
 };
+const DATO_ICON = { nombre: '👤', ubicacion: '📍', mensaje: '📝', telefono: '📞', rut: '🪪', correo: '📧' };
 /** A partir de un paso guardado (campo/tipo) deduce el "dato" para el editor. */
 function datoDe(p) {
   if (p.tipo === 'telefono' || p.campo === 'telefono') return 'telefono';
+  if (p.tipo === 'rut' || p.campo === 'rut') return 'rut';
+  if (p.tipo === 'correo' || p.campo === 'correo') return 'correo';
   if (p.campo === 'ubicacion' || p.tipo === 'ubicacion') return 'ubicacion';
   if (p.campo === 'mensaje') return 'mensaje';
   return 'nombre';
@@ -35,18 +42,18 @@ const DEFAULT_FLUJO_APP = {
   intro: 'Cuéntame en qué te puedo ayudar hoy.',
   opciones: [
     {
-      titulo: 'Soporte técnico 🛠️', categoria: 'Soporte',
-      desc: 'Internet lento, cortes, sin señal o cualquier falla. Si hace falta, coordinamos una visita técnica a tu domicilio.',
+      titulo: 'Problema técnico 🛠️', categoria: 'Soporte',
+      desc: 'Internet lento, cortes o sin señal. Coordinamos una visita si hace falta.',
       pasos: [
-        { dato: 'nombre', pregunta: 'Lamento mucho el problema con tu servicio. 🛠️ Te ayudo enseguida.\n\nPara empezar, ¿cuál es tu *nombre completo*?' },
-        { dato: 'ubicacion', pregunta: 'Gracias. 🙌 ¿En qué *dirección* está ocurriendo el problema?\n\nEscríbela con *calle, número y sector*, o compárteme tu *ubicación* 📎.' },
-        { dato: 'mensaje', pregunta: 'Perfecto. Cuéntame *con el mayor detalle posible qué está pasando*:\n\n• ¿*Sin internet*, *lento* o *cortes*?\n• ¿*Desde cuándo*?\n• ¿Afecta a *todos* los equipos o solo a algunos?\n• ¿Las *luces del router* encendidas o parpadeando?' },
+        { dato: 'nombre', pregunta: 'Lamento el problema con tu servicio. 🛠️ Te ayudo enseguida.\n\nPara empezar, ¿cuál es tu *nombre completo*?' },
+        { dato: 'ubicacion', pregunta: 'Gracias. 🙌 ¿En qué *dirección* está ocurriendo el problema?\n\nEscríbela (*calle, número y sector*) o compárteme tu *ubicación* 📎.' },
+        { dato: 'mensaje', pregunta: 'Perfecto. Cuéntame *qué está pasando*, con el mayor detalle:\n\n• ¿*Sin internet*, *lento* o *cortes*?\n• ¿*Desde cuándo*?\n• ¿Afecta a *todos* los equipos o solo a algunos?\n• ¿Las *luces del router* encendidas, apagadas o parpadeando?' },
       ],
       confirma: '✅ ¡Listo! Registramos tu solicitud de *soporte técnico* con el N° *{num}*.\n\nNuestro equipo revisará tu caso y, si es necesario, *coordinará una visita técnica*. Te contactaremos a la brevedad. 🛠️🙌',
     },
     {
-      titulo: 'Planes y contratación 📶', categoria: 'Contratación',
-      desc: 'Conoce nuestros planes y contrata internet nuevo.',
+      titulo: 'Contratar internet 📶', categoria: 'Contratación',
+      desc: 'Revisa cobertura y contrata un plan nuevo.',
       pasos: [
         { dato: 'ubicacion', pregunta: '¡Qué bueno que quieras ser parte de *WIFIRED*! 📶\n\nPrimero revisemos *cobertura* en tu sector. Compárteme tu *ubicación* 📎 o escríbeme tu *dirección exacta*: calle, número, sector y una referencia.' },
         { dato: 'nombre', pregunta: '¡Perfecto! 🙌 ¿Cuál es tu *nombre completo*?' },
@@ -54,14 +61,15 @@ const DEFAULT_FLUJO_APP = {
       confirma: '✅ ¡Recibido! Registramos tu solicitud de *contratación* con el N° *{num}*.\n\nRevisaremos la *factibilidad* y te enviaremos los *planes disponibles*. ¡Gracias por preferirnos! 📶',
     },
     {
-      titulo: 'Cancelar servicio / retiro de equipos 📦', categoria: 'Retiro',
-      desc: 'Solicita dar de baja tu servicio y coordinar el retiro de los equipos.',
+      titulo: 'Dar de baja / Retiro de equipos 📦', categoria: 'Retiro',
+      desc: 'Da de baja tu servicio y coordina el retiro de los equipos.',
       pasos: [
-        { dato: 'nombre', pregunta: 'Lamentamos que quieras irte. 😔 Te ayudo a gestionar la *baja* y el *retiro de los equipos*.\n\nPara empezar, ¿cuál es tu *nombre completo* (titular del servicio)?' },
-        { dato: 'ubicacion', pregunta: 'Gracias. 🙌 ¿En qué *dirección* están instalados los equipos?\n\nEscríbela con *calle, número y sector*, o compárteme tu *ubicación* 📎.' },
-        { dato: 'mensaje', pregunta: 'Entendido. Por último: ¿*motivo* de la cancelación, desde qué *fecha* y qué *días/horarios* te acomodan para el retiro?' },
+        { dato: 'nombre', pregunta: 'Lamentamos que quieras irte. 😔 Te ayudo a gestionar la *baja* y el *retiro de los equipos*.\n\n¿Cuál es tu *nombre completo* (titular del servicio)?' },
+        { dato: 'rut', pregunta: 'Gracias. Para ubicar tu cuenta, ¿cuál es tu *RUT*? (ej: 12.345.678-9)' },
+        { dato: 'ubicacion', pregunta: '¿En qué *dirección* están instalados los equipos?\n\nEscríbela (*calle, número y sector*) o compárteme tu *ubicación* 📎.' },
+        { dato: 'mensaje', pregunta: 'Por último: ¿*motivo* de la baja, desde qué *fecha* y qué *días/horarios* te acomodan para el retiro?' },
       ],
-      confirma: '✅ Registramos tu solicitud de *cancelación y retiro de equipos* con el N° *{num}*.\n\nCoordinaremos internamente el retiro y te contactaremos para agendar. 📦 Gracias por haber sido parte de *WIFIRED*. 🙌',
+      confirma: '✅ Registramos tu solicitud de *baja y retiro de equipos* con el N° *{num}*.\n\nCoordinaremos internamente el retiro y te contactaremos para agendar. 📦 Gracias por haber sido parte de *WIFIRED*. 🙌',
     },
   ],
 };
@@ -520,7 +528,16 @@ function waFormat(t) {
   h = h.replace(/\*(.+?)\*/g, '<b>$1</b>').replace(/_(.+?)_/g, '<i>$1</i>').replace(/~(.+?)~/g, '<s>$1</s>');
   return h.replace(/\n/g, '<br>');
 }
-const DATO_HINT = { nombre: 'Nombre y apellido', ubicacion: 'Dirección o ubicación 📎', mensaje: 'Su respuesta / detalle', telefono: 'Un teléfono' };
+const DATO_HINT = { nombre: 'Nombre y apellido', ubicacion: 'Dirección o ubicación 📎', mensaje: 'Su respuesta / detalle', telefono: 'Un teléfono', rut: 'Su RUT (12.345.678-9)', correo: 'Su correo' };
+const DATO_CORTO = { nombre: 'nombre', ubicacion: 'dirección', mensaje: 'detalle', telefono: 'teléfono', rut: 'RUT', correo: 'correo' };
+// Categorías del ticket. Cada opción del menú crea un ticket con una de estas.
+// OJO: "Contratación" dispara el flujo de factibilidad + planes; no la renombres.
+const CATS = ['Soporte', 'Contratación', 'Retiro', 'Otros'];
+const catOptions = (sel) => {
+  const base = CATS.map((c) => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  return base + (CATS.includes(sel) || !sel ? '' : `<option selected>${esc(sel)}</option>`);
+};
+const resumenRecoge = (op) => (op.pasos || []).map((p) => DATO_CORTO[p.dato] || p.dato).join(' · ') || '—';
 
 function renderFlowEditor(root) {
   if (!store.isCoordinador()) { renderConfig(root); return; }
@@ -555,11 +572,12 @@ function renderFlowEditor(root) {
   function opCard(op, i) {
     const abierto = i === openIdx;
     const resumen = `${op.pasos.length} ${op.pasos.length === 1 ? 'pregunta' : 'preguntas'}`;
+    const catChip = `<span class="chip" style="font-size:.72em">🎫 ${esc(op.categoria || 'Otros')}</span>`;
     if (!abierto) return `
       <div class="flow-op card flow-op-closed">
         <div class="flow-op-head" data-toggle="${i}">
           <span class="flow-badge">${i + 1}</span>
-          <div class="grow"><b>${esc(op.titulo || '(sin título)')}</b><div class="muted-sm">${resumen}</div></div>
+          <div class="grow"><div class="row" style="gap:8px;align-items:center"><b>${esc(op.titulo || '(sin título)')}</b>${catChip}</div><div class="muted-sm">${resumen} · recoge: ${esc(resumenRecoge(op))}</div></div>
           <span class="flow-caret">▸</span>
         </div>
       </div>`;
@@ -581,14 +599,17 @@ function renderFlowEditor(root) {
       <div class="flow-op card flow-op-open">
         <div class="flow-op-head" data-toggle="${i}">
           <span class="flow-badge">${i + 1}</span>
-          <div class="grow"><b>${esc(op.titulo || '(sin título)')}</b></div>
+          <div class="grow row" style="gap:8px;align-items:center"><b>${esc(op.titulo || '(sin título)')}</b>${catChip}</div>
           <span class="flow-caret">▾</span>
         </div>
         <div class="field"><label>Título (lo que ve el cliente en el menú)</label>
-          <input class="input flow-titulo" data-op="${i}" value="${esc(op.titulo)}" placeholder="Ej: Soporte técnico 🛠️"></div>
+          <input class="input flow-titulo" data-op="${i}" value="${esc(op.titulo)}" placeholder="Ej: Problema técnico 🛠️"></div>
         <div class="field"><label>Descripción corta (debajo del título)</label>
           <input class="input flow-desc" data-op="${i}" value="${esc(op.desc)}" placeholder="Ej: Internet lento, cortes o cualquier falla."></div>
-        <div class="flow-steps-label">Preguntas que hace el bot</div>
+        <div class="field"><label>🎫 Categoría del ticket (en qué bandeja cae)</label>
+          <select class="input flow-cat" data-op="${i}">${catOptions(op.categoria || 'Otros')}</select>
+          <span class="muted-sm">La coordinación filtra los tickets por esta categoría. <b>Contratación</b> activa el flujo de factibilidad y planes.</span></div>
+        <div class="flow-steps-label">Preguntas que hace el bot <span class="muted-sm">· recoge: ${esc(resumenRecoge(op))}</span></div>
         <div class="flow-steps">${pasosHtml || '<p class="muted-sm">Sin preguntas aún.</p>'}</div>
         <button class="btn btn-sm" data-addstep data-op="${i}" style="margin-top:8px">＋ Agregar pregunta</button>
         <div class="field" style="margin-top:14px"><label>Mensaje final (al crear el ticket). <b>{num}</b> = N° de ticket.</label>
@@ -659,9 +680,10 @@ function renderFlowEditor(root) {
 
     root.querySelectorAll('.flow-titulo').forEach((el) => (el.oninput = () => { const i = +el.dataset.op; model.opciones[i].titulo = el.value; markDirty(); refreshChat(i); }));
     root.querySelectorAll('.flow-desc').forEach((el) => (el.oninput = () => { const i = +el.dataset.op; model.opciones[i].desc = el.value; markDirty(); refreshChat(i); }));
+    root.querySelectorAll('.flow-cat').forEach((el) => (el.onchange = () => { const i = +el.dataset.op; model.opciones[i].categoria = el.value; markDirty(); paint(); }));
     root.querySelectorAll('.flow-confirma').forEach((el) => (el.oninput = () => { const i = +el.dataset.op; model.opciones[i].confirma = el.value; markDirty(); refreshChat(i); }));
     root.querySelectorAll('.flow-preg').forEach((el) => (el.oninput = () => { const i = +el.dataset.op; model.opciones[i].pasos[+el.dataset.step].pregunta = el.value; markDirty(); refreshChat(i); }));
-    root.querySelectorAll('.flow-dato').forEach((el) => (el.onchange = () => { const i = +el.dataset.op; model.opciones[i].pasos[+el.dataset.step].dato = el.value; markDirty(); refreshChat(i); }));
+    root.querySelectorAll('.flow-dato').forEach((el) => (el.onchange = () => { const i = +el.dataset.op; model.opciones[i].pasos[+el.dataset.step].dato = el.value; markDirty(); paint(); }));
 
     root.querySelectorAll('[data-addstep]').forEach((b) => (b.onclick = () => { model.opciones[+b.dataset.op].pasos.push({ dato: 'nombre', pregunta: '' }); markDirty(); paint(); }));
     root.querySelectorAll('[data-delstep]').forEach((b) => (b.onclick = () => { model.opciones[+b.dataset.op].pasos.splice(+b.dataset.step, 1); markDirty(); paint(); }));
@@ -678,7 +700,7 @@ function renderFlowEditor(root) {
     }));
     root.querySelectorAll('[data-dupop]').forEach((b) => (b.onclick = () => { const i = +b.dataset.op; model.opciones.splice(i + 1, 0, JSON.parse(JSON.stringify(model.opciones[i]))); openIdx = i + 1; markDirty(); paint(); }));
     root.querySelectorAll('[data-delop]').forEach((b) => (b.onclick = () => { const i = +b.dataset.op; model.opciones.splice(i, 1); if (openIdx >= model.opciones.length) openIdx = model.opciones.length - 1; markDirty(); paint(); }));
-    root.querySelector('[data-addop]').onclick = () => { model.opciones.push({ titulo: '', categoria: '', desc: '', confirma: '✅ ¡Listo! Registramos tu solicitud con el N° *{num}*. Te contactaremos pronto. 🙌', pasos: [{ dato: 'nombre', pregunta: '¿Cuál es tu *nombre completo*?' }] }); openIdx = model.opciones.length - 1; markDirty(); paint(); };
+    root.querySelector('[data-addop]').onclick = () => { model.opciones.push({ titulo: '', categoria: 'Otros', desc: '', confirma: '✅ ¡Listo! Registramos tu solicitud con el N° *{num}*. Te contactaremos pronto. 🙌', pasos: [{ dato: 'nombre', pregunta: '¿Cuál es tu *nombre completo*?' }] }); openIdx = model.opciones.length - 1; markDirty(); paint(); };
     root.querySelector('[data-restore]').onclick = () => { if (!confirm('¿Restaurar el flujo de fábrica? Perderás los cambios.')) return; model = JSON.parse(JSON.stringify(DEFAULT_FLUJO_APP)); openIdx = 0; markDirty(); paint(); toast('Flujo restaurado. Recuerda Guardar.', 'info'); };
 
     root.querySelectorAll('[data-saveflow]').forEach((b) => (b.onclick = () => doSave()));

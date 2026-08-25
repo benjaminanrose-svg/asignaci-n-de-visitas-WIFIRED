@@ -92,33 +92,34 @@ const DEFAULT_FLUJO = {
   intro: 'Cuéntame en qué te puedo ayudar hoy.',
   opciones: [
     {
-      n: '1', titulo: 'Soporte técnico 🛠️', categoria: 'Soporte',
-      desc: 'Internet lento, cortes, sin señal o cualquier falla. Si hace falta, coordinamos una visita técnica a tu domicilio.',
+      n: '1', titulo: 'Problema técnico 🛠️', categoria: 'Soporte',
+      desc: 'Internet lento, cortes o sin señal. Coordinamos una visita si hace falta.',
       pasos: [
-        { campo: 'nombre', tipo: 'texto', pregunta: 'Lamento mucho el problema con tu servicio. 🛠️ Te ayudo enseguida.\n\nPara empezar, ¿cuál es tu *nombre completo*?' },
-        { campo: 'ubicacion', tipo: 'ubicacion', pregunta: 'Gracias. 🙌 ¿En qué *dirección* está ocurriendo el problema?\n\nEscríbela con *calle, número y sector*, o compárteme tu *ubicación*: toca el clip 📎 → *Ubicación* → *Enviar ubicación actual*.\n\n_Así el técnico sabe exactamente dónde ir si hace falta una visita._' },
-        { campo: 'mensaje', tipo: 'texto', pregunta: 'Perfecto. Ahora, por favor, cuéntame *con el mayor detalle posible qué está pasando*:\n\n• ¿Estás *sin internet*, va *lento* o hay *cortes* que van y vuelven?\n• ¿*Desde cuándo* ocurre?\n• ¿Afecta a *todos* los dispositivos o solo a algunos?\n• ¿Las *luces del router* están encendidas o alguna parpadea/está apagada?\n\n_Mientras más me cuentes, más rápido lo resolvemos._' },
+        { campo: 'nombre', tipo: 'texto', pregunta: 'Lamento el problema con tu servicio. 🛠️ Te ayudo enseguida.\n\nPara empezar, ¿cuál es tu *nombre completo*?' },
+        { campo: 'ubicacion', tipo: 'ubicacion', pregunta: 'Gracias. 🙌 ¿En qué *dirección* está ocurriendo el problema?\n\nEscríbela (*calle, número y sector*) o compárteme tu *ubicación*: toca el clip 📎 → *Ubicación* → *Enviar ubicación actual*.' },
+        { campo: 'mensaje', tipo: 'texto', pregunta: 'Perfecto. Cuéntame *qué está pasando*, con el mayor detalle posible:\n\n• ¿Estás *sin internet*, va *lento* o hay *cortes* que van y vuelven?\n• ¿*Desde cuándo* ocurre?\n• ¿Afecta a *todos* los equipos o solo a algunos?\n• ¿Las *luces del router* están encendidas, apagadas o parpadeando?\n\n_Mientras más me cuentes, más rápido lo resolvemos._' },
       ],
-      confirma: '✅ ¡Listo! Registramos tu solicitud de *soporte técnico* con el N° *{num}*.\n\nNuestro equipo revisará tu caso y, si es necesario, *coordinará una visita técnica* a tu domicilio para solucionarlo. Te contactaremos a la brevedad. 🛠️🙌',
+      confirma: '✅ ¡Listo! Registramos tu solicitud de *soporte técnico* con el N° *{num}*.\n\nNuestro equipo revisará tu caso y, si es necesario, *coordinará una visita técnica* a tu domicilio. Te contactaremos a la brevedad. 🛠️🙌',
     },
     {
-      n: '2', titulo: 'Planes y contratación 📶', categoria: 'Contratación',
-      desc: 'Conoce nuestros planes y contrata internet nuevo.',
+      n: '2', titulo: 'Contratar internet 📶', categoria: 'Contratación',
+      desc: 'Revisa cobertura y contrata un plan nuevo.',
       pasos: [
-        { campo: 'ubicacion', tipo: 'ubicacion', pregunta: '¡Qué bueno que quieras ser parte de *WIFIRED*! 📶\n\nLo primero es revisar si tenemos *cobertura* en tu sector. Para eso necesito saber dónde vives:\n\n📎 Compárteme tu *ubicación* (toca el clip → *Ubicación* → *Enviar ubicación actual*),\no escríbeme tu *dirección exacta*: calle, número, sector o parcela y alguna referencia.' },
+        { campo: 'ubicacion', tipo: 'ubicacion', pregunta: '¡Qué bueno que quieras ser parte de *WIFIRED*! 📶\n\nPrimero revisemos la *cobertura* en tu sector. Compárteme tu *ubicación* (clip 📎 → *Ubicación* → *Enviar ubicación actual*) o escríbeme tu *dirección exacta*: calle, número, sector o parcela y una referencia.' },
         { campo: 'nombre', tipo: 'texto', pregunta: '¡Perfecto! 🙌 ¿Cuál es tu *nombre completo*?' },
       ],
-      confirma: '✅ ¡Recibido! Registramos tu solicitud de *contratación* con el N° *{num}*.\n\nAhora nuestro equipo revisará la *factibilidad* (si nuestra red llega a tu sector). En cuanto la confirmemos, te enviaremos los *planes disponibles* y coordinaremos la *instalación*. 📶\n\nTe contactaremos muy pronto. ¡Gracias por preferirnos!',
+      confirma: '✅ ¡Recibido! Registramos tu solicitud de *contratación* con el N° *{num}*.\n\nAhora revisaremos la *factibilidad* (si nuestra red llega a tu sector). En cuanto la confirmemos, te enviaremos los *planes disponibles* y coordinaremos la *instalación*. 📶\n\nTe contactaremos muy pronto. ¡Gracias por preferirnos!',
     },
     {
-      n: '3', titulo: 'Cancelar servicio / retiro de equipos 📦', categoria: 'Retiro',
-      desc: 'Solicita dar de baja tu servicio y coordinar el retiro de los equipos.',
+      n: '3', titulo: 'Dar de baja / Retiro de equipos 📦', categoria: 'Retiro',
+      desc: 'Da de baja tu servicio y coordina el retiro de los equipos.',
       pasos: [
-        { campo: 'nombre', tipo: 'texto', pregunta: 'Lamentamos que quieras irte. 😔 Te ayudo a gestionar la *baja* y el *retiro de los equipos*.\n\nPara empezar, ¿cuál es tu *nombre completo* (titular del servicio)?' },
-        { campo: 'ubicacion', tipo: 'ubicacion', pregunta: 'Gracias. 🙌 ¿En qué *dirección* están instalados los equipos?\n\nEscríbela con *calle, número y sector*, o compárteme tu *ubicación*: toca el clip 📎 → *Ubicación* → *Enviar ubicación actual*.\n\n_Así coordinamos el retiro en el lugar correcto._' },
-        { campo: 'mensaje', tipo: 'texto', pregunta: 'Entendido. Por último, cuéntame:\n\n• ¿*Motivo* de la cancelación?\n• ¿Desde qué *fecha* quieres dar de baja?\n• ¿Qué *días u horarios* te acomodan para el retiro?\n\n_Con esto coordinamos internamente el retiro de los equipos._' },
+        { campo: 'nombre', tipo: 'texto', pregunta: 'Lamentamos que quieras irte. 😔 Te ayudo a gestionar la *baja* y el *retiro de los equipos*.\n\n¿Cuál es tu *nombre completo* (titular del servicio)?' },
+        { campo: 'rut', tipo: 'rut', pregunta: 'Gracias. Para ubicar tu cuenta, ¿cuál es tu *RUT*? (ej: 12.345.678-9)' },
+        { campo: 'ubicacion', tipo: 'ubicacion', pregunta: '¿En qué *dirección* están instalados los equipos?\n\nEscríbela (*calle, número y sector*) o compárteme tu *ubicación* 📎.' },
+        { campo: 'mensaje', tipo: 'texto', pregunta: 'Por último, cuéntame:\n\n• ¿*Motivo* de la baja?\n• ¿Desde qué *fecha* quieres darla?\n• ¿Qué *días u horarios* te acomodan para el retiro?' },
       ],
-      confirma: '✅ Registramos tu solicitud de *cancelación y retiro de equipos* con el N° *{num}*.\n\nNuestro equipo *coordinará internamente el retiro* y te contactará para agendar día y hora. 📦\n\nGracias por haber sido parte de *WIFIRED*. 🙌',
+      confirma: '✅ Registramos tu solicitud de *baja y retiro de equipos* con el N° *{num}*.\n\nCoordinaremos internamente el retiro y te contactaremos para agendar día y hora. 📦\n\nGracias por haber sido parte de *WIFIRED*. 🙌',
     },
   ],
 };
@@ -650,6 +651,8 @@ async function handleStep(id, sess, info) {
     direccion: esCoords ? '' : ubic,
     ubicacion: ubic,
     mensaje: sess.data.mensaje || '',
+    rut: sess.data.rut ? formateaRut(sess.data.rut) : '',
+    email: sess.data.correo || '',
   };
   try {
     const t = await crearTicket(payload);
