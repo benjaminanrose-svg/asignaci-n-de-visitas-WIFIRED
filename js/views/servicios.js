@@ -206,7 +206,7 @@ export async function broadcastModal() {
         <textarea class="textarea" data-msg placeholder="Hola {nombre}, te saludamos de WIFIRED…" style="min-height:130px"></textarea>
         <span class="muted-sm">Puedes usar <b>{nombre}</b> y se reemplaza por el nombre de cada cliente.</span>
       </div>
-      <p class="muted-sm">⏱️ Se envían <b>de a uno con pausa</b> (15–45 seg entre cada uno) para no arriesgar el número. Puede tardar; el bot lo hace en segundo plano.</p>
+      <p class="muted-sm">⏱️ Se envían <b>de a uno con pausa</b> (8–20 seg entre cada uno) para no arriesgar el número. Puede tardar; el bot lo hace en segundo plano.</p>
     </div>
     <div class="modal-foot">
       <div class="grow"></div>
@@ -253,7 +253,7 @@ export async function broadcastModal() {
     const n = contar();
     if (!n) { toast('No hay clientes con teléfono en esa selección', 'info'); return; }
     const dest = nodo === '__todos__' ? 'TODOS los nodos' : `nodo "${nodo}"`;
-    if (!confirm(`¿Enviar este mensaje a ${n} clientes de ${dest}?\n\nSe envían despacio (15–45 seg c/u) para cuidar el número.`)) return;
+    if (!confirm(`¿Enviar este mensaje a ${n} clientes de ${dest}?\n\nSe envían despacio (8–20 seg c/u) para cuidar el número.`)) return;
     const btn = box.querySelector('[data-go]'); btn.disabled = true; btn.textContent = 'Encolando…';
     try {
       const r = await store.broadcast({ texto, nodo });

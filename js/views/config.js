@@ -390,7 +390,7 @@ function renderBotConfig(root) {
 
       <div class="card cfg-card">
         <h3 class="cfg-title">✉️ Envío masivo de WhatsApp</h3>
-        <p class="muted-sm">Envía un mensaje a todos los clientes de un <b>nodo</b> (o a todos). El bot los manda de a uno con pausa (15–45 seg) para no arriesgar el número.</p>
+        <p class="muted-sm">Envía un mensaje a todos los clientes de un <b>nodo</b> (o a todos). El bot los manda de a uno con pausa (8–20 seg) para no arriesgar el número.</p>
         <button class="btn btn-primary" data-openbroadcast style="margin-top:12px">✉️ Redactar envío masivo →</button>
       </div>
 

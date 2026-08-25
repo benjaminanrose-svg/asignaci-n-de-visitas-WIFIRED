@@ -675,7 +675,7 @@ async function finalizarContrato(id, sess, info) {
 let poolingOut = false;
 // Ritmo controlado para envíos masivos (anti-baneo): 1 por ciclo, con pausa
 // aleatoria entre cada uno y un tope diario. Los mensajes normales no se frenan.
-const BC_MIN_MS = 15000, BC_MAX_MS = 45000, BC_MAX_DIA = 400;
+const BC_MIN_MS = 8000, BC_MAX_MS = 20000, BC_MAX_DIA = 400;
 let bcNext = 0, bcHoy = 0, bcDia = '';
 async function pollOutbox() {
   if (poolingOut || !sock) return;
