@@ -515,6 +515,20 @@ api.post('/servicios/broadcast', auth, soloCoordinador, wrap(async (req, res) =>
   res.json({ encolados, sinTelefono });
 }));
 
+// Cuántos mensajes de envío masivo están pendientes en la cola. Sólo coordinación.
+api.get('/servicios/broadcast/pendientes', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const n = typeof s.countOutboxPending === 'function' ? await s.countOutboxPending('broadcast') : 0;
+  res.json({ pendientes: n });
+}));
+
+// Vaciar la cola de envío masivo (cancela los broadcast pendientes). Sólo coordinación.
+api.post('/servicios/broadcast/cancelar', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const cancelados = typeof s.cancelOutboxPending === 'function' ? await s.cancelOutboxPending('broadcast') : 0;
+  res.json({ cancelados });
+}));
+
 // Cortar o activar el internet del cliente en el router MikroTik
 api.post('/servicios/:id/:accion(cortar|activar)', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();

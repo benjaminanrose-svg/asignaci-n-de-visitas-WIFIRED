@@ -198,6 +198,10 @@ export async function broadcastModal() {
         </select>
       </div>
       <div class="muted-sm" data-count style="margin:-4px 0 10px"></div>
+      <div data-pend style="display:none;margin:0 0 10px;padding:8px 10px;border-radius:8px;background:#fff4e5;color:#7a4d00;font-size:.9em">
+        ⚠️ Hay <b data-pendn>0</b> mensajes esperando en la cola sin enviarse.
+        <button class="btn" data-vaciar style="margin-left:8px;padding:2px 10px">Vaciar cola</button>
+      </div>
       <div class="field"><label>Mensaje</label>
         <textarea class="textarea" data-msg placeholder="Hola {nombre}, te saludamos de WIFIRED…" style="min-height:130px"></textarea>
         <span class="muted-sm">Puedes usar <b>{nombre}</b> y se reemplaza por el nombre de cada cliente.</span>
@@ -222,6 +226,25 @@ export async function broadcastModal() {
     return n;
   };
   sel.onchange = contar; contar();
+
+  // Cola pendiente: avisa si quedaron mensajes sin enviar y permite vaciarla.
+  const pendBox = box.querySelector('[data-pend]');
+  const pendN = box.querySelector('[data-pendn]');
+  const revisarPend = async () => {
+    try {
+      const r = await store.broadcastPendientes();
+      if (r && r.pendientes > 0) { pendN.textContent = r.pendientes; pendBox.style.display = ''; }
+      else pendBox.style.display = 'none';
+    } catch (e) { /* silencioso */ }
+  };
+  revisarPend();
+  box.querySelector('[data-vaciar]').onclick = async () => {
+    if (!confirm('¿Vaciar la cola? Se cancelan los mensajes que aún no se han enviado.')) return;
+    const b = box.querySelector('[data-vaciar]'); b.disabled = true; b.textContent = 'Vaciando…';
+    try { const r = await store.broadcastCancelar(); toast(`🗑️ Cola vaciada (${r.cancelados} cancelados).`); }
+    catch (e) { toast(e.message || 'No se pudo vaciar', 'info'); }
+    b.disabled = false; b.textContent = 'Vaciar cola'; revisarPend();
+  };
 
   box.querySelector('[data-go]').onclick = async () => {
     const texto = box.querySelector('[data-msg]').value.trim();

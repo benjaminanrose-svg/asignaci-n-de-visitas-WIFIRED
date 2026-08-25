@@ -311,6 +311,8 @@ function memoryStore() {
       outbox.push(o); return o;
     },
     async listOutboxPending() { return outbox.filter((o) => o.estado === 'pendiente').map((o) => ({ ...o })); },
+    async countOutboxPending(tipo) { return outbox.filter((o) => o.estado === 'pendiente' && (!tipo || o.tipo === tipo)).length; },
+    async cancelOutboxPending(tipo) { let n = 0; for (const o of outbox) { if (o.estado === 'pendiente' && (!tipo || o.tipo === tipo)) { o.estado = 'cancelado'; n++; } } return n; },
     async markOutboxSent(id) { const o = outbox.find((x) => x.id == id); if (o) { o.estado = 'enviado'; o.sent_at = new Date().toISOString(); } },
     async setPin(id, pin) { const v = visitas.find((x) => x.id == id); if (v) { v.pin = pin; v.pin_ts = pin ? Date.now() : 0; } },
     async getPin(id) { const v = visitas.find((x) => x.id == id); return v ? { pin: v.pin || '', ts: v.pin_ts || 0 } : { pin: '', ts: 0 }; },
@@ -686,6 +688,18 @@ function pgStore(url) {
     async listOutboxPending() {
       const { rows } = await pool.query(`SELECT id, telefono, texto, tipo, estado, created_at FROM bot_outbox WHERE estado='pendiente' ORDER BY id ASC LIMIT 50`);
       return rows;
+    },
+    async countOutboxPending(tipo) {
+      const { rows } = tipo
+        ? await pool.query(`SELECT COUNT(*)::int AS n FROM bot_outbox WHERE estado='pendiente' AND tipo=$1`, [tipo])
+        : await pool.query(`SELECT COUNT(*)::int AS n FROM bot_outbox WHERE estado='pendiente'`);
+      return rows[0].n;
+    },
+    async cancelOutboxPending(tipo) {
+      const { rowCount } = tipo
+        ? await pool.query(`UPDATE bot_outbox SET estado='cancelado' WHERE estado='pendiente' AND tipo=$1`, [tipo])
+        : await pool.query(`UPDATE bot_outbox SET estado='cancelado' WHERE estado='pendiente'`);
+      return rowCount;
     },
     async markOutboxSent(id) { await pool.query(`UPDATE bot_outbox SET estado='enviado', sent_at=now() WHERE id=$1`, [id]); },
     async setPin(id, pin) { await pool.query(`UPDATE visitas SET pin=$1, pin_ts = CASE WHEN $1 = '' THEN NULL ELSE now() END WHERE id=$2`, [pin, id]); },
