@@ -308,14 +308,29 @@ export function clientCardModal(v, opts = {}) {
 
   // Datos de identidad: se toma el más reciente que tenga cada campo
   const first = (getter) => { for (const x of visitas) { const val = getter(x); if (val) return val; } return ''; };
-  const rut = first((x) => x.rut);
-  const fono = first((x) => x.telefono);
-  const email = first((x) => x.email);
-  const dir = first((x) => x.direccion);
+  const svc0 = opts.servicio || {};
+  const rut = first((x) => x.rut) || svc0.rut || '';
+  const fono = first((x) => x.telefono) || svc0.telefono || '';
+  const email = first((x) => x.email) || svc0.email || '';
+  const dir = first((x) => x.direccion) || svc0.direccion || '';
   const ident = [rut ? '🪪 ' + esc(formatRut(rut)) : '', fono ? '📞 ' + esc(fono) : '', email ? '✉️ ' + esc(email) : '']
     .filter(Boolean).join('  ·  ');
 
   const pill = (cls, num, label) => `<div class="ds-pill ${cls}"><span class="ds-dot"></span><span class="ds-n">${num}</span><span class="ds-l">${esc(label)}</span></div>`;
+
+  // Bloque de servicio de internet (si el cliente tiene uno vinculado)
+  const svc = opts.servicio;
+  const svcBlock = svc ? `
+    <div class="hist-head" style="margin:14px 0 6px"><span class="ev-title">📡 Servicio de internet</span></div>
+    <div class="detail-list" style="margin-bottom:6px">
+      <div class="detail-row"><span class="dl-k">Plan</span><span class="dl-v">${esc(svc.plan || '—')}</span></div>
+      <div class="detail-row"><span class="dl-k">Nodo</span><span class="dl-v">${svc.nodo ? '📡 ' + esc(svc.nodo) : '—'}</span></div>
+      <div class="detail-row"><span class="dl-k">IP</span><span class="dl-v">${esc(svc.ip || '—')}</span></div>
+      <div class="detail-row"><span class="dl-k">Usuario PPPoE</span><span class="dl-v">${esc(svc.pppoe_user || '—')}</span></div>
+      <div class="detail-row"><span class="dl-k">Día de pago</span><span class="dl-v">${esc(svc.dia_pago || '—')}</span></div>
+      <div class="detail-row"><span class="dl-k">Estado</span><span class="dl-v">${svc.estado === 'cortado' ? '⛔ Cortado' : '● Activo'}</span></div>
+    </div>
+    ${opts.onEditServicio ? '<button class="btn btn-sm btn-primary" data-editsvc style="margin-bottom:6px">✎ Editar servicio</button>' : ''}` : '';
 
   const row = (x) => {
     const tt = parseTecnico(x.tecnico);
@@ -346,11 +361,14 @@ export function clientCardModal(v, opts = {}) {
         ${pill('ds-repr', canc, 'canceladas')}
       </div>
       ${dir ? `<div class="muted-sm" style="margin-bottom:12px">📍 <a href="${mapsHref(dir)}" target="_blank" rel="noopener" style="color:var(--brand-500)">${esc(dir)} · ver mapa ›</a></div>` : ''}
+      ${svcBlock}
       <div class="hist-head" style="margin-bottom:6px"><span class="ev-title">🗂 Todas sus visitas (${n})</span></div>
-      <div class="kpi-vlist">${visitas.map(row).join('')}</div>
+      <div class="kpi-vlist">${n ? visitas.map(row).join('') : '<div class="muted-sm" style="padding:8px 2px">Sin visitas registradas aún.</div>'}</div>
     </div>
-    <div class="modal-foot"><span class="muted-sm">Toca una visita para ver su detalle</span><div class="grow"></div><button class="btn" data-close>Cerrar</button></div>`;
+    <div class="modal-foot"><span class="muted-sm">${n ? 'Toca una visita para ver su detalle' : ''}</span><div class="grow"></div><button class="btn" data-close>Cerrar</button></div>`;
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+  const editSvcBtn = node.querySelector('[data-editsvc]');
+  if (editSvcBtn) editSvcBtn.onclick = () => { closeModal(); opts.onEditServicio(svc); };
   node.querySelectorAll('[data-open]').forEach((el) => (el.onclick = () => {
     const x = store.byUid(el.dataset.open);
     if (!x) return;

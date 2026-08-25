@@ -105,9 +105,11 @@ async function accion(uid, acc, host, root) {
   paint(host, root);
 }
 
-function formModal(s, root) {
+/** Formulario de servicio. opts.onSaved(out)/opts.onDeleted() reemplazan el
+ *  refresco por defecto (útil al abrirlo desde la ficha de Clientes). */
+function formModal(s, root, opts = {}) {
   const nuevo = !s;
-  const v = s || { nombre: '', rut: '', telefono: '', direccion: '', email: '', plan: '', pppoe_user: '', notas: '' };
+  const v = s || { nombre: '', rut: '', telefono: '', direccion: '', email: '', plan: '', pppoe_user: '', notas: '', nodo: '', ip: '', dia_pago: '' };
   const box = document.createElement('div');
   box.innerHTML = `
     <div class="modal-head"><h3>${nuevo ? 'Nuevo servicio' : 'Editar servicio'}</h3><button class="icon-btn" data-x>✕</button></div>
@@ -122,8 +124,15 @@ function formModal(s, root) {
         <div class="field"><label>Plan</label><input class="input" data-f="plan" value="${esc(v.plan)}" placeholder="Ej: Full 940 Mbps"></div>
         <div class="field"><label>Correo</label><input class="input" data-f="email" value="${esc(v.email)}" placeholder="correo@…"></div>
       </div>
-      <div class="field"><label>Usuario PPPoE * <span class="muted-sm">(el mismo que tiene en el router MikroTik)</span></label>
-        <input class="input" data-f="pppoe_user" value="${esc(v.pppoe_user)}" placeholder="Ej: juanperez" autocapitalize="none"></div>
+      <div class="form-grid">
+        <div class="field"><label>Nodo</label><input class="input" data-f="nodo" value="${esc(v.nodo || '')}" placeholder="Ej: Nodo Culipran"></div>
+        <div class="field"><label>Día de pago</label><input class="input" data-f="dia_pago" value="${esc(v.dia_pago || '')}" placeholder="Ej: 5"></div>
+      </div>
+      <div class="form-grid">
+        <div class="field"><label>Usuario PPPoE <span class="muted-sm">(del router)</span></label>
+          <input class="input" data-f="pppoe_user" value="${esc(v.pppoe_user)}" placeholder="Ej: juanperez" autocapitalize="none"></div>
+        <div class="field"><label>IP</label><input class="input" data-f="ip" value="${esc(v.ip || '')}" placeholder="Ej: 10.10.32.86"></div>
+      </div>
       <div class="field"><label>Notas</label><textarea class="textarea" data-f="notas" placeholder="Observaciones internas…">${esc(v.notas)}</textarea></div>
     </div>
     <div class="modal-foot">
@@ -147,7 +156,8 @@ function formModal(s, root) {
       if (nuevo) local.servicios.push(out);
       else { const i = local.servicios.findIndex((x) => x._uid === s._uid); if (i >= 0) local.servicios[i] = out; }
       toast(nuevo ? 'Servicio creado ✓' : 'Guardado ✓');
-      cerrar(); renderServicios(root);
+      cerrar();
+      if (opts.onSaved) opts.onSaved(out); else renderServicios(root);
     } catch (e) { toast(e.message || 'No se pudo guardar', 'info'); btn.disabled = false; }
   };
 
@@ -156,9 +166,15 @@ function formModal(s, root) {
     try {
       await store.deleteServicio(s._uid);
       local.servicios = local.servicios.filter((x) => x._uid !== s._uid);
-      toast('Servicio eliminado ✓'); cerrar(); renderServicios(root);
+      toast('Servicio eliminado ✓'); cerrar();
+      if (opts.onDeleted) opts.onDeleted(); else renderServicios(root);
     } catch (e) { toast(e.message || 'No se pudo eliminar', 'info'); }
   };
+}
+
+/** Abre el formulario de un servicio desde otra vista (ej: ficha de Clientes). */
+export function editServicioModal(servicio, onSaved) {
+  formModal(servicio, null, { onSaved: (out) => onSaved && onSaved(out), onDeleted: () => onSaved && onSaved(null) });
 }
 
 // ---------- Importar (CSV de MikroWisp o plantilla propia) ----------

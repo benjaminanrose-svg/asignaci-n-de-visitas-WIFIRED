@@ -7,8 +7,9 @@
 // ============================================================
 import * as store from '../store.js';
 import { esc, parseTecnico, fmtDateShort, limpiaRut, normalizaFono, formatRut } from '../util.js';
-import { clientAvatar, clientCardModal, workOrderModal, openModal, closeModal } from '../components.js';
+import { clientAvatar, clientCardModal, workOrderModal } from '../components.js';
 import { visitFormModal } from '../form.js';
+import { editServicioModal } from './servicios.js';
 
 const local = { q: '', orden: 'reciente' };
 
@@ -152,9 +153,7 @@ export function renderClientes(root) {
 
     host.querySelectorAll('[data-key]').forEach((el) => (el.onclick = () => {
       const c = list.find((x) => x.key === el.dataset.key);
-      if (!c) return;
-      if (c.rep) abrirFicha(c.rep);
-      else abrirServicioInfo(c);
+      if (c) abrirFicha(c, root);
     }));
   }
 
@@ -163,41 +162,28 @@ export function renderClientes(root) {
   cargarServicios().then(() => paint());
 }
 
-/** Ficha simple para clientes que solo existen como servicio (importados, sin visitas). */
-function abrirServicioInfo(c) {
-  const s = c.servicio || {};
-  const fila = (etq, val) => val ? `<div class="cell-sub" style="margin:2px 0">${etq}: <b>${esc(val)}</b></div>` : '';
-  const estado = s.estado === 'cortado'
-    ? '<span class="tag" style="background:color-mix(in srgb,#ef4444 16%,transparent);border-color:color-mix(in srgb,#ef4444 40%,var(--border));color:#dc2626">Cortado</span>'
-    : '<span class="tag" style="background:color-mix(in srgb,#10b981 16%,transparent);border-color:color-mix(in srgb,#10b981 40%,var(--border));color:#0f9d68">Activo</span>';
-  const box = document.createElement('div');
-  box.innerHTML = `
-    <div class="modal-head"><h3>${esc(c.nombre)}</h3><button class="icon-btn" data-x>✕</button></div>
-    <div class="modal-body">
-      <p class="muted-sm">Cliente con servicio de internet (aún sin visitas registradas).</p>
-      ${fila('RUT', s.rut ? formatRut(s.rut) : '')}
-      ${fila('Teléfono', s.telefono)}
-      ${fila('Dirección', s.direccion)}
-      ${fila('Plan', s.plan)}
-      ${fila('Nodo', s.nodo)}
-      <div class="cell-sub" style="margin:8px 0">Estado del servicio: ${estado}</div>
-      <p class="muted-sm">La IP y el usuario PPPoE se gestionan en la sección <b>Servicios</b>.</p>
-    </div>
-    <div class="modal-foot">
-      <div class="grow"></div>
-      <button class="btn" data-x2>Cerrar</button>
-      <button class="btn btn-primary" data-svc>Ver en Servicios</button>
-    </div>`;
-  openModal(box, 'sm');
-  box.querySelector('[data-x]').onclick = () => closeModal();
-  box.querySelector('[data-x2]').onclick = () => closeModal();
-  box.querySelector('[data-svc]').onclick = () => { closeModal(); location.hash = '#/servicios'; };
+/** Visita "fantasma" (solo en memoria) para abrir la misma ficha cuando el
+ *  cliente solo existe como servicio (importado, sin visitas reales). */
+function pseudoVisita(s) {
+  s = s || {};
+  return {
+    _uid: 'svc-' + (s._uid || ''), id: '', cliente: s.nombre || 'Sin nombre',
+    rut: s.rut || '', telefono: s.telefono || '', email: s.email || '', direccion: s.direccion || '',
+    tecnico: '', estado: '', tipo: '', fecha: '', nodo: s.nodo || '',
+  };
 }
 
-function abrirFicha(rep) {
+function abrirFicha(c, root) {
+  const rep = c.rep || pseudoVisita(c.servicio);
   const opts = store.isCoordinador()
     ? { onEdit: (x) => visitFormModal(x), onOrder: (x) => workOrderModal(x, store.company) }
     : { onOrder: (x) => workOrderModal(x, store.company), readOnly: true };
+  if (c.servicio) {
+    opts.servicio = c.servicio;
+    if (store.isCoordinador()) {
+      opts.onEditServicio = (s) => editServicioModal(s, () => { svcCache.ts = 0; renderClientes(root); });
+    }
+  }
   clientCardModal(rep, opts);
 }
 
