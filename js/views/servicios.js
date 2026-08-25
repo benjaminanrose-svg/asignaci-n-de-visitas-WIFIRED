@@ -206,7 +206,11 @@ export async function broadcastModal() {
         <textarea class="textarea" data-msg placeholder="Hola {nombre}, te saludamos de WIFIRED…" style="min-height:130px"></textarea>
         <span class="muted-sm">Puedes usar <b>{nombre}</b> y se reemplaza por el nombre de cada cliente.</span>
       </div>
-      <p class="muted-sm">⏱️ Se envían <b>de a uno con pausa</b> (8–20 seg entre cada uno) para no arriesgar el número. Puede tardar; el bot lo hace en segundo plano.</p>
+      <label class="row" style="gap:8px;align-items:center;cursor:pointer;margin:2px 0 8px">
+        <input type="checkbox" data-optin>
+        <span class="muted-sm">Enviar <b>solo a quienes ya me escribieron</b> (más seguro; actívalo cuando tengas una lista grande).</span>
+      </label>
+      <p class="muted-sm">🛡️ Nunca se envía a quien respondió <b>BAJA</b>. ⏱️ Se envían <b>de a uno con pausa</b> (8–20 seg) para no arriesgar el número; el bot lo hace en segundo plano.</p>
     </div>
     <div class="modal-foot">
       <div class="grow"></div>
@@ -254,10 +258,14 @@ export async function broadcastModal() {
     if (!n) { toast('No hay clientes con teléfono en esa selección', 'info'); return; }
     const dest = nodo === '__todos__' ? 'TODOS los nodos' : `nodo "${nodo}"`;
     if (!confirm(`¿Enviar este mensaje a ${n} clientes de ${dest}?\n\nSe envían despacio (8–20 seg c/u) para cuidar el número.`)) return;
+    const soloOptIn = box.querySelector('[data-optin]').checked;
     const btn = box.querySelector('[data-go]'); btn.disabled = true; btn.textContent = 'Encolando…';
     try {
-      const r = await store.broadcast({ texto, nodo });
-      toast(`✅ ${r.encolados} mensajes en cola. El bot los enviará de a poco.`);
+      const r = await store.broadcast({ texto, nodo, soloOptIn });
+      const extra = [];
+      if (r.omitidosBaja) extra.push(`${r.omitidosBaja} en BAJA`);
+      if (r.sinOptIn) extra.push(`${r.sinOptIn} sin opt-in`);
+      toast(`✅ ${r.encolados} en cola${extra.length ? ' (omitidos: ' + extra.join(', ') + ')' : ''}. El bot los enviará de a poco.`);
       cerrar();
     } catch (e) { toast(e.message || 'No se pudo enviar', 'info'); btn.disabled = false; btn.textContent = 'Enviar'; }
   };

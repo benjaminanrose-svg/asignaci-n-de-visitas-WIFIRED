@@ -221,6 +221,7 @@ function memoryStore() {
   let kSeq = 0;
   let outbox = []; // mensajes automáticos que el bot debe enviar por WhatsApp
   let oSeq = 0;
+  const contactos = new Map(); // tel(9 díg) -> { telefono, visto, baja, ts } (opt-in/opt-out)
   let servicios = []; // perfiles de cliente con cuenta PPPoE
   let sSeq = 0;
 
@@ -319,6 +320,14 @@ function memoryStore() {
     async countOutboxPending(tipo) { return outbox.filter((o) => o.estado === 'pendiente' && (!tipo || o.tipo === tipo)).length; },
     async cancelOutboxPending(tipo) { let n = 0; for (const o of outbox) { if (o.estado === 'pendiente' && (!tipo || o.tipo === tipo)) { o.estado = 'cancelado'; n++; } } return n; },
     async markOutboxSent(id) { const o = outbox.find((x) => x.id == id); if (o) { o.estado = 'enviado'; o.sent_at = new Date().toISOString(); } },
+    async marcarContacto(telefono, baja) {
+      const tel = String(telefono || '').replace(/\D/g, '').slice(-9); if (!tel) return;
+      const c = contactos.get(tel) || { telefono: tel, visto: false, baja: false };
+      c.visto = true;
+      if (baja === true) c.baja = true; else if (baja === false) c.baja = false;
+      c.ts = Date.now(); contactos.set(tel, c);
+    },
+    async listContactos() { return [...contactos.values()]; },
     async setPin(id, pin) { const v = visitas.find((x) => x.id == id); if (v) { v.pin = pin; v.pin_ts = pin ? Date.now() : 0; } },
     async getPin(id) { const v = visitas.find((x) => x.id == id); return v ? { pin: v.pin || '', ts: v.pin_ts || 0 } : { pin: '', ts: 0 }; },
     async listServicios() { return servicios.slice().sort((a, b) => b.id - a.id).map(outS); },
@@ -495,6 +504,13 @@ function pgStore(url) {
           sent_at TIMESTAMPTZ
         );`);
       await pool.query(`ALTER TABLE bot_outbox ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT '';`);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS bot_contactos (
+          telefono TEXT PRIMARY KEY,
+          visto BOOLEAN DEFAULT false,
+          baja BOOLEAN DEFAULT false,
+          updated_at TIMESTAMPTZ DEFAULT now()
+        );`);
       await pool.query(`
         CREATE TABLE IF NOT EXISTS servicios (
           id SERIAL PRIMARY KEY,
@@ -696,6 +712,22 @@ function pgStore(url) {
       const { rows } = await pool.query(
         `INSERT INTO bot_outbox (telefono, texto, tipo, estado) VALUES ($1,$2,$3,'pendiente') RETURNING *`, [telefono || '', texto || '', tipo || '']);
       return rows[0];
+    },
+    async marcarContacto(telefono, baja) {
+      const tel = String(telefono || '').replace(/\D/g, '').slice(-9); if (!tel) return;
+      if (baja === true || baja === false) {
+        await pool.query(
+          `INSERT INTO bot_contactos (telefono, visto, baja, updated_at) VALUES ($1, true, $2, now())
+           ON CONFLICT (telefono) DO UPDATE SET visto=true, baja=$2, updated_at=now()`, [tel, baja]);
+      } else {
+        await pool.query(
+          `INSERT INTO bot_contactos (telefono, visto, updated_at) VALUES ($1, true, now())
+           ON CONFLICT (telefono) DO UPDATE SET visto=true, updated_at=now()`, [tel]);
+      }
+    },
+    async listContactos() {
+      const { rows } = await pool.query(`SELECT telefono, visto, baja FROM bot_contactos`);
+      return rows;
     },
     async listOutboxPending() {
       const { rows } = await pool.query(`SELECT id, telefono, texto, tipo, estado, created_at FROM bot_outbox WHERE estado='pendiente' ORDER BY id ASC LIMIT 50`);

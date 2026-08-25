@@ -499,20 +499,27 @@ api.post('/servicios/broadcast', auth, soloCoordinador, wrap(async (req, res) =>
   const s = await getStore();
   const texto = String((req.body && req.body.texto) || '').trim();
   const nodo = String((req.body && req.body.nodo) || '').trim();
+  const soloOptIn = !!(req.body && req.body.soloOptIn); // C: solo a quienes ya escribieron
   if (!texto) return res.status(400).json({ error: 'Escribe el mensaje a enviar' });
   const servicios = await s.listServicios();
   const norm = (t) => (t || '').replace(/\D/g, '').slice(-9);
-  const seen = new Set(); let encolados = 0, sinTelefono = 0;
+  // Opt-out (A) siempre: nunca a quien dijo BAJA. Opt-in (C) opcional.
+  const contactos = typeof s.listContactos === 'function' ? await s.listContactos() : [];
+  const baja = new Set(), optin = new Set();
+  for (const c of contactos) { const t = norm(c.telefono); if (c.baja) baja.add(t); if (c.visto) optin.add(t); }
+  const seen = new Set(); let encolados = 0, sinTelefono = 0, omitidosBaja = 0, sinOptIn = 0;
   for (const sv of servicios) {
     if (nodo && nodo !== '__todos__' && (sv.nodo || '') !== nodo) continue;
     const tel = norm(sv.telefono);
     if (tel.length !== 9) { sinTelefono++; continue; }
     if (seen.has(tel)) continue; seen.add(tel);
+    if (baja.has(tel)) { omitidosBaja++; continue; }          // A: pidió BAJA
+    if (soloOptIn && !optin.has(tel)) { sinOptIn++; continue; } // C: no ha escrito
     const msg = texto.replace(/\{nombre\}/gi, (sv.nombre || '').trim().split(/\s+/)[0] || '');
     await s.addOutbox(tel, msg, 'broadcast');
     encolados++;
   }
-  res.json({ encolados, sinTelefono });
+  res.json({ encolados, sinTelefono, omitidosBaja, sinOptIn });
 }));
 
 // Cuántos mensajes de envío masivo están pendientes en la cola. Sólo coordinación.
@@ -755,6 +762,15 @@ api.get('/bot/outbox', requireBotKey, wrap(async (req, res) => {
 api.post('/bot/outbox/:id/sent', requireBotKey, wrap(async (req, res) => {
   const s = await getStore();
   if (typeof s.markOutboxSent === 'function') await s.markOutboxSent(req.params.id);
+  res.json({ ok: true });
+}));
+
+// El bot avisa que un número le escribió (opt-in) o pidió BAJA/ALTA (opt-out).
+api.post('/bot/contacto', requireBotKey, wrap(async (req, res) => {
+  const s = await getStore();
+  const tel = String((req.body && req.body.telefono) || '');
+  const baja = (req.body && typeof req.body.baja === 'boolean') ? req.body.baja : undefined;
+  if (tel && typeof s.marcarContacto === 'function') await s.marcarContacto(tel, baja);
   res.json({ ok: true });
 }));
 

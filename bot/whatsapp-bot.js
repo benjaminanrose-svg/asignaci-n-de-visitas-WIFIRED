@@ -463,7 +463,22 @@ async function onMessage(m) {
   if (h) handoff.delete(id);
 
   const text = info.body;
-  const low = text.toLowerCase();
+  const low = text.toLowerCase().trim();
+
+  // --- Opt-in / Opt-out (anti-bloqueo, siempre activo aunque esté en prueba) ---
+  // Nos escribió → queda como "opt-in" (autoriza recibir comunicados).
+  // Responde BAJA/STOP → no recibe más masivos.  ALTA → vuelve a recibir.
+  if (info.telefono) {
+    if (low === 'baja' || low === 'stop' || low === 'no molestar') {
+      api('/api/bot/contacto', { method: 'POST', body: JSON.stringify({ telefono: info.telefono, baja: true }) }).catch(() => {});
+      return botSend(id, '✅ Listo, no te enviaremos más comunicados masivos.\n\nEscribe *ALTA* cuando quieras volver a recibirlos.');
+    }
+    if (low === 'alta') {
+      api('/api/bot/contacto', { method: 'POST', body: JSON.stringify({ telefono: info.telefono, baja: false }) }).catch(() => {});
+      return botSend(id, '✅ Listo, volverás a recibir nuestros comunicados. 🙌');
+    }
+    api('/api/bot/contacto', { method: 'POST', body: JSON.stringify({ telefono: info.telefono }) }).catch(() => {});
+  }
 
   // Modo prueba: solo atendemos a quien escriba la palabra clave; el resto se ignora.
   if (modoPruebaActivo()) {
