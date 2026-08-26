@@ -252,6 +252,10 @@ function memoryStore() {
     async saveConfig(patch) { return saveConfigWith(async (k) => settings[k] ?? null, async (k, v) => { settings[k] = v; }, patch); },
     async getUserByUsername(u) { return users.find((x) => x.username === u) || null; },
     async getUserById(id) { return users.find((x) => x.id == id) || null; },
+    async setPassword(userId, newPlain) {
+      const u = users.find((x) => x.id == userId); if (!u) return false;
+      u.pass_plain = String(newPlain); u.pass = hashPassword(u.pass_plain); return true;
+    },
     async getTecnicoById(id) { const t = tecnicos.find((x) => x.id == id); return t ? outT(t) : null; },
     async listTecnicos() { return tecnicos.map(outT); },
     async addTecnico(d) {
@@ -580,6 +584,11 @@ function pgStore(url) {
     },
     async getUserByUsername(u) { const { rows } = await pool.query('SELECT * FROM usuarios WHERE username=$1', [u]); return outU(rows[0]); },
     async getUserById(id) { const { rows } = await pool.query('SELECT * FROM usuarios WHERE id=$1', [id]); return outU(rows[0]); },
+    async setPassword(userId, newPlain) {
+      const plain = String(newPlain);
+      const r = await pool.query('UPDATE usuarios SET pass=$1, pass_plain=$2 WHERE id=$3', [hashPassword(plain), plain, userId]);
+      return r.rowCount > 0;
+    },
     async getTecnicoById(id) { const { rows } = await pool.query('SELECT * FROM tecnicos WHERE id=$1', [id]); return rows[0] ? enrich(rows[0]) : null; },
     async listTecnicos() {
       const { rows } = await pool.query('SELECT * FROM tecnicos ORDER BY activo DESC, id ASC');

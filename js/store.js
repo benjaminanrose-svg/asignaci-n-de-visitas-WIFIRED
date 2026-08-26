@@ -280,6 +280,7 @@ export async function marcarContacto(telefono, baja) { return rawApi('POST', '/c
 export async function broadcastPendientes() { return rawApi('GET', '/servicios/broadcast/pendientes'); }
 export async function broadcastCancelar() { return rawApi('POST', '/servicios/broadcast/cancelar'); }
 export async function routerEstado() { return rawApi('GET', '/router/estado'); }
+export async function cambiarClave(actual, nueva) { return rawApi('POST', '/mi-clave', { actual, nueva }); }
 
 // ---------- Configuración ----------
 export async function saveConfig(patch) {

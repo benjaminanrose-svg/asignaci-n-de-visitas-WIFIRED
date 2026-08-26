@@ -245,6 +245,17 @@ export function renderConfig(root) {
       </div>
 
       <div class="card cfg-card">
+        <h3 class="cfg-title">🔐 Seguridad · Mi contraseña</h3>
+        <p class="muted-sm">Cambia la contraseña con la que entras a la app. Hazlo sobre todo si todavía usas la de fábrica. Mínimo 6 caracteres.</p>
+        <div class="form-grid" style="margin-top:8px">
+          <div class="field"><label>Contraseña actual</label><input class="input" type="password" data-pw="actual" autocomplete="current-password"></div>
+          <div class="field"><label>Nueva contraseña</label><input class="input" type="password" data-pw="nueva" autocomplete="new-password"></div>
+          <div class="field"><label>Repetir nueva</label><input class="input" type="password" data-pw="rep" autocomplete="new-password"></div>
+        </div>
+        <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn btn-primary" data-savepw>Cambiar contraseña</button></div>
+      </div>
+
+      <div class="card cfg-card">
         <h3 class="cfg-title">🛠 Tipos de servicio</h3>
         <p class="muted-sm">Aparecen en “Tipo de visita” al agendar.</p>
         ${listEditor('tipos', cfg.tipos)}
@@ -321,6 +332,22 @@ export function renderConfig(root) {
 
   // Abrir la sección dedicada del Bot de WhatsApp
   root.querySelector('[data-openbot]').onclick = () => renderBotConfig(root);
+
+  // Cambiar mi contraseña
+  root.querySelector('[data-savepw]').onclick = async (e) => {
+    const g = (k) => (root.querySelector(`[data-pw="${k}"]`).value || '');
+    const actual = g('actual'), nueva = g('nueva'), rep = g('rep');
+    if (!actual) { toast('Escribe tu contraseña actual', 'info'); return; }
+    if (nueva.length < 6) { toast('La nueva contraseña debe tener al menos 6 caracteres', 'info'); return; }
+    if (nueva !== rep) { toast('Las contraseñas nuevas no coinciden', 'info'); return; }
+    const btn = e.currentTarget; btn.disabled = true;
+    try {
+      await store.cambiarClave(actual, nueva);
+      toast('Contraseña cambiada ✓');
+      ['actual', 'nueva', 'rep'].forEach((k) => { root.querySelector(`[data-pw="${k}"]`).value = ''; });
+    } catch (err) { toast(err.message || 'No se pudo cambiar', 'info'); }
+    btn.disabled = false;
+  };
 
   // Guardar
   const doSave = async (btn) => {

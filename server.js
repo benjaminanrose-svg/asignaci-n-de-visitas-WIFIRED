@@ -298,6 +298,22 @@ async function techDisplay(user) {
 
 const api = express.Router();
 
+// --- Límite global de peticiones por IP (anti-abuso/DoS al exponer a IP pública) ---
+// Ventana de 1 min; tope alto para no molestar el uso normal de la app.
+const rl = new Map(); // ip -> { n, reset }
+const RL_MAX = 300, RL_WIN_MS = 60 * 1000;
+setInterval(() => { const now = Date.now(); for (const [ip, e] of rl) if (now > e.reset) rl.delete(ip); }, 5 * 60 * 1000);
+api.use((req, res, next) => {
+  if (req.path === '/health') return next();
+  const ip = req.ip || 'x';
+  const now = Date.now();
+  let e = rl.get(ip);
+  if (!e || now > e.reset) { e = { n: 0, reset: now + RL_WIN_MS }; rl.set(ip, e); }
+  e.n += 1;
+  if (e.n > RL_MAX) return res.status(429).json({ error: 'Demasiadas peticiones. Espera un momento.' });
+  next();
+});
+
 // --- Login ---
 api.post('/login', wrap(async (req, res) => {
   const ip = req.ip || 'x';
@@ -322,6 +338,27 @@ api.post('/login', wrap(async (req, res) => {
 
 api.get('/me', auth, wrap(async (req, res) => {
   res.json({ id: req.user.id, nombre: req.user.nombre, rol: req.user.rol, tecnico: await techDisplay(req.user), username: req.user.username });
+}));
+
+// Valida una contraseña nueva. Devuelve un mensaje de error o null si está ok.
+function claveProblema(pw) {
+  if (typeof pw !== 'string' || pw.length < 6) return 'La contraseña debe tener al menos 6 caracteres';
+  if (pw.length > 200) return 'La contraseña es demasiado larga';
+  return null;
+}
+
+// El usuario cambia su PROPIA contraseña (coordinación o técnico).
+api.post('/mi-clave', auth, wrap(async (req, res) => {
+  const s = await getStore();
+  const actual = String((req.body && req.body.actual) || '');
+  const nueva = String((req.body && req.body.nueva) || '');
+  if (!verifyPassword(actual, req.user.pass)) return res.status(403).json({ error: 'La contraseña actual no es correcta' });
+  const prob = claveProblema(nueva);
+  if (prob) return res.status(400).json({ error: prob });
+  if (actual === nueva) return res.status(400).json({ error: 'La nueva contraseña debe ser distinta a la actual' });
+  if (typeof s.setPassword !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  await s.setPassword(req.user.id, nueva);
+  res.json({ ok: true });
 }));
 
 // --- Bootstrap (filtra por rol) ---
@@ -892,7 +929,13 @@ api.get('/bot/visita', requireBotKey, wrap(async (req, res) => {
 }));
 
 // --- Técnicos (sólo coordinación administra) ---
-api.get('/tecnicos', auth, wrap(async (req, res) => res.json(await (await getStore()).listTecnicos())));
+api.get('/tecnicos', auth, wrap(async (req, res) => {
+  let list = await (await getStore()).listTecnicos();
+  // Las credenciales (usuario/clave) SOLO las ve la coordinación. A los técnicos
+  // se las quitamos para no filtrar accesos de otros.
+  if (req.user.rol !== 'coordinador') list = list.map(({ username, password, pass, pass_plain, ...t }) => t);
+  res.json(list);
+}));
 
 // El técnico reporta su ubicación GPS (su app la envía cada ~1 min).
 api.post('/tecnico/ubicacion', auth, wrap(async (req, res) => {
@@ -915,9 +958,11 @@ api.get('/tecnicos/ubicaciones', auth, soloCoordinador, wrap(async (req, res) =>
 api.post('/tecnicos', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
   if (!req.body || (!req.body.nombre && !req.body.rol)) return res.status(400).json({ error: 'Nombre o rol requerido' });
+  if (req.body.password && req.body.password.trim()) { const p = claveProblema(req.body.password.trim()); if (p) return res.status(400).json({ error: p }); }
   res.status(201).json(await s.addTecnico(req.body));
 }));
 api.put('/tecnicos/:id', auth, soloCoordinador, wrap(async (req, res) => {
+  if (req.body && req.body.password && req.body.password.trim()) { const p = claveProblema(req.body.password.trim()); if (p) return res.status(400).json({ error: p }); }
   const t = await (await getStore()).updateTecnico(req.params.id, req.body || {});
   if (!t) return res.status(404).json({ error: 'Técnico no encontrado' });
   res.json(t);
@@ -943,6 +988,12 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 getStore()
   .then(() => app.listen(PORT, '0.0.0.0', () => {
     console.log(`WIFIRED Agenda — servidor en http://0.0.0.0:${PORT}`);
+    // Avisos de seguridad para exposición a IP pública.
+    const avisos = [];
+    if (!process.env.AUTH_SECRET || process.env.AUTH_SECRET.length < 16) avisos.push('AUTH_SECRET no definido (o corto): las sesiones se cierran en cada reinicio. Define uno de 32+ caracteres.');
+    if (!process.env.ADMIN_PASS) avisos.push('ADMIN_PASS por defecto: cambia la contraseña de coordinación (desde la app: Configuración → Cambiar mi contraseña, o define ADMIN_PASS).');
+    if (!process.env.BOT_API_KEY) avisos.push('BOT_API_KEY no definido: el bot de WhatsApp no podrá conectarse.');
+    if (avisos.length) { console.warn('\n⚠️  SEGURIDAD:'); avisos.forEach((a) => console.warn('   • ' + a)); console.warn(''); }
     // Recordatorios del día antes + respaldo automático: se revisan cada 30 min y
     // se ejecutan una vez al día (según hora de Chile). Sin nada configurado, no hacen nada.
     const tick = () => { correrRecordatorios(); correrConfirmaciones(); correrRespaldo(); };
