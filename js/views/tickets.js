@@ -50,7 +50,15 @@ function accionPendiente(t) {
     if (f === 'planes_enviados') return { l: 'Cerrar la venta', color: '#06b6d4' };
     return null; // no_factible: nada más que hacer
   }
+  const GUIA = {
+    Soporte: { Nuevo: 'Contactar cliente', 'En proceso': 'Resolver' },
+    Retiro:  { Nuevo: 'Agendar retiro',    'En proceso': 'Confirmar retiro' },
+    Pago:    { Nuevo: 'Revisar comprobante', 'En proceso': 'Validar pago' },
+  };
+  const g = GUIA[t.categoria];
+  if (g && g[t.estado]) return { l: g[t.estado], color: t.estado === 'Nuevo' ? '#2563eb' : '#f59e0b' };
   if (t.estado === 'Nuevo') return { l: 'Atender', color: '#2563eb' };
+  if (t.estado === 'En proceso' && g) return { l: 'Continuar', color: '#f59e0b' };
   return null;
 }
 
@@ -89,6 +97,70 @@ function guiaContratacionHtml(t) {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:9px">${stepper}</div>
       <div style="font-size:13px;line-height:1.45;color:var(--text)">${banner}</div>
     </div>`;
+}
+
+/** Dibuja la barra de pasos (círculos numerados) para una guía. */
+function stepperHtml(pasos, activo) {
+  return pasos.map((p, i) => {
+    const done = activo > i && activo !== -1;
+    const now = activo === i;
+    const bg = now ? '#2563eb' : done ? '#10b981' : 'transparent';
+    const fg = (now || done) ? '#fff' : 'var(--text-3)';
+    const bd = now ? '#2563eb' : done ? '#10b981' : 'var(--border)';
+    return `<div style="display:flex;align-items:center;gap:6px">
+        <span style="width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:${bg};color:${fg};border:1px solid ${bd}">${done ? '✓' : i + 1}</span>
+        <span style="font-size:12px;color:${now ? 'var(--text)' : 'var(--text-3)'};font-weight:${now ? '700' : '400'}">${esc(p)}</span>
+      </div>`;
+  }).join('<span style="flex:1;height:1px;background:var(--border);min-width:10px"></span>');
+}
+
+/** Envoltura visual de una guía: barra de pasos + cartel "ahora haz esto" + botones. */
+function guiaBox(pasos, activo, banner, botones) {
+  return `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:9px">${stepperHtml(pasos, activo)}</div>
+      <div style="font-size:13px;line-height:1.45;color:var(--text)">${banner}</div>
+      ${botones && botones.length ? `<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:10px">${botones.join('')}</div>` : ''}
+    </div>`;
+}
+
+/** Botón que fija el estado del ticket con un toque. */
+function btnEstado(l, estado, color, extra) {
+  const st = color ? `background:${color};border-color:${color};color:#fff` : '';
+  return `<button class="btn btn-sm" data-setestado="${esc(estado)}" ${extra || ''} style="${st}">${l}</button>`;
+}
+
+/**
+ * Guía por categoría para Soporte / Retiro / Pago. Usa el estado del ticket
+ * (Nuevo → En proceso → Resuelto → Cerrado) y traduce cada situación en un
+ * paso claro con un cartel y botones de un toque. Devuelve '' si la categoría
+ * no tiene guía propia (se maneja con el selector de estado normal).
+ */
+function guiaCategoriaHtml(t) {
+  const est = t.estado;
+  const cerrar = btnEstado('🗄️ Cerrar (archivar)', 'Cerrado', '#94a3b8');
+  if (t.categoria === 'Soporte') {
+    const pasos = ['Recibido', 'En atención', 'Resuelto'];
+    if (est === 'Nuevo') return guiaBox(pasos, 0, '🛠️ <strong>Ahora:</strong> contacta al cliente y diagnostica el problema. Si necesita ir un técnico, usa <strong>“📅 Convertir en visita”</strong>.', [btnEstado('▶️ Marcar en atención', 'En proceso', '#2563eb')]);
+    if (est === 'En proceso') return guiaBox(pasos, 1, '⏳ <strong>En atención.</strong> Cuando el problema quede solucionado, márcalo como resuelto.', [btnEstado('✅ Marcar resuelto', 'Resuelto', '#10b981')]);
+    if (est === 'Resuelto') return guiaBox(pasos, 2, '✅ <strong>Resuelto.</strong> Si ya no hay nada pendiente, ciérralo para archivarlo.', [cerrar]);
+    return guiaBox(pasos, 3, '🗄️ <strong>Cerrado.</strong> Este ticket está terminado y archivado.', []);
+  }
+  if (t.categoria === 'Retiro') {
+    const pasos = ['Recibido', 'Retiro agendado', 'Equipos retirados'];
+    if (est === 'Nuevo') return guiaBox(pasos, 0, '📦 <strong>Ahora:</strong> coordina con el cliente el <strong>día y hora</strong> del retiro de los equipos.', [btnEstado('📅 Marcar retiro agendado', 'En proceso', '#2563eb')]);
+    if (est === 'En proceso') return guiaBox(pasos, 1, '🚚 <strong>Retiro agendado.</strong> Cuando el técnico retire los equipos, márcalo.', [btnEstado('📦 Equipos retirados', 'Resuelto', '#10b981')]);
+    if (est === 'Resuelto') return guiaBox(pasos, 2, '✅ <strong>Equipos retirados.</strong> Ciérralo para archivar la baja.', [cerrar]);
+    return guiaBox(pasos, 3, '🗄️ <strong>Cerrado.</strong> Baja y retiro terminados.', []);
+  }
+  if (t.categoria === 'Pago') {
+    const pasos = ['Comprobante recibido', 'Revisado', 'Validado'];
+    if (est === 'Nuevo') return guiaBox(pasos, 1, '💳 <strong>Ahora:</strong> revisa el comprobante adjunto (monto, fecha y destinatario) y decide.', [btnEstado('✅ Validar pago', 'Resuelto', '#10b981'), btnEstado('❌ Rechazar', 'Cerrado', '#ef4444')]);
+    if (est === 'En proceso') return guiaBox(pasos, 1, '💳 <strong>En revisión.</strong> Revisa el comprobante y valida o rechaza el pago.', [btnEstado('✅ Validar pago', 'Resuelto', '#10b981'), btnEstado('❌ Rechazar', 'Cerrado', '#ef4444')]);
+    if (est === 'Resuelto') return guiaBox(pasos, 2, '✅ <strong>Pago validado.</strong> Ciérralo para archivarlo.', [cerrar]);
+    return guiaBox(pasos, 3, '🗄️ <strong>Cerrado.</strong> Pago gestionado.', []);
+  }
+  return '';
 }
 
 /** Chip de color (tinte suave) */
@@ -293,6 +365,12 @@ function detailHtml(t) {
           </div>
         </div>` : ''}
 
+      ${['Soporte', 'Retiro', 'Pago'].includes(t.categoria) ? `
+        <div class="tk-section">
+          <label class="tk-section-lbl">Seguimiento</label>
+          ${guiaCategoriaHtml(t)}
+        </div>` : ''}
+
       <div class="form-grid" style="margin-top:14px">
         <div class="field">
           <label>Categoría</label>
@@ -324,6 +402,7 @@ function wire(node, uid) {
   const est = node.querySelector('[data-estado]');
   if (est) est.onchange = (e) => applyPatch(node, uid, { estado: e.target.value });
   node.querySelectorAll('[data-fact]').forEach((b) => (b.onclick = () => applyPatch(node, uid, { factibilidad: b.dataset.fact })));
+  node.querySelectorAll('[data-setestado]').forEach((b) => (b.onclick = () => applyPatch(node, uid, { estado: b.dataset.setestado })));
 
   const planes = node.querySelector('[data-planes]');
   if (planes) planes.onclick = async () => {
