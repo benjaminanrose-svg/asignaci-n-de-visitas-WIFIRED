@@ -15,7 +15,8 @@ const local = { q: '', cat: '', estado: '' };
 const CATS = {
   'Soporte':      { emo: '🛠️', color: '#f59e0b' },
   'Contratación': { emo: '📶', color: '#2563eb' },
-  'Pagos':        { emo: '💳', color: '#10b981' },
+  'Retiro':       { emo: '📦', color: '#ef4444' },
+  'Pago':         { emo: '💳', color: '#10b981' },
   'Visita':       { emo: '📅', color: '#8b5cf6' },
   'Ejecutivo':    { emo: '🧑‍💼', color: '#06b6d4' },
   'Otros':        { emo: '💬', color: '#94a3b8' },
@@ -265,13 +266,18 @@ function detailHtml(t) {
 
       ${Array.isArray(t.adjuntos) && t.adjuntos.length ? `
         <div class="tk-section">
-          <label class="tk-section-lbl">📷 Documentos del cliente (carnet)</label>
+          <label class="tk-section-lbl">📷 Documentos del cliente</label>
           <div class="row" style="gap:10px; flex-wrap:wrap; margin-top:6px">
-            ${t.adjuntos.map((a) => `
+            ${t.adjuntos.map((a) => {
+              const esImg = /^data:image\//i.test(a.data || '');
+              const vista = esImg
+                ? `<img src="${esc(a.data)}" alt="${esc(a.tipo || 'documento')}" style="width:150px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block">`
+                : `<div style="width:150px;height:100px;display:flex;align-items:center;justify-content:center;font-size:38px;border-radius:8px;border:1px solid var(--border)">📄</div>`;
+              return `
               <a href="${esc(a.data)}" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">
-                <img src="${esc(a.data)}" alt="${esc(a.tipo || 'documento')}" style="width:150px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block">
+                ${vista}
                 <span class="muted-sm" style="display:block;margin-top:4px">${esc(a.tipo || 'Documento')} · abrir ›</span>
-              </a>`).join('')}
+              </a>`; }).join('')}
           </div>
         </div>` : ''}
 

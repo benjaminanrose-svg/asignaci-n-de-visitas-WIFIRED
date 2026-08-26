@@ -18,6 +18,7 @@ const DATOS = [
   { v: 'rut', l: '🪪 RUT / cédula' },
   { v: 'correo', l: '📧 Correo electrónico' },
   { v: 'mensaje', l: '📝 Detalle / mensaje' },
+  { v: 'comprobante', l: '💳 Foto o archivo (comprobante)' },
 ];
 const DATO_MAP = {
   nombre: { campo: 'nombre', tipo: 'texto' },
@@ -26,13 +27,15 @@ const DATO_MAP = {
   telefono: { campo: 'telefono', tipo: 'telefono' },
   rut: { campo: 'rut', tipo: 'rut' },
   correo: { campo: 'correo', tipo: 'correo' },
+  comprobante: { campo: 'comprobante', tipo: 'foto' },
 };
-const DATO_ICON = { nombre: '👤', ubicacion: '📍', mensaje: '📝', telefono: '📞', rut: '🪪', correo: '📧' };
+const DATO_ICON = { nombre: '👤', ubicacion: '📍', mensaje: '📝', telefono: '📞', rut: '🪪', correo: '📧', comprobante: '💳' };
 /** A partir de un paso guardado (campo/tipo) deduce el "dato" para el editor. */
 function datoDe(p) {
   if (p.tipo === 'telefono' || p.campo === 'telefono') return 'telefono';
   if (p.tipo === 'rut' || p.campo === 'rut') return 'rut';
   if (p.tipo === 'correo' || p.campo === 'correo') return 'correo';
+  if (p.tipo === 'foto' || p.campo === 'comprobante') return 'comprobante';
   if (p.campo === 'ubicacion' || p.tipo === 'ubicacion') return 'ubicacion';
   if (p.campo === 'mensaje') return 'mensaje';
   return 'nombre';
@@ -52,7 +55,7 @@ const DEFAULT_FLUJO_APP = {
       confirma: '✅ ¡Listo! Registramos tu solicitud de *soporte técnico* con el N° *{num}*.\n\nNuestro equipo revisará tu caso y, si es necesario, *coordinará una visita técnica*. Te contactaremos a la brevedad. 🛠️🙌',
     },
     {
-      titulo: 'Contratar internet 📶', categoria: 'Contratación',
+      titulo: 'Planes y contratación 📶', categoria: 'Contratación',
       desc: 'Revisa cobertura y contrata un plan nuevo.',
       pasos: [
         { dato: 'ubicacion', pregunta: '¡Qué bueno que quieras ser parte de *WIFIRED*! 📶\n\nPrimero revisemos *cobertura* en tu sector. Compárteme tu *ubicación* 📎 o escríbeme tu *dirección exacta*: calle, número, sector y una referencia.' },
@@ -61,7 +64,7 @@ const DEFAULT_FLUJO_APP = {
       confirma: '✅ ¡Recibido! Registramos tu solicitud de *contratación* con el N° *{num}*.\n\nRevisaremos la *factibilidad* y te enviaremos los *planes disponibles*. ¡Gracias por preferirnos! 📶',
     },
     {
-      titulo: 'Dar de baja / Retiro de equipos 📦', categoria: 'Retiro',
+      titulo: 'Cancelar servicio / Retiro de equipos 📦', categoria: 'Retiro',
       desc: 'Da de baja tu servicio y coordina el retiro de los equipos.',
       pasos: [
         { dato: 'nombre', pregunta: 'Lamentamos que quieras irte. 😔 Te ayudo a gestionar la *baja* y el *retiro de los equipos*.\n\n¿Cuál es tu *nombre completo* (titular del servicio)?' },
@@ -70,6 +73,15 @@ const DEFAULT_FLUJO_APP = {
         { dato: 'mensaje', pregunta: 'Por último: ¿*motivo* de la baja, desde qué *fecha* y qué *días/horarios* te acomodan para el retiro?' },
       ],
       confirma: '✅ Registramos tu solicitud de *baja y retiro de equipos* con el N° *{num}*.\n\nCoordinaremos internamente el retiro y te contactaremos para agendar. 📦 Gracias por haber sido parte de *WIFIRED*. 🙌',
+    },
+    {
+      titulo: 'Enviar comprobante de pago 💳', categoria: 'Pago',
+      desc: 'Envíanos la foto o el archivo de tu comprobante de pago.',
+      pasos: [
+        { dato: 'nombre', pregunta: '¡Gracias por tu pago! 💳 Te ayudo a registrarlo.\n\nPara empezar, ¿cuál es tu *nombre completo* (titular del servicio)?' },
+        { dato: 'comprobante', pregunta: 'Perfecto. Ahora envíame la *foto* 📷 o el *archivo* 📎 de tu *comprobante de pago* (transferencia, depósito, etc.).\n\nAsegúrate de que se vea claro el *monto*, la *fecha* y el *destinatario*.' },
+      ],
+      confirma: '✅ ¡Recibido! Registramos tu *comprobante de pago* con el N° *{num}*.\n\nNuestro equipo lo revisará y validará tu pago. Si hay algún detalle, te contactaremos. 💳🙌',
     },
   ],
 };
@@ -532,7 +544,7 @@ const DATO_HINT = { nombre: 'Nombre y apellido', ubicacion: 'Dirección o ubicac
 const DATO_CORTO = { nombre: 'nombre', ubicacion: 'dirección', mensaje: 'detalle', telefono: 'teléfono', rut: 'RUT', correo: 'correo' };
 // Categorías del ticket. Cada opción del menú crea un ticket con una de estas.
 // OJO: "Contratación" dispara el flujo de factibilidad + planes; no la renombres.
-const CATS = ['Soporte', 'Contratación', 'Retiro', 'Otros'];
+const CATS = ['Soporte', 'Contratación', 'Retiro', 'Pago', 'Otros'];
 const catOptions = (sel) => {
   const base = CATS.map((c) => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
   return base + (CATS.includes(sel) || !sel ? '' : `<option selected>${esc(sel)}</option>`);

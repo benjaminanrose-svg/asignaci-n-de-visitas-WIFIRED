@@ -102,7 +102,7 @@ const DEFAULT_FLUJO = {
       confirma: '✅ ¡Listo! Registramos tu solicitud de *soporte técnico* con el N° *{num}*.\n\nNuestro equipo revisará tu caso y, si es necesario, *coordinará una visita técnica* a tu domicilio. Te contactaremos a la brevedad. 🛠️🙌',
     },
     {
-      n: '2', titulo: 'Contratar internet 📶', categoria: 'Contratación',
+      n: '2', titulo: 'Planes y contratación 📶', categoria: 'Contratación',
       desc: 'Revisa cobertura y contrata un plan nuevo.',
       pasos: [
         { campo: 'ubicacion', tipo: 'ubicacion', pregunta: '¡Qué bueno que quieras ser parte de *WIFIRED*! 📶\n\nPrimero revisemos la *cobertura* en tu sector. Compárteme tu *ubicación* (clip 📎 → *Ubicación* → *Enviar ubicación actual*) o escríbeme tu *dirección exacta*: calle, número, sector o parcela y una referencia.' },
@@ -111,7 +111,7 @@ const DEFAULT_FLUJO = {
       confirma: '✅ ¡Recibido! Registramos tu solicitud de *contratación* con el N° *{num}*.\n\nAhora revisaremos la *factibilidad* (si nuestra red llega a tu sector). En cuanto la confirmemos, te enviaremos los *planes disponibles* y coordinaremos la *instalación*. 📶\n\nTe contactaremos muy pronto. ¡Gracias por preferirnos!',
     },
     {
-      n: '3', titulo: 'Dar de baja / Retiro de equipos 📦', categoria: 'Retiro',
+      n: '3', titulo: 'Cancelar servicio / Retiro de equipos 📦', categoria: 'Retiro',
       desc: 'Da de baja tu servicio y coordina el retiro de los equipos.',
       pasos: [
         { campo: 'nombre', tipo: 'texto', pregunta: 'Lamentamos que quieras irte. 😔 Te ayudo a gestionar la *baja* y el *retiro de los equipos*.\n\n¿Cuál es tu *nombre completo* (titular del servicio)?' },
@@ -120,6 +120,15 @@ const DEFAULT_FLUJO = {
         { campo: 'mensaje', tipo: 'texto', pregunta: 'Por último, cuéntame:\n\n• ¿*Motivo* de la baja?\n• ¿Desde qué *fecha* quieres darla?\n• ¿Qué *días u horarios* te acomodan para el retiro?' },
       ],
       confirma: '✅ Registramos tu solicitud de *baja y retiro de equipos* con el N° *{num}*.\n\nCoordinaremos internamente el retiro y te contactaremos para agendar día y hora. 📦\n\nGracias por haber sido parte de *WIFIRED*. 🙌',
+    },
+    {
+      n: '4', titulo: 'Enviar comprobante de pago 💳', categoria: 'Pago',
+      desc: 'Envíanos la foto o el archivo de tu comprobante de pago.',
+      pasos: [
+        { campo: 'nombre', tipo: 'texto', pregunta: '¡Gracias por tu pago! 💳 Te ayudo a registrarlo.\n\nPara empezar, ¿cuál es tu *nombre completo* (titular del servicio)?' },
+        { campo: 'comprobante', tipo: 'foto', pregunta: 'Perfecto. Ahora envíame la *foto* 📷 o el *archivo* 📎 de tu *comprobante de pago* (transferencia, depósito, etc.).\n\nAsegúrate de que se vea claro el *monto*, la *fecha* y el *destinatario*.' },
+      ],
+      confirma: '✅ ¡Recibido! Registramos tu *comprobante de pago* con el N° *{num}*.\n\nNuestro equipo lo revisará y validará tu pago. Si hay algún detalle, te contactaremos. 💳🙌',
     },
   ],
 };
@@ -313,13 +322,15 @@ function crearTicket(payload) { return api('/api/bot/ticket', { method: 'POST', 
 
 /** Descarga una imagen recibida y la devuelve como data URI (base64), o '' si no es imagen. */
 async function getFotoDataUri(m) {
-  const img = m && m.message && m.message.imageMessage;
-  if (!img) return '';
+  const mm = (m && m.message) || {};
+  // Acepta imagen o archivo (documento: PDF, etc.).
+  const media = mm.imageMessage || mm.documentMessage || (mm.documentWithCaptionMessage && mm.documentWithCaptionMessage.message && mm.documentWithCaptionMessage.message.documentMessage);
+  if (!media) return '';
   try {
     const buf = await downloadMediaMessage(m, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage });
-    const mime = img.mimetype || 'image/jpeg';
+    const mime = media.mimetype || 'image/jpeg';
     return 'data:' + mime + ';base64,' + Buffer.from(buf).toString('base64');
-  } catch (e) { console.error('No pude descargar la foto:', e.message); return ''; }
+  } catch (e) { console.error('No pude descargar el adjunto:', e.message); return ''; }
 }
 
 /** Envía el PDF de Términos y Condiciones (si existe el archivo). Devuelve true si se envió. */
@@ -594,7 +605,7 @@ async function handleStep(id, sess, info) {
     valor = r;
   } else if (paso.esFoto) {
     const foto = await getFotoDataUri(info.raw);
-    if (!foto) return botSend(id, 'Necesito una *foto* 📷. Toma una foto clara con tu cámara y envíamela *como imagen* (no como texto).');
+    if (!foto) return botSend(id, 'Necesito que me envíes una *foto* 📷 o un *archivo* 📎 (como imagen o documento, no como texto).');
     valor = foto;
   } else if (paso.esConsentimiento) {
     const low = (info.body || '').toLowerCase();
@@ -644,6 +655,8 @@ async function handleStep(id, sess, info) {
   // Flujos del menú: separar dirección (texto) de ubicación GPS ("lat,lng") y crear el ticket
   const ubic = (sess.data.ubicacion || '').trim();
   const esCoords = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(ubic);
+  // Junta los adjuntos (comprobantes, fotos) que se hayan capturado en pasos tipo foto.
+  const adjuntos = pasos.filter((p) => p.esFoto && sess.data[p.campo]).map((p) => sess.data[p.campo]);
   const payload = {
     categoria: flow.categoria,
     nombre: sess.data.nombre || info.notifyName || '',
@@ -653,6 +666,7 @@ async function handleStep(id, sess, info) {
     mensaje: sess.data.mensaje || '',
     rut: sess.data.rut ? formateaRut(sess.data.rut) : '',
     email: sess.data.correo || '',
+    adjuntos,
   };
   try {
     const t = await crearTicket(payload);

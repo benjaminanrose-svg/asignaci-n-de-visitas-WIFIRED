@@ -654,6 +654,11 @@ api.post('/bot/ticket', requireBotKey, wrap(async (req, res) => {
   b.canal = 'whatsapp';
   if (!b.estado) b.estado = 'Nuevo';
   if (b.categoria === 'Contratación' && !b.factibilidad) b.factibilidad = 'pendiente';
+  // El bot puede mandar adjuntos como lista de data-URIs; los normalizamos a {tipo, data}.
+  if (Array.isArray(b.adjuntos)) {
+    const etiq = b.categoria === 'Pago' ? 'Comprobante de pago' : 'Adjunto';
+    b.adjuntos = b.adjuntos.map((a) => (typeof a === 'string' ? { tipo: etiq, data: a } : a)).filter((a) => a && a.data);
+  }
   const t = await s.addTicket(b);
   console.log(`[BOT] ticket ${t.num} creado · ${t.categoria} · ${b.telefono || ''}`);
   res.status(201).json(t);
