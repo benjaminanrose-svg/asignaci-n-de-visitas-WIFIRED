@@ -83,7 +83,7 @@ export async function renderUbicaciones(root) {
               <div class="cell-strong truncate">${esc(t.nombre)}</div>
               <div class="cell-sub">${ok ? '🟢 En línea' : '⚪ '}${hace(t.ts)}</div>
             </div>
-            <a class="btn btn-sm" href="https://www.google.com/maps?q=${t.lat},${t.lng}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Ver</a>
+            <a class="btn btn-sm" data-ver href="https://www.google.com/maps?q=${t.lat},${t.lng}" target="_blank" rel="noopener">Ver</a>
           </div>
         </div>`;
       }).join('')}</div>`;
@@ -109,7 +109,8 @@ export async function renderUbicaciones(root) {
       map.fitBounds(b, { padding: [40, 40], maxZoom: 15 });
     }
     // Enlaza clic de tarjeta → centra en el técnico
-    listEl.querySelectorAll('[data-goto]').forEach((c) => c.onclick = () => {
+    listEl.querySelectorAll('[data-goto]').forEach((c) => c.onclick = (ev) => {
+      if (ev.target.closest('[data-ver]')) return; // el botón "Ver" abre el mapa, no re-centra
       const t = list.find((x) => String(x.id) === c.dataset.goto);
       if (t && map) { map.setView([t.lat, t.lng], 16); markers.get(t.id) && markers.get(t.id).openPopup(); }
     });

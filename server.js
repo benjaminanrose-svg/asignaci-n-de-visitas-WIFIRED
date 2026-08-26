@@ -211,9 +211,66 @@ const COMPANY = {
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+app.disable('x-powered-by');       // no revelar que corre Express
+app.set('trust proxy', 1);         // detrás del proxy de Coolify (para req.ip y HTTPS)
+
+// --- Cabeceras de seguridad (para exposición a IP pública) ---
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(), microphone=(), payment=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  // HSTS solo cuando la conexión llega por HTTPS (Coolify termina el TLS).
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  }
+  // Política de contenido: permite el mapa (Leaflet/unpkg + tiles OSM) y las
+  // fuentes de Google; bloquea scripts/orígenes no confiables.
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'self'",
+    "form-action 'self'",
+    "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com",
+    "style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "script-src 'self' https://unpkg.com",
+    "connect-src 'self'",
+    "worker-src 'self'",
+    "manifest-src 'self'",
+  ].join('; '));
+  next();
+});
+
 app.use(express.json({ limit: '20mb' })); // amplio para fotos (carnet en contratación, evidencias)
+// JSON malformado o cuerpo demasiado grande: respuesta clara en vez de error 500.
+app.use((err, req, res, next) => {
+  if (err && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Datos enviados inválidos' });
+  if (err && (err.type === 'entity.too.large' || err.status === 413)) return res.status(413).json({ error: 'El archivo es demasiado grande' });
+  return next(err);
+});
 
 const wrap = (fn) => (req, res) => fn(req, res).catch((e) => { console.error(e); res.status(500).json({ error: 'Error interno del servidor' }); });
+
+// --- Anti fuerza bruta en el login (memoria) ---
+// Bloquea temporalmente a una IP tras demasiados intentos fallidos seguidos.
+const loginHits = new Map(); // ip -> { fails, until }
+const LOGIN_MAX = 8, LOGIN_WIN_MS = 15 * 60 * 1000;
+function loginBlocked(ip) {
+  const e = loginHits.get(ip);
+  return !!(e && e.until && Date.now() < e.until);
+}
+function loginFail(ip) {
+  const e = loginHits.get(ip) || { fails: 0, until: 0 };
+  e.fails += 1;
+  if (e.fails >= LOGIN_MAX) { e.until = Date.now() + LOGIN_WIN_MS; e.fails = 0; }
+  loginHits.set(ip, e);
+}
+function loginReset(ip) { loginHits.delete(ip); }
+// Limpieza periódica para no acumular IPs en memoria.
+setInterval(() => { const now = Date.now(); for (const [ip, e] of loginHits) if ((!e.until || now > e.until) && !e.fails) loginHits.delete(ip); }, 30 * 60 * 1000);
 
 // Middleware de autenticación
 async function auth(req, res, next) {
@@ -243,10 +300,21 @@ const api = express.Router();
 
 // --- Login ---
 api.post('/login', wrap(async (req, res) => {
+  const ip = req.ip || 'x';
+  if (loginBlocked(ip)) return res.status(429).json({ error: 'Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.' });
   const { username, password } = req.body || {};
+  // Validación básica de entrada.
+  if (typeof username !== 'string' || typeof password !== 'string' || !username.trim() || !password || username.length > 100 || password.length > 200) {
+    loginFail(ip);
+    return res.status(400).json({ error: 'Ingresa usuario y contraseña' });
+  }
   const s = await getStore();
-  const user = await s.getUserByUsername((username || '').trim().toLowerCase());
-  if (!user || !verifyPassword(password || '', user.pass)) return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+  const user = await s.getUserByUsername(username.trim().toLowerCase());
+  if (!user || !verifyPassword(password, user.pass)) {
+    loginFail(ip);
+    return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+  }
+  loginReset(ip);
   const token = signToken({ uid: user.id, rol: user.rol });
   const display = await techDisplay(user);
   res.json({ token, user: { id: user.id, nombre: user.nombre, rol: user.rol, tecnico: display, username: user.username } });

@@ -4,7 +4,15 @@
 // ============================================================
 const crypto = require('crypto');
 
-const SECRET = process.env.AUTH_SECRET || 'wifired-agenda-secret-cambia-esto-en-produccion';
+// Secreto para firmar los tokens de sesión. DEBE venir de la variable de entorno
+// AUTH_SECRET en producción. Si no está (o es muy corto), generamos uno aleatorio
+// al arrancar: seguro, pero las sesiones se cierran en cada reinicio del servidor.
+let SECRET = process.env.AUTH_SECRET;
+if (!SECRET || SECRET.length < 16) {
+  SECRET = crypto.randomBytes(32).toString('hex');
+  console.warn('\n⚠️  AUTH_SECRET no definido (o demasiado corto). Se generó uno temporal.');
+  console.warn('   Las sesiones se cerrarán en cada reinicio. Define AUTH_SECRET (32+ caracteres) en las variables de entorno para producción.\n');
+}
 const TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 días
 
 function hashPassword(pw) {
