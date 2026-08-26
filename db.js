@@ -75,6 +75,9 @@ function mergeBot(b) {
       };
     })(),
     condiciones: typeof s.condiciones === 'string' ? s.condiciones : '',
+    // Nodos que atiende el bot. Vacío = atiende a todos. Con nodos, el bot SOLO
+    // responde a los números de los clientes de esos nodos.
+    nodos: Array.isArray(s.nodos) ? s.nodos.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim()) : [],
     // Flujo del menú editable desde la página (menú → opciones → pasos). Si no hay, el bot usa su flujo por defecto.
     flujo: sanitizeFlujo(s.flujo),
   };

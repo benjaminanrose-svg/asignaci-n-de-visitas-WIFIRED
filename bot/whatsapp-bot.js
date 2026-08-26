@@ -76,10 +76,16 @@ async function api(pathname, opts = {}) {
   return r.status === 204 ? null : r.json();
 }
 
+// Filtro por nodo: Set de teléfonos (9 dígitos) que el bot puede atender, o
+// null = atiende a todos. Lo calcula el server según los nodos activos.
+let telsPermitidos = null;
 async function loadBotConfig() {
   try {
     const c = await api('/api/bot/config');
-    if (c && typeof c === 'object') botCfg = { ...botCfg, ...c, horario: { ...botCfg.horario, ...(c.horario || {}) } };
+    if (c && typeof c === 'object') {
+      botCfg = { ...botCfg, ...c, horario: { ...botCfg.horario, ...(c.horario || {}) } };
+      telsPermitidos = Array.isArray(c.telefonos_permitidos) ? new Set(c.telefonos_permitidos) : null;
+    }
   } catch (e) { /* se reintenta en el próximo ciclo */ }
 }
 
@@ -466,6 +472,16 @@ async function onMessage(m) {
     telefono: telefonoReal(m),
   };
   console.log(`📩 mensaje de ${id} (tel: ${info.telefono || '—'}) · "${(info.body || (info.location ? '[ubicación]' : '')).slice(0, 40)}"`);
+
+  // Filtro por nodo: si la coordinación activó nodos, el bot SOLO responde a los
+  // números de los clientes de esos nodos. En modo prueba no aplica (usa la palabra clave).
+  if (!modoPruebaActivo() && telsPermitidos) {
+    const d9 = soloDigitos(info.telefono).slice(-9);
+    if (!d9 || !telsPermitidos.has(d9)) {
+      console.log(`⛔ ignorado por filtro de nodo (tel: ${info.telefono || '—'})`);
+      return;
+    }
+  }
 
   const now = Date.now();
 

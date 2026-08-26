@@ -772,8 +772,22 @@ api.post('/visitas/:id/confirmar-ahora', auth, soloCoordinador, wrap(async (req,
 
 // El bot lee la configuración (saludo, planes, horario) desde la app
 api.get('/bot/config', requireBotKey, wrap(async (req, res) => {
-  const c = await (await getStore()).getConfig();
-  res.json(c.bot || {});
+  const s = await getStore();
+  const c = await s.getConfig();
+  const bot = { ...(c.bot || {}) };
+  // Filtro por nodo: si hay nodos activos, el bot solo atiende a los teléfonos
+  // de los clientes de esos nodos. Le pasamos la lista ya calculada.
+  const nodos = Array.isArray(bot.nodos) ? bot.nodos.filter((n) => n && n !== '__todos__') : [];
+  if (nodos.length && typeof s.listServicios === 'function') {
+    const set = new Set(nodos);
+    const norm = (t) => (t || '').replace(/\D/g, '').slice(-9);
+    const tels = new Set();
+    for (const sv of await s.listServicios()) {
+      if (set.has((sv.nodo || '').trim())) { const t = norm(sv.telefono); if (t.length === 9) tels.add(t); }
+    }
+    bot.telefonos_permitidos = [...tels];
+  }
+  res.json(bot);
 }));
 
 // Bandeja de salida: mensajes automáticos que el bot debe enviar por WhatsApp

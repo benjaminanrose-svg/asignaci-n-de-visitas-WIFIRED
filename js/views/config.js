@@ -403,6 +403,15 @@ function renderBotConfig(root) {
       </div>
 
       <div class="card cfg-card">
+        <h3 class="cfg-title">📍 Nodos que atiende el bot</h3>
+        <p class="muted-sm">Marca los nodos cuyos clientes quieres que atienda el bot. Si <b>no marcas ninguno</b>, atiende a <b>todos</b>. Con nodos marcados, el bot <b>solo responde a los números de clientes de esos nodos</b> (el resto los ignora).</p>
+        ${(Array.isArray(cfg.nodos) && cfg.nodos.length) ? `
+          <div style="margin-top:10px">
+            ${cfg.nodos.map((n) => `<label style="${sw};margin:6px 0"><input type="checkbox" data-nodo="${esc(n)}" ${(Array.isArray(bot.nodos) && bot.nodos.includes(n)) ? 'checked' : ''} style="${cb}"><span>${esc(n)}</span></label>`).join('')}
+          </div>` : `<p class="muted-sm" style="margin-top:8px">⚠️ Aún no tienes nodos creados. Créalos en <b>Configuración → Nodos</b> y asigna el nodo a cada cliente en <b>Servicios</b>.</p>`}
+      </div>
+
+      <div class="card cfg-card">
         <h3 class="cfg-title">🔀 Flujo del menú (editor visual)</h3>
         <p class="muted-sm">Mira y edita el recorrido del bot: las opciones del menú (Soporte, Contratación…), qué pregunta en cada paso y el mensaje de confirmación. Los cambios se aplican al bot en menos de 1 minuto.</p>
         <button class="btn btn-primary" data-openflow style="margin-top:12px">🔀 Abrir editor del flujo →</button>
@@ -501,6 +510,7 @@ function renderBotConfig(root) {
         activo: q('[data-b="activo"]').checked,
         modo_prueba: q('[data-b="modo_prueba"]').checked,
         palabra_prueba: q('[data-b="palabra_prueba"]').value.trim() || 'paralelepipedo',
+        nodos: Array.from(root.querySelectorAll('[data-nodo]:checked')).map((el) => el.dataset.nodo),
         saludo: q('[data-b="saludo"]').value.trim(),
         planes: q('[data-b="planes"]').value.trim(),
         horario: {
