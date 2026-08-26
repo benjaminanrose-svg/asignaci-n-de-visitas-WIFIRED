@@ -30,7 +30,7 @@ const ROUTES = {
   tickets:    { title: 'Tickets de atención', render: renderTickets },
   servicios:  { title: 'Servicios',            render: renderServicios },
   tecnicos:   { title: 'Técnicos',            render: renderTecnicos },
-  ubicaciones:{ title: 'Ubicación técnicos',  render: renderUbicaciones },
+  ubicaciones:{ title: 'Ubicación de técnicos', render: renderUbicaciones },
   config:     { title: 'Configuración',       render: renderConfig },
 };
 const REACTIVE = ['panel', 'agenda', 'calendario', 'visitas', 'clientes', 'tickets', 'tecnicos', 'mis-visitas'];
