@@ -605,7 +605,13 @@ api.post('/servicios/broadcast', auth, soloCoordinador, wrap(async (req, res) =>
   const texto = String((req.body && req.body.texto) || '').trim();
   const nodo = String((req.body && req.body.nodo) || '').trim();
   const soloOptIn = !!(req.body && req.body.soloOptIn); // C: solo a quienes ya escribieron
-  if (!texto) return res.status(400).json({ error: 'Escribe el mensaje a enviar' });
+  const imagen = String((req.body && req.body.imagen) || '').trim(); // data URI opcional
+  if (!texto && !imagen) return res.status(400).json({ error: 'Escribe el mensaje o adjunta una imagen' });
+  if (imagen && !/^data:image\/(png|jpe?g|webp|gif);base64,/.test(imagen)) return res.status(400).json({ error: 'La imagen no es válida (usa PNG, JPG, WEBP o GIF)' });
+  if (imagen && imagen.length > 8 * 1024 * 1024) return res.status(400).json({ error: 'La imagen es demasiado grande (máx ~5 MB)' });
+  // La imagen se guarda UNA sola vez; cada mensaje de la cola solo referencia su id.
+  let mediaId = '';
+  if (imagen && typeof s.saveBroadcastMedia === 'function') mediaId = await s.saveBroadcastMedia(imagen);
   const servicios = await s.listServicios();
   const norm = (t) => (t || '').replace(/\D/g, '').slice(-9);
   // Opt-out (A) siempre: nunca a quien dijo BAJA. Opt-in (C) opcional.
@@ -621,7 +627,7 @@ api.post('/servicios/broadcast', auth, soloCoordinador, wrap(async (req, res) =>
     if (baja.has(tel)) { omitidosBaja++; continue; }          // A: pidió BAJA
     if (soloOptIn && !optin.has(tel)) { sinOptIn++; continue; } // C: no ha escrito
     const msg = texto.replace(/\{nombre\}/gi, (sv.nombre || '').trim().split(/\s+/)[0] || '');
-    await s.addOutbox(tel, msg, 'broadcast');
+    await s.addOutbox(tel, msg, 'broadcast', mediaId);
     encolados++;
   }
   res.json({ encolados, sinTelefono, omitidosBaja, sinOptIn });
@@ -904,6 +910,12 @@ api.post('/bot/outbox/:id/sent', requireBotKey, wrap(async (req, res) => {
   const s = await getStore();
   if (typeof s.markOutboxSent === 'function') await s.markOutboxSent(req.params.id);
   res.json({ ok: true });
+}));
+// Imagen de un comunicado (el bot la descarga una vez y la reutiliza para todos).
+api.get('/bot/media/:id', requireBotKey, wrap(async (req, res) => {
+  const s = await getStore();
+  const data = typeof s.getBroadcastMedia === 'function' ? await s.getBroadcastMedia(req.params.id) : '';
+  res.json({ data: data || '' });
 }));
 
 // El bot avisa que un número le escribió (opt-in) o pidió BAJA/ALTA (opt-out).

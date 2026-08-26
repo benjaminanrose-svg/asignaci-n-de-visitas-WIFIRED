@@ -206,6 +206,14 @@ export async function broadcastModal() {
         <textarea class="textarea" data-msg placeholder="Hola {nombre}, te saludamos de WIFIRED…" style="min-height:130px"></textarea>
         <span class="muted-sm">Puedes usar <b>{nombre}</b> y se reemplaza por el nombre de cada cliente.</span>
       </div>
+      <div class="field"><label>Imagen (opcional) 🖼️</label>
+        <input type="file" accept="image/*" data-img>
+        <div data-imgprev style="display:none;margin-top:8px">
+          <img data-imgel alt="vista previa" style="max-width:180px;max-height:180px;border-radius:8px;border:1px solid var(--border);display:block">
+          <button class="btn" data-imgclear style="margin-top:6px;padding:2px 10px">Quitar imagen</button>
+        </div>
+        <span class="muted-sm">Se envía la imagen con el texto como pie. Máx ~5 MB. Si adjuntas imagen, el texto es opcional.</span>
+      </div>
       <label class="row" style="gap:8px;align-items:center;cursor:pointer;margin:2px 0 8px">
         <input type="checkbox" data-optin>
         <span class="muted-sm">Enviar <b>solo a quienes ya me escribieron</b> (más seguro; actívalo cuando tengas una lista grande).</span>
@@ -248,6 +256,21 @@ export async function broadcastModal() {
     return recibiran;
   };
   sel.onchange = contar; chkOptin.onchange = contar; contar();
+
+  // Imagen opcional del comunicado.
+  let imagenData = '';
+  const imgInput = box.querySelector('[data-img]');
+  const imgPrev = box.querySelector('[data-imgprev]');
+  const imgEl = box.querySelector('[data-imgel]');
+  imgInput.onchange = () => {
+    const f = imgInput.files && imgInput.files[0];
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { toast('La imagen supera 5 MB. Usa una más liviana.', 'info'); imgInput.value = ''; return; }
+    const fr = new FileReader();
+    fr.onload = () => { imagenData = String(fr.result || ''); imgEl.src = imagenData; imgPrev.style.display = ''; };
+    fr.readAsDataURL(f);
+  };
+  box.querySelector('[data-imgclear]').onclick = () => { imagenData = ''; imgInput.value = ''; imgPrev.style.display = 'none'; };
   // Carga las bajas/opt-in y recalcula el número real.
   store.listContactos().then((r) => {
     for (const c of (r.contactos || [])) { const t = norm9(c.telefono); if (c.baja) bajaSet.add(t); if (c.visto) optinSet.add(t); }
@@ -276,15 +299,16 @@ export async function broadcastModal() {
   box.querySelector('[data-go]').onclick = async () => {
     const texto = box.querySelector('[data-msg]').value.trim();
     const nodo = sel.value;
-    if (!texto) { toast('Escribe el mensaje', 'info'); return; }
+    if (!texto && !imagenData) { toast('Escribe el mensaje o adjunta una imagen', 'info'); return; }
     const n = contar();
     if (!n) { toast('No hay clientes con teléfono en esa selección', 'info'); return; }
     const dest = nodo === '__todos__' ? 'TODOS los nodos' : `nodo "${nodo}"`;
-    if (!confirm(`¿Enviar este mensaje a ${n} clientes de ${dest}?\n\nSe envían despacio (8–20 seg c/u) para cuidar el número.`)) return;
+    const conImg = imagenData ? ' (con imagen 🖼️)' : '';
+    if (!confirm(`¿Enviar este mensaje${conImg} a ${n} clientes de ${dest}?\n\nSe envían despacio (8–20 seg c/u) para cuidar el número.`)) return;
     const soloOptIn = box.querySelector('[data-optin]').checked;
     const btn = box.querySelector('[data-go]'); btn.disabled = true; btn.textContent = 'Encolando…';
     try {
-      const r = await store.broadcast({ texto, nodo, soloOptIn });
+      const r = await store.broadcast({ texto, nodo, soloOptIn, imagen: imagenData || '' });
       const extra = [];
       if (r.omitidosBaja) extra.push(`${r.omitidosBaja} en BAJA`);
       if (r.sinOptIn) extra.push(`${r.sinOptIn} sin opt-in`);

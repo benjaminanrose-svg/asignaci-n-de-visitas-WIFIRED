@@ -324,6 +324,27 @@ async function botSend(id, text) {
   try { await sock.sendMessage(id, { text }); } catch (e) { console.error('Error al enviar:', e.message); }
 }
 
+// Caché de imágenes de comunicados: se descargan del server UNA vez por id.
+const mediaCache = new Map(); // media_id -> Buffer (o null si falló)
+async function getMediaBuffer(mediaId) {
+  if (mediaCache.has(mediaId)) return mediaCache.get(mediaId);
+  let buf = null;
+  try {
+    const r = await api('/api/bot/media/' + mediaId);
+    const data = r && r.data ? String(r.data) : '';
+    const m = data.match(/^data:[^;]+;base64,(.*)$/);
+    if (m) buf = Buffer.from(m[1], 'base64');
+  } catch (e) { console.error('No pude descargar la imagen del comunicado:', e.message); }
+  mediaCache.set(mediaId, buf);
+  return buf;
+}
+
+/** Envía una imagen (Buffer) con texto opcional como pie. */
+async function botSendImagen(id, buf, caption) {
+  lastBotSend.set(id, Date.now());
+  try { await sock.sendMessage(id, { image: buf, caption: caption || '' }); } catch (e) { console.error('Error al enviar imagen:', e.message); }
+}
+
 function crearTicket(payload) { return api('/api/bot/ticket', { method: 'POST', body: JSON.stringify(payload) }); }
 
 /** Descarga una imagen recibida y la devuelve como data URI (base64), o '' si no es imagen. */
@@ -739,7 +760,13 @@ async function pollOutbox() {
         if (hoy !== bcDia) { bcDia = hoy; bcHoy = 0; }
         if (bcHoy >= BC_MAX_DIA) continue;   // tope diario: se retoma mañana
         if (Date.now() < bcNext) continue;   // aún en pausa entre mensajes
-        await botSend(chatId, m.texto || '');
+        if (m.media_id) {
+          const buf = await getMediaBuffer(m.media_id);
+          if (buf) await botSendImagen(chatId, buf, m.texto || '');
+          else await botSend(chatId, m.texto || ''); // si la imagen falla, al menos va el texto
+        } else {
+          await botSend(chatId, m.texto || '');
+        }
         await api('/api/bot/outbox/' + m.id + '/sent', { method: 'POST' });
         bcHoy++;
         bcNext = Date.now() + BC_MIN_MS + Math.random() * (BC_MAX_MS - BC_MIN_MS);

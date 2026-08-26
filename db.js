@@ -224,6 +224,7 @@ function memoryStore() {
   let kSeq = 0;
   let outbox = []; // mensajes automáticos que el bot debe enviar por WhatsApp
   let oSeq = 0;
+  const mediaStore = new Map(); let mediaSeq = 0; // imágenes de comunicados (una copia por comunicado)
   const contactos = new Map(); // tel(9 díg) -> { telefono, visto, baja, ts } (opt-in/opt-out)
   let servicios = []; // perfiles de cliente con cuenta PPPoE
   let sSeq = 0;
@@ -319,11 +320,14 @@ function memoryStore() {
       return outTk(t);
     },
     async deleteTicket(id) { tickets = tickets.filter((x) => x.id != id); },
-    async addOutbox(telefono, texto, tipo) {
-      const o = { id: ++oSeq, telefono: telefono || '', texto: texto || '', tipo: tipo || '', estado: 'pendiente', created_at: new Date().toISOString(), sent_at: null };
+    async addOutbox(telefono, texto, tipo, mediaId) {
+      const o = { id: ++oSeq, telefono: telefono || '', texto: texto || '', tipo: tipo || '', media_id: mediaId || '', estado: 'pendiente', created_at: new Date().toISOString(), sent_at: null };
       outbox.push(o); return o;
     },
     async listOutboxPending() { return outbox.filter((o) => o.estado === 'pendiente').map((o) => ({ ...o })); },
+    // Media compartida de comunicados (una imagen se guarda una vez; la cola solo referencia su id).
+    async saveBroadcastMedia(data) { const id = String(++mediaSeq); mediaStore.set(id, String(data || '')); return id; },
+    async getBroadcastMedia(id) { return mediaStore.get(String(id)) || ''; },
     async countOutboxPending(tipo) { return outbox.filter((o) => o.estado === 'pendiente' && (!tipo || o.tipo === tipo)).length; },
     async cancelOutboxPending(tipo) { let n = 0; for (const o of outbox) { if (o.estado === 'pendiente' && (!tipo || o.tipo === tipo)) { o.estado = 'cancelado'; n++; } } return n; },
     async markOutboxSent(id) { const o = outbox.find((x) => x.id == id); if (o) { o.estado = 'enviado'; o.sent_at = new Date().toISOString(); } },
@@ -511,6 +515,14 @@ function pgStore(url) {
           sent_at TIMESTAMPTZ
         );`);
       await pool.query(`ALTER TABLE bot_outbox ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE bot_outbox ADD COLUMN IF NOT EXISTS media_id TEXT DEFAULT '';`);
+      // Imágenes de comunicados: se guardan UNA vez y la cola solo referencia su id.
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS bot_media (
+          id BIGSERIAL PRIMARY KEY,
+          data TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT now()
+        );`);
       await pool.query(`
         CREATE TABLE IF NOT EXISTS bot_contactos (
           telefono TEXT PRIMARY KEY,
@@ -721,10 +733,18 @@ function pgStore(url) {
       return rows[0] ? outTk(rows[0]) : null;
     },
     async deleteTicket(id) { await pool.query('DELETE FROM tickets WHERE id=$1', [id]); },
-    async addOutbox(telefono, texto, tipo) {
+    async addOutbox(telefono, texto, tipo, mediaId) {
       const { rows } = await pool.query(
-        `INSERT INTO bot_outbox (telefono, texto, tipo, estado) VALUES ($1,$2,$3,'pendiente') RETURNING *`, [telefono || '', texto || '', tipo || '']);
+        `INSERT INTO bot_outbox (telefono, texto, tipo, media_id, estado) VALUES ($1,$2,$3,$4,'pendiente') RETURNING *`, [telefono || '', texto || '', tipo || '', mediaId || '']);
       return rows[0];
+    },
+    async saveBroadcastMedia(data) {
+      const { rows } = await pool.query(`INSERT INTO bot_media (data) VALUES ($1) RETURNING id`, [String(data || '')]);
+      return String(rows[0].id);
+    },
+    async getBroadcastMedia(id) {
+      const { rows } = await pool.query(`SELECT data FROM bot_media WHERE id=$1`, [String(id)]);
+      return rows[0] ? rows[0].data : '';
     },
     async marcarContacto(telefono, baja) {
       const tel = String(telefono || '').replace(/\D/g, '').slice(-9); if (!tel) return;
@@ -743,7 +763,7 @@ function pgStore(url) {
       return rows;
     },
     async listOutboxPending() {
-      const { rows } = await pool.query(`SELECT id, telefono, texto, tipo, estado, created_at FROM bot_outbox WHERE estado='pendiente' ORDER BY id ASC LIMIT 50`);
+      const { rows } = await pool.query(`SELECT id, telefono, texto, tipo, media_id, estado, created_at FROM bot_outbox WHERE estado='pendiente' ORDER BY id ASC LIMIT 50`);
       return rows;
     },
     async countOutboxPending(tipo) {
