@@ -605,6 +605,8 @@ api.post('/servicios/broadcast', auth, soloCoordinador, wrap(async (req, res) =>
   const texto = String((req.body && req.body.texto) || '').trim();
   const nodo = String((req.body && req.body.nodo) || '').trim();
   const soloOptIn = !!(req.body && req.body.soloOptIn); // C: solo a quienes ya escribieron
+  const soloAnuncios = !!(req.body && req.body.soloAnuncios); // solo a quienes ACEPTARON anuncios generales
+  const preguntarAnuncios = !!(req.body && req.body.preguntarAnuncios); // pregunta al final si quiere seguir recibiendo
   const imagen = String((req.body && req.body.imagen) || '').trim(); // data URI opcional
   if (!texto && !imagen) return res.status(400).json({ error: 'Escribe el mensaje o adjunta una imagen' });
   if (imagen && !/^data:image\/(png|jpe?g|webp|gif);base64,/.test(imagen)) return res.status(400).json({ error: 'La imagen no es válida (usa PNG, JPG, WEBP o GIF)' });
@@ -614,39 +616,48 @@ api.post('/servicios/broadcast', auth, soloCoordinador, wrap(async (req, res) =>
   if (imagen && typeof s.saveBroadcastMedia === 'function') mediaId = await s.saveBroadcastMedia(imagen);
   const servicios = await s.listServicios();
   const norm = (t) => (t || '').replace(/\D/g, '').slice(-9);
-  // Opt-out (A) siempre: nunca a quien dijo BAJA. Opt-in (C) opcional.
+  // Opt-out (A) siempre: nunca a quien dijo BAJA. Opt-in (C) opcional. Anuncios generales: opcional.
   const contactos = typeof s.listContactos === 'function' ? await s.listContactos() : [];
-  const baja = new Set(), optin = new Set();
-  for (const c of contactos) { const t = norm(c.telefono); if (c.baja) baja.add(t); if (c.visto) optin.add(t); }
-  const seen = new Set(); let encolados = 0, sinTelefono = 0, omitidosBaja = 0, sinOptIn = 0;
+  const baja = new Set(), optin = new Set(), quiereAnuncios = new Set();
+  for (const c of contactos) { const t = norm(c.telefono); if (c.baja) baja.add(t); if (c.visto) optin.add(t); if (c.anuncios === true) quiereAnuncios.add(t); }
+  const preg = '\n\n———\n📣 ¿Quieres seguir recibiendo nuestros *anuncios generales* (novedades y promociones)?\nResponde *SÍ* para seguir recibiéndolos o *NO* para dejar de recibirlos. Los avisos importantes de tu servicio te llegarán igual.';
+  const tipoMsg = preguntarAnuncios ? 'broadcast_ask' : 'broadcast';
+  const seen = new Set(); let encolados = 0, sinTelefono = 0, omitidosBaja = 0, sinOptIn = 0, sinAnuncios = 0;
   for (const sv of servicios) {
     if (nodo && nodo !== '__todos__' && (sv.nodo || '') !== nodo) continue;
     const tel = norm(sv.telefono);
     if (tel.length !== 9) { sinTelefono++; continue; }
     if (seen.has(tel)) continue; seen.add(tel);
-    if (baja.has(tel)) { omitidosBaja++; continue; }          // A: pidió BAJA
-    if (soloOptIn && !optin.has(tel)) { sinOptIn++; continue; } // C: no ha escrito
-    const msg = texto.replace(/\{nombre\}/gi, (sv.nombre || '').trim().split(/\s+/)[0] || '');
-    await s.addOutbox(tel, msg, 'broadcast', mediaId);
+    if (baja.has(tel)) { omitidosBaja++; continue; }               // A: pidió BAJA
+    if (soloOptIn && !optin.has(tel)) { sinOptIn++; continue; }     // C: no ha escrito
+    if (soloAnuncios && !quiereAnuncios.has(tel)) { sinAnuncios++; continue; } // no aceptó anuncios generales
+    let msg = texto.replace(/\{nombre\}/gi, (sv.nombre || '').trim().split(/\s+/)[0] || '');
+    if (preguntarAnuncios) msg = (msg ? msg : '') + preg;
+    await s.addOutbox(tel, msg, tipoMsg, mediaId);
     encolados++;
   }
-  res.json({ encolados, sinTelefono, omitidosBaja, sinOptIn });
+  res.json({ encolados, sinTelefono, omitidosBaja, sinOptIn, sinAnuncios });
 }));
 
-// Lista de contactos (opt-in / BAJA) para calcular a cuántos llegará. Sólo coordinación.
+// Lista de contactos (opt-in / BAJA / anuncios) para calcular a cuántos llegará. Sólo coordinación.
 api.get('/contactos', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
   const c = typeof s.listContactos === 'function' ? await s.listContactos() : [];
-  res.json({ contactos: c.map((x) => ({ telefono: x.telefono, visto: !!x.visto, baja: !!x.baja })) });
+  res.json({ contactos: c.map((x) => ({ telefono: x.telefono, visto: !!x.visto, baja: !!x.baja, anuncios: (x.anuncios == null ? null : !!x.anuncios) })) });
 }));
 
-// Marcar BAJA/ALTA a mano desde la app. Sólo coordinación.
+// Marcar BAJA/ALTA o preferencia de anuncios a mano desde la app. Sólo coordinación.
 api.post('/contactos/marcar', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
-  const tel = String((req.body && req.body.telefono) || '');
-  const baja = !!(req.body && req.body.baja);
+  const b = req.body || {};
+  const tel = String(b.telefono || '');
   if (!tel) return res.status(400).json({ error: 'Falta el teléfono' });
-  if (typeof s.marcarContacto === 'function') await s.marcarContacto(tel, baja);
+  // Si viene 'anuncios' (true/false) fijamos esa preferencia; si no, gestionamos BAJA/ALTA.
+  if (typeof b.anuncios === 'boolean' && typeof s.setPrefAnuncios === 'function') {
+    await s.setPrefAnuncios(tel, b.anuncios);
+  } else if (typeof s.marcarContacto === 'function') {
+    await s.marcarContacto(tel, !!b.baja);
+  }
   res.json({ ok: true });
 }));
 
@@ -928,12 +939,19 @@ api.get('/bot/media/:id', requireBotKey, wrap(async (req, res) => {
   res.json({ data: data || '' });
 }));
 
-// El bot avisa que un número le escribió (opt-in) o pidió BAJA/ALTA (opt-out).
+// El bot avisa que un número le escribió (opt-in), pidió BAJA/ALTA (opt-out),
+// o respondió a la pregunta de anuncios generales (anuncios: true/false).
 api.post('/bot/contacto', requireBotKey, wrap(async (req, res) => {
   const s = await getStore();
-  const tel = String((req.body && req.body.telefono) || '');
-  const baja = (req.body && typeof req.body.baja === 'boolean') ? req.body.baja : undefined;
-  if (tel && typeof s.marcarContacto === 'function') await s.marcarContacto(tel, baja);
+  const b = req.body || {};
+  const tel = String(b.telefono || '');
+  if (!tel) return res.json({ ok: true });
+  if (typeof b.anuncios === 'boolean' && typeof s.setPrefAnuncios === 'function') {
+    await s.setPrefAnuncios(tel, b.anuncios);
+  } else if (typeof s.marcarContacto === 'function') {
+    const baja = (typeof b.baja === 'boolean') ? b.baja : undefined;
+    await s.marcarContacto(tel, baja);
+  }
   res.json({ ok: true });
 }));
 

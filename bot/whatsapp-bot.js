@@ -212,10 +212,12 @@ const lastBotSend = new Map();// chatId -> timestamp del último envío del bot
 const desbloqueados = new Map(); // (modo prueba) chatId -> ts, chats que dijeron la palabra clave
 const esperaPlan = new Map();    // teléfono (dígitos) -> ts límite: le enviamos planes y esperamos su elección
 const esperaConfirmacion = new Map(); // teléfono (dígitos) -> ts límite: le pedimos confirmar su visita (SÍ/NO)
+const esperaAnuncios = new Map(); // teléfono (dígitos) -> ts límite: le preguntamos si quiere seguir recibiendo anuncios generales
 const SESSION_TTL = 10 * 60 * 1000;      // 10 min sin actividad → se reinicia el flujo
 const HANDOFF_TTL = 3 * 60 * 60 * 1000;  // 3 h de silencio cuando entra un humano
 const PLAN_TTL = 12 * 60 * 60 * 1000;    // 12 h para reconocer la respuesta del cliente a los planes
 const CONFIRM_TTL = 20 * 60 * 60 * 1000; // 20 h para reconocer el SÍ/NO de confirmación de visita
+const ANUNCIOS_TTL = 3 * 24 * 60 * 60 * 1000; // 3 días para reconocer el SÍ/NO de anuncios generales
 
 function resetSession(id) { sessions.delete(id); }
 
@@ -517,13 +519,28 @@ async function onMessage(m) {
   // Nos escribió → queda como "opt-in" (autoriza recibir comunicados).
   // Responde BAJA/STOP → no recibe más masivos.  ALTA → vuelve a recibir.
   if (info.telefono) {
+    const telDig = soloDigitos(info.telefono).slice(-9);
     if (low === 'baja' || low === 'stop' || low === 'no molestar') {
+      esperaAnuncios.delete(telDig);
       api('/api/bot/contacto', { method: 'POST', body: JSON.stringify({ telefono: info.telefono, baja: true }) }).catch(() => {});
       return botSend(id, '✅ Listo, no te enviaremos más comunicados masivos.\n\nEscribe *ALTA* cuando quieras volver a recibirlos.');
     }
     if (low === 'alta') {
       api('/api/bot/contacto', { method: 'POST', body: JSON.stringify({ telefono: info.telefono, baja: false }) }).catch(() => {});
       return botSend(id, '✅ Listo, volverás a recibir nuestros comunicados. 🙌');
+    }
+    // ¿Está respondiendo a la pregunta de "anuncios generales"? (tras un comunicado)
+    if (telDig && esperaAnuncios.has(telDig)) {
+      const si = /^(s[ií]|si|sí|quiero|acepto|dale|ya|ok|okey|listo|👍)/.test(low);
+      const no = /^(no|nop|no quiero|no gracias|negativo|paso)/.test(low);
+      if (si || no) {
+        esperaAnuncios.delete(telDig);
+        api('/api/bot/contacto', { method: 'POST', body: JSON.stringify({ telefono: info.telefono, anuncios: si }) }).catch(() => {});
+        return botSend(id, si
+          ? '¡Gracias! 🙌 Seguirás recibiendo nuestros *anuncios generales*.'
+          : '✅ Listo, no te enviaremos más *anuncios generales*. Los avisos importantes de tu servicio te seguirán llegando.');
+      }
+      // Si respondió otra cosa, seguimos esperando su SÍ/NO y atendemos el mensaje normal.
     }
     api('/api/bot/contacto', { method: 'POST', body: JSON.stringify({ telefono: info.telefono }) }).catch(() => {});
   }
@@ -741,24 +758,26 @@ async function finalizarContrato(id, sess, info) {
 
 // ---------- Bandeja de salida: envía los mensajes automáticos (planes, etc.) ----------
 let poolingOut = false;
-// Ritmo controlado para envíos masivos (anti-baneo): 1 por ciclo, con pausa
-// aleatoria entre cada uno y un tope diario. Los mensajes normales no se frenan.
-const BC_MIN_MS = 8000, BC_MAX_MS = 20000, BC_MAX_DIA = 400;
-let bcNext = 0, bcHoy = 0, bcDia = '';
+// Ritmo controlado para envíos masivos (anti-baneo): un LOTE por ciclo con pausas
+// cortas aleatorias entre cada uno y un tope diario. Los mensajes normales no se frenan.
+const BC_MIN_MS = 3000, BC_MAX_MS = 7000, BC_MAX_DIA = 500, BC_POR_CICLO = 4;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let bcHoy = 0, bcDia = '';
 async function pollOutbox() {
   if (poolingOut || !sock) return;
   poolingOut = true;
+  let bcCiclo = 0; // cuántos masivos llevamos enviados en este ciclo
   try {
     const pend = await api('/api/bot/outbox');
     if (pend && pend.length) console.log(`[BOT] cola: ${pend.length} pendientes (primero tipo=${pend[0].tipo || '-'} tel=${pend[0].telefono})`);
     for (const m of pend || []) {
       const chatId = toChatId(m.telefono);
       if (!chatId) { await api('/api/bot/outbox/' + m.id + '/sent', { method: 'POST' }); continue; }
-      if (m.tipo === 'broadcast') {
+      if (m.tipo === 'broadcast' || m.tipo === 'broadcast_ask') {
         const hoy = new Date().toISOString().slice(0, 10);
         if (hoy !== bcDia) { bcDia = hoy; bcHoy = 0; }
-        if (bcHoy >= BC_MAX_DIA) continue;   // tope diario: se retoma mañana
-        if (Date.now() < bcNext) continue;   // aún en pausa entre mensajes
+        if (bcHoy >= BC_MAX_DIA) continue;      // tope diario: se retoma mañana
+        if (bcCiclo >= BC_POR_CICLO) continue;  // ya enviamos el lote de este ciclo
         if (m.media_id) {
           const buf = await getMediaBuffer(m.media_id);
           if (buf) await botSendImagen(chatId, buf, m.texto || '');
@@ -767,10 +786,12 @@ async function pollOutbox() {
           await botSend(chatId, m.texto || '');
         }
         await api('/api/bot/outbox/' + m.id + '/sent', { method: 'POST' });
-        bcHoy++;
-        bcNext = Date.now() + BC_MIN_MS + Math.random() * (BC_MAX_MS - BC_MIN_MS);
+        bcHoy++; bcCiclo++;
+        // Si preguntamos por anuncios generales, su próxima respuesta (SÍ/NO) se registra como preferencia.
+        if (m.tipo === 'broadcast_ask') { const td = soloDigitos(m.telefono).slice(-9); if (td) esperaAnuncios.set(td, Date.now() + ANUNCIOS_TTL); }
         console.log(`[BOT] masivo enviado a ${m.telefono} (${bcHoy} hoy)`);
-        continue; // sólo 1 masivo por ciclo
+        if (bcCiclo < BC_POR_CICLO) await sleep(BC_MIN_MS + Math.random() * (BC_MAX_MS - BC_MIN_MS));
+        continue;
       }
       await botSend(chatId, m.texto || '');
       const telDig = soloDigitos(m.telefono);
@@ -792,4 +813,4 @@ async function pollOutbox() {
 console.log('Iniciando bot de WhatsApp WIFIRED (motor Baileys)…');
 start().catch((e) => { console.error('Error al iniciar:', e); process.exit(1); });
 setInterval(loadBotConfig, 60 * 1000);      // refresca la config cada minuto
-setInterval(pollOutbox, 12 * 1000);         // envía mensajes automáticos pendientes
+setInterval(pollOutbox, 8 * 1000);          // envía mensajes automáticos pendientes (lote por ciclo)

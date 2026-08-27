@@ -214,11 +214,19 @@ export async function broadcastModal() {
         </div>
         <span class="muted-sm">Se envía la imagen con el texto como pie. Máx ~5 MB. Si adjuntas imagen, el texto es opcional.</span>
       </div>
-      <label class="row" style="gap:8px;align-items:center;cursor:pointer;margin:2px 0 8px">
+      <label class="row" style="gap:8px;align-items:center;cursor:pointer;margin:2px 0 6px">
         <input type="checkbox" data-optin>
-        <span class="muted-sm">Enviar <b>solo a quienes ya me escribieron</b> (más seguro; actívalo cuando tengas una lista grande).</span>
+        <span class="muted-sm">Enviar <b>solo a quienes ya me escribieron</b> (más seguro con listas grandes).</span>
       </label>
-      <p class="muted-sm">🛡️ Nunca se envía a quien respondió <b>BAJA</b>. ⏱️ Se envían <b>de a uno con pausa</b> (8–20 seg) para no arriesgar el número; el bot lo hace en segundo plano.</p>
+      <label class="row" style="gap:8px;align-items:center;cursor:pointer;margin:2px 0 6px">
+        <input type="checkbox" data-soloanuncios>
+        <span class="muted-sm">📣 Enviar <b>solo a quienes aceptaron anuncios generales</b> (para promociones/novedades).</span>
+      </label>
+      <label class="row" style="gap:8px;align-items:center;cursor:pointer;margin:2px 0 8px">
+        <input type="checkbox" data-preguntar>
+        <span class="muted-sm">❓ <b>Preguntar al final</b> si quieren seguir recibiendo anuncios generales (guarda su Sí/No).</span>
+      </label>
+      <p class="muted-sm">🛡️ Nunca se envía a quien respondió <b>BAJA</b>. ⏱️ Se envían por lotes con pausas cortas (más rápido, cuidando el número); el bot lo hace en segundo plano.</p>
     </div>
     <div class="modal-foot">
       <div class="grow"></div>
@@ -232,30 +240,34 @@ export async function broadcastModal() {
   const sel = box.querySelector('[data-nodo]');
   const cnt = box.querySelector('[data-count]');
   const chkOptin = box.querySelector('[data-optin]');
+  const chkAnuncios = box.querySelector('[data-soloanuncios]');
   const norm9 = (t) => (t || '').replace(/\D/g, '').slice(-9);
-  let bajaSet = new Set(), optinSet = new Set(); // se llenan al cargar contactos
+  let bajaSet = new Set(), optinSet = new Set(), anunciosSet = new Set(); // se llenan al cargar contactos
   const contar = () => {
     const nodo = sel.value;
     const soloOptIn = chkOptin.checked;
+    const soloAnuncios = chkAnuncios.checked;
     const tels = new Set();
     for (const s of servicios) {
       if (nodo !== '__todos__' && (s.nodo || '') !== nodo) continue;
       if (!telValido(s.telefono)) continue;
       tels.add(norm9(s.telefono));
     }
-    let recibiran = 0, enBaja = 0, sinOptin = 0;
+    let recibiran = 0, enBaja = 0, sinOptin = 0, sinAnuncios = 0;
     for (const t of tels) {
       if (bajaSet.has(t)) { enBaja++; continue; }
       if (soloOptIn && !optinSet.has(t)) { sinOptin++; continue; }
+      if (soloAnuncios && !anunciosSet.has(t)) { sinAnuncios++; continue; }
       recibiran++;
     }
     const notas = [];
     if (enBaja) notas.push(`${enBaja} en BAJA`);
     if (sinOptin) notas.push(`${sinOptin} sin opt-in`);
+    if (sinAnuncios) notas.push(`${sinAnuncios} no aceptó anuncios`);
     cnt.innerHTML = `📲 Recibirán el mensaje: <b>${recibiran}</b> de ${tels.size}${notas.length ? ` <span class="muted-sm">(excluidos: ${notas.join(', ')})</span>` : ''}.`;
     return recibiran;
   };
-  sel.onchange = contar; chkOptin.onchange = contar; contar();
+  sel.onchange = contar; chkOptin.onchange = contar; chkAnuncios.onchange = contar; contar();
 
   // Imagen opcional del comunicado.
   let imagenData = '';
@@ -273,7 +285,7 @@ export async function broadcastModal() {
   box.querySelector('[data-imgclear]').onclick = () => { imagenData = ''; imgInput.value = ''; imgPrev.style.display = 'none'; };
   // Carga las bajas/opt-in y recalcula el número real.
   store.listContactos().then((r) => {
-    for (const c of (r.contactos || [])) { const t = norm9(c.telefono); if (c.baja) bajaSet.add(t); if (c.visto) optinSet.add(t); }
+    for (const c of (r.contactos || [])) { const t = norm9(c.telefono); if (c.baja) bajaSet.add(t); if (c.visto) optinSet.add(t); if (c.anuncios === true) anunciosSet.add(t); }
     contar();
   }).catch(() => {});
 
@@ -304,14 +316,17 @@ export async function broadcastModal() {
     if (!n) { toast('No hay clientes con teléfono en esa selección', 'info'); return; }
     const dest = nodo === '__todos__' ? 'TODOS los nodos' : `nodo "${nodo}"`;
     const conImg = imagenData ? ' (con imagen 🖼️)' : '';
-    if (!confirm(`¿Enviar este mensaje${conImg} a ${n} clientes de ${dest}?\n\nSe envían despacio (8–20 seg c/u) para cuidar el número.`)) return;
+    if (!confirm(`¿Enviar este mensaje${conImg} a ${n} clientes de ${dest}?\n\nSe envían por lotes con pausas cortas para cuidar el número.`)) return;
     const soloOptIn = box.querySelector('[data-optin]').checked;
+    const soloAnuncios = box.querySelector('[data-soloanuncios]').checked;
+    const preguntarAnuncios = box.querySelector('[data-preguntar]').checked;
     const btn = box.querySelector('[data-go]'); btn.disabled = true; btn.textContent = 'Encolando…';
     try {
-      const r = await store.broadcast({ texto, nodo, soloOptIn, imagen: imagenData || '' });
+      const r = await store.broadcast({ texto, nodo, soloOptIn, soloAnuncios, preguntarAnuncios, imagen: imagenData || '' });
       const extra = [];
       if (r.omitidosBaja) extra.push(`${r.omitidosBaja} en BAJA`);
       if (r.sinOptIn) extra.push(`${r.sinOptIn} sin opt-in`);
+      if (r.sinAnuncios) extra.push(`${r.sinAnuncios} no aceptó anuncios`);
       toast(`✅ ${r.encolados} en cola${extra.length ? ' (omitidos: ' + extra.join(', ') + ')' : ''}. El bot los enviará de a poco.`);
       cerrar();
     } catch (e) { toast(e.message || 'No se pudo enviar', 'info'); btn.disabled = false; btn.textContent = 'Enviar'; }
@@ -522,8 +537,8 @@ export async function contactosModal() {
   } catch (e) { toast('No se pudieron cargar los contactos', 'info'); return; }
 
   const norm9 = (t) => (t || '').replace(/\D/g, '').slice(-9);
-  const nameOf = {};
-  for (const s of servicios) { const t = norm9(s.telefono); if (t && !nameOf[t]) nameOf[t] = s.nombre || ''; }
+  const nameOf = {}, nodoOf = {};
+  for (const s of servicios) { const t = norm9(s.telefono); if (t && !nameOf[t]) { nameOf[t] = s.nombre || ''; nodoOf[t] = s.nodo || ''; } }
   const fmtTel = (t) => (t && t.length === 9 ? `+56 ${t.slice(0, 1)} ${t.slice(1, 5)} ${t.slice(5)}` : t);
 
   let q = '';
@@ -563,11 +578,23 @@ export async function contactosModal() {
       pintar();
     } catch (e) { toast(e.message || 'No se pudo guardar', 'info'); }
   };
+  const marcarAnun = async (tel, quiere) => {
+    try {
+      await store.marcarAnuncios(tel, quiere);
+      const t = norm9(tel);
+      const c = contactos.find((x) => norm9(x.telefono) === t);
+      if (c) { c.anuncios = quiere; c.visto = true; }
+      else contactos.push({ telefono: t, visto: true, baja: false, anuncios: quiere });
+      pintar();
+    } catch (e) { toast(e.message || 'No se pudo guardar', 'info'); }
+  };
 
   const pintar = () => {
     const optin = contactos.filter((c) => c.visto && !c.baja).length;
     const bajas = contactos.filter((c) => c.baja).length;
-    resumenEl.innerHTML = `🟢 <b>${optin}</b> te escribieron (opt-in) &nbsp;·&nbsp; ⛔ <b>${bajas}</b> en BAJA`;
+    const quieren = contactos.filter((c) => c.anuncios === true).length;
+    const noQuieren = contactos.filter((c) => c.anuncios === false).length;
+    resumenEl.innerHTML = `🟢 <b>${optin}</b> opt-in &nbsp;·&nbsp; ⛔ <b>${bajas}</b> BAJA &nbsp;·&nbsp; 📣 <b>${quieren}</b> quieren anuncios &nbsp;·&nbsp; 🚫 <b>${noQuieren}</b> no`;
 
     let list = contactos.slice();
     if (q) list = list.filter((c) => (norm9(c.telefono).includes(q.replace(/\D/g, '')) || (nameOf[norm9(c.telefono)] || '').toLowerCase().includes(q)));
@@ -575,28 +602,37 @@ export async function contactosModal() {
 
     if (!list.length) { listaEl.innerHTML = `<div class="empty-state" style="padding:20px"><p>${q ? 'Sin resultados.' : 'Aún no hay contactos registrados.<br><span class="muted-sm">Se llenan cuando la gente le escribe al bot o das una BAJA a mano.</span>'}</p></div>`; return; }
 
+    const tagS = (bg, bd, fg, txt) => `<span class="tag" style="background:color-mix(in srgb,${bg} 16%,transparent);border-color:color-mix(in srgb,${bd} 40%,var(--border));color:${fg}">${txt}</span>`;
     listaEl.innerHTML = list.map((c) => {
       const t = norm9(c.telefono);
       const nombre = nameOf[t] || 'Sin nombre en clientes';
-      const chip = c.baja
-        ? '<span class="tag" style="background:color-mix(in srgb,#ef4444 16%,transparent);border-color:color-mix(in srgb,#ef4444 40%,var(--border));color:#dc2626">⛔ BAJA</span>'
-        : '<span class="tag" style="background:color-mix(in srgb,#10b981 16%,transparent);border-color:color-mix(in srgb,#10b981 40%,var(--border));color:#0f9d68">🟢 Opt-in</span>';
-      const btn = c.baja
+      const nodo = nodoOf[t] ? ` · 📡 ${esc(nodoOf[t])}` : '';
+      const chip = c.baja ? tagS('#ef4444', '#ef4444', '#dc2626', '⛔ BAJA') : tagS('#10b981', '#10b981', '#0f9d68', '🟢 Opt-in');
+      const anunChip = c.anuncios === true ? tagS('#2563eb', '#2563eb', '#2563eb', '📣 Anuncios: Sí')
+        : c.anuncios === false ? tagS('#94a3b8', '#94a3b8', '#64748b', '🚫 Anuncios: No')
+        : tagS('#94a3b8', '#94a3b8', '#94a3b8', '📣 Anuncios: —');
+      const btnBaja = c.baja
         ? `<button class="btn btn-sm" data-alta="${esc(t)}">Quitar BAJA</button>`
         : `<button class="btn btn-sm btn-danger" data-baja="${esc(t)}">Dar BAJA</button>`;
+      const btnAnun = c.anuncios === true
+        ? `<button class="btn btn-sm" data-anno="${esc(t)}">Quitar anuncios</button>`
+        : `<button class="btn btn-sm" data-ansi="${esc(t)}">Marcar quiere anuncios</button>`;
       return `<div class="card" style="padding:10px 12px;margin-bottom:8px">
-        <div class="row" style="gap:10px;align-items:center">
-          <div style="flex:1;min-width:0">
+        <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap">
+          <div style="flex:1;min-width:140px">
             <div class="cell-strong truncate">${esc(nombre)}</div>
-            <div class="cell-sub">📞 ${esc(fmtTel(t))}</div>
+            <div class="cell-sub">📞 ${esc(fmtTel(t))}${nodo}</div>
           </div>
-          ${chip}${btn}
+          <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">${chip}${anunChip}</div>
         </div>
+        <div class="row" style="gap:6px;margin-top:8px;justify-content:flex-end;flex-wrap:wrap">${btnAnun}${btnBaja}</div>
       </div>`;
     }).join('');
 
     listaEl.querySelectorAll('[data-baja]').forEach((b) => b.onclick = () => marcar(b.dataset.baja, true));
     listaEl.querySelectorAll('[data-alta]').forEach((b) => b.onclick = () => marcar(b.dataset.alta, false));
+    listaEl.querySelectorAll('[data-ansi]').forEach((b) => b.onclick = () => marcarAnun(b.dataset.ansi, true));
+    listaEl.querySelectorAll('[data-anno]').forEach((b) => b.onclick = () => marcarAnun(b.dataset.anno, false));
   };
 
   box.querySelector('[data-q]').oninput = (e) => { q = e.target.value.trim().toLowerCase(); pintar(); };

@@ -179,6 +179,13 @@ function evStr(v) { return Array.isArray(v) ? JSON.stringify(v) : (v || '[]'); }
 /** evidencias / historial se guardan como JSON (texto) y se exponen como arreglo */
 function parseEv(s) { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 
+/** ¿El tipo de un mensaje de la cola coincide con el filtro? 'broadcast' engloba 'broadcast_ask'. */
+function tipoCoincide(t, filtro) {
+  if (!filtro) return true;
+  if (filtro === 'broadcast') return String(t || '').startsWith('broadcast');
+  return t === filtro;
+}
+
 /** Hash corto (determinístico) para detectar cambios sin transferir toda la data */
 function revHash(str) {
   let h = 0;
@@ -328,14 +335,21 @@ function memoryStore() {
     // Media compartida de comunicados (una imagen se guarda una vez; la cola solo referencia su id).
     async saveBroadcastMedia(data) { const id = String(++mediaSeq); mediaStore.set(id, String(data || '')); return id; },
     async getBroadcastMedia(id) { return mediaStore.get(String(id)) || ''; },
-    async countOutboxPending(tipo) { return outbox.filter((o) => o.estado === 'pendiente' && (!tipo || o.tipo === tipo)).length; },
-    async cancelOutboxPending(tipo) { let n = 0; for (const o of outbox) { if (o.estado === 'pendiente' && (!tipo || o.tipo === tipo)) { o.estado = 'cancelado'; n++; } } return n; },
+    async countOutboxPending(tipo) { return outbox.filter((o) => o.estado === 'pendiente' && tipoCoincide(o.tipo, tipo)).length; },
+    async cancelOutboxPending(tipo) { let n = 0; for (const o of outbox) { if (o.estado === 'pendiente' && tipoCoincide(o.tipo, tipo)) { o.estado = 'cancelado'; n++; } } return n; },
     async markOutboxSent(id) { const o = outbox.find((x) => x.id == id); if (o) { o.estado = 'enviado'; o.sent_at = new Date().toISOString(); } },
     async marcarContacto(telefono, baja) {
       const tel = String(telefono || '').replace(/\D/g, '').slice(-9); if (!tel) return;
       const c = contactos.get(tel) || { telefono: tel, visto: false, baja: false };
       c.visto = true;
       if (baja === true) c.baja = true; else if (baja === false) c.baja = false;
+      c.ts = Date.now(); contactos.set(tel, c);
+    },
+    // Preferencia de anuncios generales: true = sí quiere, false = no quiere, sin registro = no ha respondido.
+    async setPrefAnuncios(telefono, quiere) {
+      const tel = String(telefono || '').replace(/\D/g, '').slice(-9); if (!tel) return;
+      const c = contactos.get(tel) || { telefono: tel, visto: false, baja: false };
+      c.visto = true; c.anuncios = !!quiere;
       c.ts = Date.now(); contactos.set(tel, c);
     },
     async listContactos() { return [...contactos.values()]; },
@@ -530,6 +544,8 @@ function pgStore(url) {
           baja BOOLEAN DEFAULT false,
           updated_at TIMESTAMPTZ DEFAULT now()
         );`);
+      // Preferencia de anuncios generales (null = no respondió, true = sí, false = no).
+      await pool.query(`ALTER TABLE bot_contactos ADD COLUMN IF NOT EXISTS anuncios BOOLEAN;`);
       await pool.query(`
         CREATE TABLE IF NOT EXISTS servicios (
           id SERIAL PRIMARY KEY,
@@ -758,8 +774,14 @@ function pgStore(url) {
            ON CONFLICT (telefono) DO UPDATE SET visto=true, updated_at=now()`, [tel]);
       }
     },
+    async setPrefAnuncios(telefono, quiere) {
+      const tel = String(telefono || '').replace(/\D/g, '').slice(-9); if (!tel) return;
+      await pool.query(
+        `INSERT INTO bot_contactos (telefono, visto, anuncios, updated_at) VALUES ($1, true, $2, now())
+         ON CONFLICT (telefono) DO UPDATE SET visto=true, anuncios=$2, updated_at=now()`, [tel, !!quiere]);
+    },
     async listContactos() {
-      const { rows } = await pool.query(`SELECT telefono, visto, baja FROM bot_contactos`);
+      const { rows } = await pool.query(`SELECT telefono, visto, baja, anuncios FROM bot_contactos`);
       return rows;
     },
     async listOutboxPending() {
@@ -767,15 +789,20 @@ function pgStore(url) {
       return rows;
     },
     async countOutboxPending(tipo) {
-      const { rows } = tipo
-        ? await pool.query(`SELECT COUNT(*)::int AS n FROM bot_outbox WHERE estado='pendiente' AND tipo=$1`, [tipo])
-        : await pool.query(`SELECT COUNT(*)::int AS n FROM bot_outbox WHERE estado='pendiente'`);
+      // 'broadcast' engloba 'broadcast_ask'.
+      const { rows } = !tipo
+        ? await pool.query(`SELECT COUNT(*)::int AS n FROM bot_outbox WHERE estado='pendiente'`)
+        : tipo === 'broadcast'
+          ? await pool.query(`SELECT COUNT(*)::int AS n FROM bot_outbox WHERE estado='pendiente' AND tipo LIKE 'broadcast%'`)
+          : await pool.query(`SELECT COUNT(*)::int AS n FROM bot_outbox WHERE estado='pendiente' AND tipo=$1`, [tipo]);
       return rows[0].n;
     },
     async cancelOutboxPending(tipo) {
-      const { rowCount } = tipo
-        ? await pool.query(`UPDATE bot_outbox SET estado='cancelado' WHERE estado='pendiente' AND tipo=$1`, [tipo])
-        : await pool.query(`UPDATE bot_outbox SET estado='cancelado' WHERE estado='pendiente'`);
+      const { rowCount } = !tipo
+        ? await pool.query(`UPDATE bot_outbox SET estado='cancelado' WHERE estado='pendiente'`)
+        : tipo === 'broadcast'
+          ? await pool.query(`UPDATE bot_outbox SET estado='cancelado' WHERE estado='pendiente' AND tipo LIKE 'broadcast%'`)
+          : await pool.query(`UPDATE bot_outbox SET estado='cancelado' WHERE estado='pendiente' AND tipo=$1`, [tipo]);
       return rowCount;
     },
     async markOutboxSent(id) { await pool.query(`UPDATE bot_outbox SET estado='enviado', sent_at=now() WHERE id=$1`, [id]); },
