@@ -139,12 +139,10 @@ const DEFAULT_FLUJO = {
   ],
 };
 
-/** Devuelve el flujo editado en la página (botCfg.flujo) o el flujo por defecto. */
+/** Flujo del menú del bot: SIEMPRE el definido en el código (DEFAULT_FLUJO).
+ * El editor de flujo de la página fue retirado para no interferir con las
+ * opciones fijas (Soporte, Contratación, Retiro, Pago). */
 function getFlujo() {
-  const f = botCfg && botCfg.flujo;
-  if (f && Array.isArray(f.opciones) && f.opciones.length) {
-    return { intro: (typeof f.intro === 'string' && f.intro.trim()) ? f.intro : DEFAULT_FLUJO.intro, opciones: f.opciones };
-  }
   return DEFAULT_FLUJO;
 }
 
