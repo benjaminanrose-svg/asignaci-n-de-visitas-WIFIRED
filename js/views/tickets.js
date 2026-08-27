@@ -340,16 +340,16 @@ function detailHtml(t) {
         <div class="tk-section">
           <label class="tk-section-lbl">📷 Documentos del cliente</label>
           <div class="row" style="gap:10px; flex-wrap:wrap; margin-top:6px">
-            ${t.adjuntos.map((a) => {
+            ${t.adjuntos.map((a, i) => {
               const esImg = /^data:image\//i.test(a.data || '');
               const vista = esImg
                 ? `<img src="${esc(a.data)}" alt="${esc(a.tipo || 'documento')}" style="width:150px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block">`
                 : `<div style="width:150px;height:100px;display:flex;align-items:center;justify-content:center;font-size:38px;border-radius:8px;border:1px solid var(--border)">📄</div>`;
               return `
-              <a href="${esc(a.data)}" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">
+              <button type="button" data-adj="${i}" style="background:none;border:none;padding:0;cursor:pointer;text-align:center">
                 ${vista}
-                <span class="muted-sm" style="display:block;margin-top:4px">${esc(a.tipo || 'Documento')} · abrir ›</span>
-              </a>`; }).join('')}
+                <span class="muted-sm" style="display:block;margin-top:4px">${esc(a.tipo || 'Documento')} · ver ›</span>
+              </button>`; }).join('')}
           </div>
         </div>` : ''}
 
@@ -395,8 +395,43 @@ function detailHtml(t) {
     </div>`;
 }
 
+// Visor de adjuntos DENTRO de la página (el navegador y la CSP bloquean abrir
+// data: en una pestaña nueva). Imágenes → lightbox; otros archivos (PDF) → blob.
+function verAdjunto(a) {
+  const data = (a && a.data) || '';
+  if (!data) return;
+  if (/^data:image\//i.test(data)) {
+    const ov = document.createElement('div');
+    ov.setAttribute('style', 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px;gap:12px');
+    ov.innerHTML = `
+      <div style="width:100%;max-width:900px;display:flex;justify-content:space-between;align-items:center;color:#fff">
+        <span style="font-size:14px">${esc(a.tipo || 'Documento')}</span>
+        <button data-lbx style="background:none;border:none;color:#fff;font-size:26px;cursor:pointer;line-height:1">✕</button>
+      </div>
+      <img src="${esc(data)}" alt="${esc(a.tipo || '')}" style="max-width:100%;max-height:80vh;object-fit:contain;border-radius:8px;background:#fff">`;
+    const cerrar = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') cerrar(); };
+    ov.addEventListener('click', (e) => { if (e.target === ov || e.target.closest('[data-lbx]')) cerrar(); });
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(ov);
+    return;
+  }
+  // Archivo no-imagen (PDF, etc.): lo abrimos como blob (el navegador sí lo permite).
+  try {
+    const [meta, b64] = data.split(',');
+    const mime = (meta.match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
+    const bin = atob(b64 || ''); const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([arr], { type: mime }));
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) { toast('No se pudo abrir el archivo', 'info'); }
+}
+
 function wire(node, uid) {
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+  const tk = store.ticketByUid(uid);
+  node.querySelectorAll('[data-adj]').forEach((b) => (b.onclick = () => { if (tk && tk.adjuntos) verAdjunto(tk.adjuntos[Number(b.dataset.adj)]); }));
   const cat = node.querySelector('[data-cat]');
   if (cat) cat.onchange = (e) => applyPatch(node, uid, { categoria: e.target.value });
   const est = node.querySelector('[data-estado]');
