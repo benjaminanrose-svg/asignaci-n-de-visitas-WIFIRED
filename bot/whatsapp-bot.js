@@ -131,10 +131,11 @@ const DEFAULT_FLUJO = {
       n: '4', titulo: 'Enviar comprobante de pago 💳', categoria: 'Pago',
       desc: 'Envíanos la foto o el archivo de tu comprobante de pago.',
       pasos: [
-        { campo: 'nombre', tipo: 'texto', pregunta: '¡Gracias por tu pago! 💳 Te ayudo a registrarlo.\n\nPara empezar, ¿cuál es tu *nombre completo* (titular del servicio)?' },
-        { campo: 'comprobante', tipo: 'foto', pregunta: 'Perfecto. Ahora envíame la *foto* 📷 o el *archivo* 📎 de tu *comprobante de pago* (transferencia, depósito, etc.).\n\nAsegúrate de que se vea claro el *monto*, la *fecha* y el *destinatario*.' },
+        { campo: 'nombre', tipo: 'texto', pregunta: 'Te ayudo a registrar tu comprobante de pago. 💳\n\nPara identificar la cuenta, ¿cuál es el *nombre completo del titular* de la cuenta que estás pagando?' },
+        { campo: 'rut', tipo: 'rut', pregunta: 'Gracias. ¿Cuál es el *RUT del titular* de la cuenta? (ej: 12.345.678-9)' },
+        { campo: 'comprobante', tipo: 'foto', pregunta: 'Perfecto. Ahora envíame la *foto* 📷 o el *archivo* 📎 de tu *comprobante de pago* (transferencia, depósito, etc.).\n\nAsegúrate de que en la imagen se vea *claro* y *completo*:\n• El *N° de transferencia u orden* de la operación\n• El *monto*\n• La *fecha*\n• El *destinatario*' },
       ],
-      confirma: '✅ ¡Recibido! Registramos tu *comprobante de pago* con el N° *{num}*.\n\nNuestro equipo lo revisará y validará tu pago. Si hay algún detalle, te contactaremos. 💳🙌',
+      confirma: '✅ ¡Comprobante *recibido*! Lo registramos con el N° *{num}*.\n\nNuestro equipo lo *revisará* y, cuando confirmemos tu pago, te avisaremos por este medio. 💳🙌',
     },
   ],
 };
@@ -776,8 +777,9 @@ async function pollOutbox() {
       if (telDig && m.tipo === 'confirmacion') {
         // Le pedimos confirmar su visita: su próxima respuesta (SÍ/NO) se procesa como confirmación.
         esperaConfirmacion.set(telDig, Date.now() + CONFIRM_TTL);
-      } else if (telDig) {
+      } else if (telDig && m.tipo !== 'aviso') {
         // Le mandamos planes: su próxima respuesta se trata como su elección (no como menú).
+        // Los avisos sueltos (ej: pago validado) NO arman esta espera.
         esperaPlan.set(telDig, Date.now() + PLAN_TTL);
       }
       await api('/api/bot/outbox/' + m.id + '/sent', { method: 'POST' });

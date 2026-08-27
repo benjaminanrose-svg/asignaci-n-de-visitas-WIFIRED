@@ -724,8 +724,18 @@ api.post('/tickets', auth, soloCoordinador, wrap(async (req, res) => {
 api.put('/tickets/:id', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
   if (typeof s.updateTicket !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  // Estado anterior, para detectar la validación de un pago.
+  let previo = null;
+  if (typeof s.listTickets === 'function') previo = (await s.listTickets()).find((x) => x._uid === String(req.params.id)) || null;
   const t = await s.updateTicket(req.params.id, req.body || {});
   if (!t) return res.status(404).json({ error: 'Ticket no encontrado' });
+  // Pago validado (categoría Pago pasa a Resuelto): avisamos al cliente por WhatsApp.
+  if (t.categoria === 'Pago' && t.estado === 'Resuelto' && (!previo || previo.estado !== 'Resuelto') && t.telefono && typeof s.addOutbox === 'function') {
+    const nom = (t.nombre || '').trim().split(/\s+/)[0] || '';
+    const msg = `✅ ¡Hola${nom ? ' ' + nom : ''}! Tu *pago fue registrado y validado correctamente*. ✔️\n\nGracias por mantenerte al día con *WIFIRED*. 🙌`;
+    try { await s.addOutbox(normFono(t.telefono) || t.telefono, msg, 'aviso'); } catch (e) { console.warn('[PAGO] no se pudo encolar aviso:', e.message); }
+    console.log(`[PAGO] aviso de pago validado encolado · ticket ${t.num} · ${t.telefono}`);
+  }
   res.json(t);
 }));
 api.delete('/tickets/:id', auth, soloCoordinador, wrap(async (req, res) => {

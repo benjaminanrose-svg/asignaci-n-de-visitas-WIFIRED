@@ -391,7 +391,7 @@ function detailHtml(t) {
       <button class="btn btn-danger" data-del>Eliminar</button>
       <div class="grow"></div>
       <button class="btn" data-close>Cerrar</button>
-      <button class="btn btn-primary" data-visita>📅 Convertir en visita</button>
+      ${['Soporte', 'Contratación', 'Retiro'].includes(t.categoria) ? '<button class="btn btn-primary" data-visita>📅 Convertir en visita</button>' : ''}
     </div>`;
 }
 
