@@ -14,6 +14,7 @@ import { renderTickets } from './views/tickets.js';
 import { renderServicios } from './views/servicios.js';
 import { renderTecnicos } from './views/tecnicos.js';
 import { renderUbicaciones } from './views/ubicaciones.js';
+import { renderBodega } from './views/bodega.js';
 import { renderConfig } from './views/config.js';
 import { renderTecnico } from './views/tecnico.js';
 import { renderLogin, clearLogin } from './views/login.js';
@@ -29,6 +30,7 @@ const ROUTES = {
   clientes:   { title: 'Clientes',            render: renderClientes },
   tickets:    { title: 'Tickets de atención', render: renderTickets },
   servicios:  { title: 'Servicios',            render: renderServicios },
+  bodega:     { title: 'Bodega',               render: renderBodega },
   tecnicos:   { title: 'Técnicos',            render: renderTecnicos },
   ubicaciones:{ title: 'Ubicación de técnicos', render: renderUbicaciones },
   config:     { title: 'Configuración',       render: renderConfig },

@@ -574,6 +574,79 @@ api.delete('/servicios/:id', auth, soloCoordinador, wrap(async (req, res) => {
   await (await getStore()).deleteServicio(req.params.id);
   res.json({ ok: true });
 }));
+
+// ---- Bodega (inventario de equipos por código de serie) — sólo coordinación ----
+api.get('/inventario', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  res.json({ inventario: typeof s.listInventario === 'function' ? await s.listInventario() : [] });
+}));
+api.post('/inventario', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.addInventario !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  const b = req.body || {};
+  const codigo = String(b.codigo || '').trim();
+  if (!codigo) return res.status(400).json({ error: 'El código del equipo es obligatorio' });
+  if (typeof s.listInventario === 'function') {
+    const existe = (await s.listInventario()).some((x) => (x.codigo || '').toLowerCase() === codigo.toLowerCase());
+    if (existe) return res.status(400).json({ error: `Ya existe un equipo con el código "${codigo}"` });
+  }
+  const hist = [{ ts: new Date().toISOString(), estado: 'bodega', detalle: 'Ingresado a bodega', por: req.user.nombre }];
+  const it = await s.addInventario({
+    codigo, categoria: String(b.categoria || 'Otro').trim() || 'Otro',
+    descripcion: String(b.descripcion || '').trim(), nota: String(b.nota || '').trim(),
+    estado: 'bodega', historial: hist,
+  });
+  res.status(201).json(it);
+}));
+api.put('/inventario/:id', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.updateInventario !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  const b = req.body || {};
+  const patch = {};
+  ['codigo', 'categoria', 'descripcion', 'nota'].forEach((k) => { if (k in b) patch[k] = String(b[k] || '').trim(); });
+  if ('codigo' in patch && !patch.codigo) return res.status(400).json({ error: 'El código no puede quedar vacío' });
+  const upd = await s.updateInventario(req.params.id, patch);
+  if (!upd) return res.status(404).json({ error: 'Equipo no encontrado' });
+  res.json(upd);
+}));
+// Mover un equipo (cambia estado y deja registro en su historial).
+api.post('/inventario/:id/mover', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.getInventario !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  const it = await s.getInventario(req.params.id);
+  if (!it) return res.status(404).json({ error: 'Equipo no encontrado' });
+  const b = req.body || {};
+  const accion = String(b.accion || '');
+  const patch = {}; let detalle = '';
+  if (accion === 'entregar') {
+    const tec = String(b.tecnico || '').trim();
+    if (!tec) return res.status(400).json({ error: 'Elige el técnico' });
+    patch.estado = 'tecnico'; patch.tecnico = tec; patch.cliente = '';
+    detalle = `Entregado a ${tec}`;
+  } else if (accion === 'instalar') {
+    patch.estado = 'instalado'; patch.cliente = String(b.cliente || '').trim();
+    detalle = `Instalado${patch.cliente ? ` en ${patch.cliente}` : ''}${it.tecnico ? ` (por ${it.tecnico})` : ''}`;
+  } else if (accion === 'devolver' || accion === 'reingresar') {
+    patch.estado = 'bodega'; patch.tecnico = ''; patch.cliente = '';
+    detalle = accion === 'reingresar' ? 'Reingresado a bodega' : 'Devuelto a bodega';
+  } else if (accion === 'baja') {
+    patch.estado = 'baja';
+    detalle = 'Dado de baja';
+  } else {
+    return res.status(400).json({ error: 'Acción no válida' });
+  }
+  const nota = String(b.nota || '').trim();
+  const hist = Array.isArray(it.historial) ? it.historial.slice() : [];
+  hist.push({ ts: new Date().toISOString(), estado: patch.estado, detalle, nota, por: req.user.nombre });
+  patch.historial = hist;
+  const upd = await s.updateInventario(req.params.id, patch);
+  res.json(upd);
+}));
+api.delete('/inventario/:id', auth, soloCoordinador, wrap(async (req, res) => {
+  await (await getStore()).deleteInventario(req.params.id);
+  res.json({ ok: true });
+}));
+
 // Importación masiva (ej: export de MikroWisp). Fusiona sin perder datos:
 // si el cliente ya existe (por mikrowisp_id / PPPoE / RUT / teléfono) sólo
 // rellena los campos que están vacíos; si no existe, lo crea.

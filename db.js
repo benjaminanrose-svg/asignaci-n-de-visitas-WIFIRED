@@ -173,6 +173,8 @@ const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'te
 const TICKET_FIELDS = ['categoria', 'estado', 'factibilidad', 'nombre', 'telefono', 'direccion', 'ubicacion', 'mensaje', 'canal', 'notas', 'historial', 'rut', 'email', 'adjuntos'];
 // Servicios = perfil del cliente atado a su cuenta PPPoE del router (para cortar/activar internet)
 const SERVICE_FIELDS = ['nombre', 'rut', 'telefono', 'direccion', 'email', 'plan', 'pppoe_user', 'estado', 'notas', 'gps', 'mikrowisp_id', 'nodo', 'ip', 'dia_pago'];
+// Bodega = equipos por código de serie. estado: bodega | tecnico | instalado | baja
+const INV_FIELDS = ['codigo', 'categoria', 'descripcion', 'estado', 'tecnico', 'cliente', 'nota'];
 /** Normaliza el historial (arreglo o texto) a JSON en texto para guardar */
 function evStr(v) { return Array.isArray(v) ? JSON.stringify(v) : (v || '[]'); }
 
@@ -235,6 +237,8 @@ function memoryStore() {
   const contactos = new Map(); // tel(9 díg) -> { telefono, visto, baja, ts } (opt-in/opt-out)
   let servicios = []; // perfiles de cliente con cuenta PPPoE
   let sSeq = 0;
+  let inventario = []; // equipos de bodega (decos, routers, etc.) por código de serie
+  let iSeq = 0;
 
   function pick(v) {
     const o = {};
@@ -253,6 +257,8 @@ function memoryStore() {
   const uniqUser = (base, exceptId) => { let u = base || 'tecnico', b = u, i = 2; while (users.some((x) => x.username === u && x.id !== exceptId)) u = `${b}${i++}`; return u; };
   const pickS = (d) => { const o = {}; SERVICE_FIELDS.forEach((f) => (o[f] = d[f] || '')); return o; };
   const outS = (s) => ({ _uid: String(s.id), ...pickS(s), estado: s.estado || 'activo', created_at: s.created_at, updated_at: s.updated_at });
+  const pickI = (d) => { const o = {}; INV_FIELDS.forEach((f) => (o[f] = d[f] || '')); o.historial = evStr(d.historial); return o; };
+  const outI = (r) => { const o = { _uid: String(r.id), ...pickI(r), created_at: r.created_at, updated_at: r.updated_at }; o.estado = o.estado || 'bodega'; o.categoria = o.categoria || 'Otro'; o.historial = parseEv(o.historial); return o; };
 
   return {
     async init() {},
@@ -369,6 +375,22 @@ function memoryStore() {
       s.updated_at = new Date().toISOString(); return outS(s);
     },
     async deleteServicio(id) { servicios = servicios.filter((x) => x.id != id); },
+    // ---- Bodega ----
+    async listInventario() { return inventario.slice().sort((a, b) => b.id - a.id).map(outI); },
+    async getInventario(id) { const it = inventario.find((x) => x.id == id); return it ? outI(it) : null; },
+    async addInventario(d) {
+      const now = new Date().toISOString();
+      const it = { id: ++iSeq, created_at: now, updated_at: now, ...pickI(d) };
+      if (!it.estado) it.estado = 'bodega';
+      inventario.push(it); return outI(it);
+    },
+    async updateInventario(id, patch) {
+      const it = inventario.find((x) => x.id == id); if (!it) return null;
+      INV_FIELDS.forEach((k) => { if (k in patch) it[k] = patch[k]; });
+      if ('historial' in patch) it.historial = evStr(patch.historial);
+      it.updated_at = new Date().toISOString(); return outI(it);
+    },
+    async deleteInventario(id) { inventario = inventario.filter((x) => x.id != id); },
     async getSetting(k) { return settings[k] ?? null; },
     async setSetting(k, v) { settings[k] = v; },
     async savePushSub(userId, sub) { pushSubs = pushSubs.filter((s) => s.endpoint !== sub.endpoint); pushSubs.push({ userId, endpoint: sub.endpoint, sub }); },
@@ -429,6 +451,11 @@ function pgStore(url) {
     email: r.email || '', plan: r.plan || '', pppoe_user: r.pppoe_user || '', estado: r.estado || 'activo',
     notas: r.notas || '', gps: r.gps || '', mikrowisp_id: r.mikrowisp_id || '', nodo: r.nodo || '', ip: r.ip || '', dia_pago: r.dia_pago || '',
     created_at: r.created_at, updated_at: r.updated_at,
+  });
+  const outI = (r) => ({
+    _uid: String(r.id), codigo: r.codigo || '', categoria: r.categoria || 'Otro', descripcion: r.descripcion || '',
+    estado: r.estado || 'bodega', tecnico: r.tecnico || '', cliente: r.cliente || '', nota: r.nota || '',
+    historial: parseEv(r.historial), created_at: r.created_at, updated_at: r.updated_at,
   });
   async function credsOf(tid) {
     const { rows } = await pool.query('SELECT username, pass_plain FROM usuarios WHERE tecnico_id=$1', [tid]);
@@ -571,6 +598,21 @@ function pgStore(url) {
       for (const col of ['mikrowisp_id', 'nodo', 'ip', 'dia_pago']) {
         await pool.query(`ALTER TABLE servicios ADD COLUMN IF NOT EXISTS ${col} TEXT DEFAULT '';`);
       }
+      // Bodega (equipos por código de serie)
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS inventario (
+          id SERIAL PRIMARY KEY,
+          codigo TEXT DEFAULT '',
+          categoria TEXT DEFAULT 'Otro',
+          descripcion TEXT DEFAULT '',
+          estado TEXT DEFAULT 'bodega',
+          tecnico TEXT DEFAULT '',
+          cliente TEXT DEFAULT '',
+          nota TEXT DEFAULT '',
+          historial TEXT DEFAULT '[]',
+          created_at TIMESTAMPTZ DEFAULT now(),
+          updated_at TIMESTAMPTZ DEFAULT now()
+        );`);
 
       // Reset opcional de técnicos (poner RESET_TECNICOS=1 una vez y redeploy)
       if (process.env.RESET_TECNICOS === '1') {
@@ -684,6 +726,26 @@ function pgStore(url) {
       return rows[0] ? outS(rows[0]) : null;
     },
     async deleteServicio(id) { await pool.query('DELETE FROM servicios WHERE id=$1', [id]); },
+    // ---- Bodega ----
+    async listInventario() { const { rows } = await pool.query('SELECT * FROM inventario ORDER BY id DESC'); return rows.map(outI); },
+    async getInventario(id) { const { rows } = await pool.query('SELECT * FROM inventario WHERE id=$1', [id]); return rows[0] ? outI(rows[0]) : null; },
+    async addInventario(d) {
+      const { rows } = await pool.query(
+        `INSERT INTO inventario (codigo,categoria,descripcion,estado,tecnico,cliente,nota,historial)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [d.codigo || '', d.categoria || 'Otro', d.descripcion || '', d.estado || 'bodega', d.tecnico || '', d.cliente || '', d.nota || '', evStr(d.historial)]);
+      return outI(rows[0]);
+    },
+    async updateInventario(id, patch) {
+      const cols = [], vals = []; let i = 1;
+      INV_FIELDS.forEach((k) => { if (k in patch) { cols.push(`${k}=$${i++}`); vals.push(patch[k]); } });
+      if ('historial' in patch) { cols.push(`historial=$${i++}`); vals.push(evStr(patch.historial)); }
+      if (!cols.length) return null;
+      cols.push('updated_at=now()'); vals.push(id);
+      const { rows } = await pool.query(`UPDATE inventario SET ${cols.join(', ')} WHERE id=$${i} RETURNING *`, vals);
+      return rows[0] ? outI(rows[0]) : null;
+    },
+    async deleteInventario(id) { await pool.query('DELETE FROM inventario WHERE id=$1', [id]); },
     async savePushSub(userId, sub) { await pool.query('INSERT INTO push_subs (user_id,endpoint,sub) VALUES ($1,$2,$3) ON CONFLICT (endpoint) DO UPDATE SET sub=$3, user_id=$1', [userId, sub.endpoint, JSON.stringify(sub)]); },
     async listPushSubsByTecnicoId(tid) { const { rows } = await pool.query('SELECT ps.sub FROM push_subs ps JOIN usuarios u ON u.id=ps.user_id WHERE u.tecnico_id=$1', [tid]); return rows.map((r) => { try { return JSON.parse(r.sub); } catch (e) { return null; } }).filter(Boolean); },
     async removePushSubByEndpoint(ep) { await pool.query('DELETE FROM push_subs WHERE endpoint=$1', [ep]); },

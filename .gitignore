@@ -2,6 +2,9 @@
 node_modules/
 *.log
 
+# Configuración local de Claude Code (contiene claves) — NUNCA subir
+.claude/settings.local.json
+
 # Archivos de trabajo de diseño (Claude Design) — no forman parte de la app
 *.dc.html
 canvas.json

@@ -282,6 +282,13 @@ export async function listServicios() { return rawApi('GET', '/servicios'); }
 export async function addServicio(data) { return rawApi('POST', '/servicios', data); }
 export async function updateServicio(id, patch) { return rawApi('PUT', '/servicios/' + id, patch); }
 export async function deleteServicio(id) { return rawApi('DELETE', '/servicios/' + id); }
+
+// ---------- Bodega ----------
+export async function listInventario() { return rawApi('GET', '/inventario'); }
+export async function addInventario(data) { return rawApi('POST', '/inventario', data); }
+export async function updateInventario(id, patch) { return rawApi('PUT', '/inventario/' + id, patch); }
+export async function moverInventario(id, data) { return rawApi('POST', '/inventario/' + id + '/mover', data); }
+export async function deleteInventario(id) { return rawApi('DELETE', '/inventario/' + id); }
 export async function servicioAccion(id, accion) { return rawApi('POST', '/servicios/' + id + '/' + accion); }
 export async function importServicios(rows) { return rawApi('POST', '/servicios/import', { rows }); }
 export async function broadcast(payload) { return rawApi('POST', '/servicios/broadcast', payload); }
