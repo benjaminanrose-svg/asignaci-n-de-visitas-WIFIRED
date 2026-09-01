@@ -19,6 +19,7 @@ const estMeta = (e) => EST[e] || EST.bodega;
 
 let items = [];              // cache del inventario
 const local = { q: '', estado: '', categoria: '' };
+// Vista por categorías: barra lateral de categorías + panel de productos de la seleccionada.
 
 function chip(text, color) {
   return `<span class="tag" style="background:color-mix(in srgb, ${color} 16%, transparent); border-color:color-mix(in srgb, ${color} 40%, var(--border)); color:${color}">${text}</span>`;
