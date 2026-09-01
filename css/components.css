@@ -300,16 +300,20 @@ table.data tbody tr:hover { background: var(--surface-2); }
 .modal {
   background: var(--surface); border-radius: var(--radius-lg); width: 100%; margin: auto;
   box-shadow: var(--shadow-lg); animation: pop .2s ease; max-height: 92vh; display:flex; flex-direction:column;
+  overflow: hidden; /* nada se sale de la tarjeta; el scroll va en .modal-body */
 }
+/* El contenido (head/body/foot) va dentro de un div envoltorio: que también sea
+   columna flexible y pueda encoger, para que .modal-body haga scroll interno. */
+.modal > * { display:flex; flex-direction:column; min-height:0; flex:1 1 auto; width:100%; }
 .modal.md { max-width: 620px; }
 .modal.lg { max-width: 860px; }
 /* Sacudida sutil cuando se intenta cerrar un formulario tocando fuera */
 .modal.modal-nudge { animation: modalNudge .3s ease; }
 @keyframes modalNudge { 0%,100%{ transform:translateX(0);} 20%{ transform:translateX(-7px);} 40%{ transform:translateX(6px);} 60%{ transform:translateX(-4px);} 80%{ transform:translateX(3px);} }
-.modal-head { padding: 20px 24px; border-bottom: 1px solid var(--border-2); display:flex; align-items:center; justify-content:space-between; gap: 12px; }
+.modal-head { padding: 20px 24px; border-bottom: 1px solid var(--border-2); display:flex; align-items:center; justify-content:space-between; gap: 12px; flex:0 0 auto; }
 .modal-head h3 { font-size: 17px; font-weight: 800; }
-.modal-body { padding: 22px 24px; overflow-y: auto; min-height: 0; }
-.modal-foot { padding: 16px 24px; border-top: 1px solid var(--border-2); display:flex; justify-content:flex-end; gap: 10px; }
+.modal-body { padding: 22px 24px; overflow-y: auto; min-height: 0; flex: 1 1 auto; }
+.modal-foot { padding: 16px 24px; border-top: 1px solid var(--border-2); display:flex; justify-content:flex-end; gap: 10px; flex:0 0 auto; flex-wrap: wrap; }
 
 .form-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
 .form-grid .full { grid-column: 1 / -1; }
@@ -361,7 +365,8 @@ table.data tbody tr:hover { background: var(--surface-2); }
   .app-shell, #toast-root, .no-db-bar { display:none !important; }
   .modal-head, .modal-foot { display:none !important; }
   .modal-overlay { position:static; background:none; padding:0; backdrop-filter:none; display:block; overflow:visible; }
-  .modal { box-shadow:none; max-height:none; margin:0; width:100%; display:block; }
+  .modal { box-shadow:none; max-height:none; margin:0; width:100%; display:block; overflow:visible; }
+  .modal > * { display:block; min-height:auto; }
   .modal-body { overflow:visible; padding:0; }
   .ot-doc { color:#000; }
 }
