@@ -403,6 +403,20 @@ api.post('/visitas', auth, soloCoordinador, wrap(async (req, res) => {
   res.status(201).json(nueva);
 }));
 
+// Reordenar visitas (el orden en que las ve el técnico). Recibe la lista de _uid
+// en el nuevo orden y les asigna orden 1..N. Sólo coordinación.
+api.post('/visitas/orden', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const uids = Array.isArray(req.body && req.body.uids) ? req.body.uids : [];
+  if (typeof s.updateVisita !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  let n = 0;
+  for (let i = 0; i < uids.length; i++) {
+    const upd = await s.updateVisita(String(uids[i]), { orden: i + 1 });
+    if (upd) n++;
+  }
+  res.json({ ok: true, actualizadas: n });
+}));
+
 api.put('/visitas/:id', auth, wrap(async (req, res) => {
   const s = await getStore();
   const body = req.body || {};

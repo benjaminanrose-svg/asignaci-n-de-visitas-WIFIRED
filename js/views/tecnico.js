@@ -58,7 +58,8 @@ export function renderTecnico(root) {
   }
   if (!filtros[local.filtro]) local.filtro = 'porhacer';
   let list = all.filter(filtros[local.filtro] || (() => true))
-    .sort((a, b) => prioRank(a.prioridad) - prioRank(b.prioridad) || (a.fecha || '').localeCompare(b.fecha || '') || (a.bloque || '').localeCompare(b.bloque || ''));
+    // Por fecha, luego el orden manual que fijó coordinación, luego prioridad y bloque.
+    .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '') || (Number(a.orden) || 0) - (Number(b.orden) || 0) || prioRank(a.prioridad) - prioRank(b.prioridad) || (a.bloque || '').localeCompare(b.bloque || ''));
 
   const count = (k) => all.filter(filtros[k]).length;
 

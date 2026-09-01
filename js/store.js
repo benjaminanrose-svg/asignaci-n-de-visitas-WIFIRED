@@ -80,6 +80,18 @@ export function getState() { return state; }
 export let company = { ...COMPANY };
 export function visitas() { return state.visitas; }
 export function byUid(uid) { return state.visitas.find((v) => v._uid === uid); }
+
+// Reordena varias visitas de una (el orden en que las ve el técnico).
+// Asigna orden 1..N según el arreglo de _uid recibido; optimista + 1 sola petición.
+export async function reordenarVisitas(uids) {
+  uids.forEach((uid, i) => {
+    const idx = state.visitas.findIndex((v) => v._uid === uid);
+    if (idx >= 0) state.visitas[idx] = { ...state.visitas[idx], orden: i + 1 };
+  });
+  emit();
+  try { await rawApi('POST', '/visitas/orden', { uids }); }
+  catch (e) { if (e.network) enqueue({ method: 'POST', url: '/visitas/orden', body: { uids } }); else toast(e.message || 'No se pudo guardar el orden', 'info'); }
+}
 export function tecnicosList() { return state.tecnicos; }
 export function tecnicos() { return state.tecnicos.filter((t) => t.activo).map((t) => t.display); }
 export function tipos() { return state.config.tipos; }

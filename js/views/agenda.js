@@ -110,7 +110,8 @@ function buildByBloque(board, dayVisits) {
 }
 
 function makeCol(key, headInner, list, unassigned, prog = null) {
-  list = list.slice().sort((a, b) => prioRank(a.prioridad) - prioRank(b.prioridad)); // mayor prioridad primero
+  // Orden manual (si se arrastró) primero; si no hay, por prioridad.
+  list = list.slice().sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || prioRank(a.prioridad) - prioRank(b.prioridad));
   const col = document.createElement('div');
   col.className = 'col' + (unassigned ? ' is-unassigned' : '');
   col.dataset.col = key;
@@ -142,9 +143,32 @@ function wireBoard(board, root) {
     card.addEventListener('dragend', () => { card.classList.remove('dragging'); dragUid = null; });
   });
 
+  // Devuelve la tarjeta ANTES de la cual habría que insertar, según la posición del cursor.
+  const dragAfter = (body, y) => {
+    const cards = [...body.querySelectorAll('.vcard:not(.dragging)')];
+    let best = { off: -Infinity, el: null };
+    for (const c of cards) {
+      const box = c.getBoundingClientRect();
+      const off = y - box.top - box.height / 2;
+      if (off < 0 && off > best.off) best = { off, el: c };
+    }
+    return best.el;
+  };
+
   board.querySelectorAll('.col-body').forEach((body) => {
     const col = body.closest('.col');
-    body.addEventListener('dragover', (e) => { e.preventDefault(); body.classList.add('drop-hint'); });
+    body.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      body.classList.add('drop-hint');
+      // Mueve visualmente la tarjeta arrastrada entre las demás (para reordenar).
+      const dragging = board.querySelector('.vcard.dragging');
+      if (!dragging) return;
+      const empty = body.querySelector('.col-empty');
+      if (empty) empty.remove();
+      const after = dragAfter(body, e.clientY);
+      if (after == null) body.appendChild(dragging);
+      else body.insertBefore(dragging, after);
+    });
     body.addEventListener('dragleave', () => body.classList.remove('drop-hint'));
     body.addEventListener('drop', (e) => {
       e.preventDefault();
@@ -153,6 +177,14 @@ function wireBoard(board, root) {
       const v = store.byUid(dragUid);
       if (!v) return;
       const key = col.dataset.col;
+      const esTech = local.mode === 'tecnico' && key !== '__none__' && !key.startsWith('bloque::');
+      // Mismo técnico → sólo reordenar (guardar el orden en que las verá el técnico).
+      if (esTech && v.tecnico === key) {
+        const uids = [...body.querySelectorAll('.vcard')].map((c) => c.dataset.uid);
+        store.reordenarVisitas(uids);
+        toast('Orden actualizado');
+        return;
+      }
       if (key.startsWith('bloque::')) {
         const b = key.slice(8);
         if (v.bloque === b) return;

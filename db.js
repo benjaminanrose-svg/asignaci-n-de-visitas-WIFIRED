@@ -166,7 +166,7 @@ function nextOt(existing, tipo) {
   return `${prefix}${String(n).padStart(3, '0')}`;
 }
 
-const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por', 'reagenda_solicitada', 'reagenda_motivo', 'prioridad', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'orden_enviada', 'nodo', 'historial', 'validada', 'aviso_agendada', 'recordatorio_enviado', 'confirmacion', 'confirmacion_enviada'];
+const VISIT_FIELDS = ['estado', 'tipo', 'fecha', 'bloque', 'cliente', 'rut', 'telefono', 'direccion', 'gps', 'detalle', 'tecnico', 'asignado_por', 'reagenda_solicitada', 'reagenda_motivo', 'prioridad', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'orden_enviada', 'nodo', 'historial', 'validada', 'aviso_agendada', 'recordatorio_enviado', 'confirmacion', 'confirmacion_enviada', 'orden'];
 
 // Campos de un ticket de atención (WhatsApp / manual). Se clasifican por
 // categoría y estado; 'factibilidad' aplica a los de contratación.
@@ -412,6 +412,7 @@ function pgStore(url) {
     nodo: r.nodo || '', historial: parseEv(r.historial), validada: r.validada || '',
     aviso_agendada: r.aviso_agendada || '', recordatorio_enviado: r.recordatorio_enviado || '',
     confirmacion: r.confirmacion || '', confirmacion_enviada: r.confirmacion_enviada || '',
+    orden: r.orden != null ? Number(r.orden) : 0,
   });
   const outU = (r) => r ? { id: r.id, username: r.username, pass: r.pass, rol: r.rol, nombre: r.nombre, tecnico_id: r.tecnico_id } : null;
   const outTk = (r) => ({
@@ -483,6 +484,7 @@ function pgStore(url) {
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS recordatorio_enviado TEXT DEFAULT '';`);
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS confirmacion TEXT DEFAULT '';`);
       await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS confirmacion_enviada TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE visitas ADD COLUMN IF NOT EXISTS orden INTEGER DEFAULT 0;`);
       await pool.query(`
         CREATE TABLE IF NOT EXISTS usuarios (
           id SERIAL PRIMARY KEY,
