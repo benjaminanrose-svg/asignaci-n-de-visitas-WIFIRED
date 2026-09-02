@@ -701,6 +701,9 @@ details[open] > .perf-head .perf-chev { transform: rotate(180deg); }
 .bod-scan-inp { font-family: ui-monospace, Menlo, monospace; font-size: 15px; letter-spacing: .02em; }
 .bod-scan-inp:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-500) 22%, transparent); }
 .bod-scan-hint { font-size: 12px; }
+.bod-scan-adjust { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.bod-scan-ok { font-size: 13px; color: var(--text); font-family: ui-monospace, Menlo, monospace; }
+.bod-scan-chg { font-size: 12px; color: var(--text-3); margin-left: 4px; }
 @media (max-width: 720px) {
   .bod-tbl thead { display: none; }
   .bod-tbl, .bod-tbl tbody, .bod-tbl tr, .bod-tbl td { display: block; width: 100%; }

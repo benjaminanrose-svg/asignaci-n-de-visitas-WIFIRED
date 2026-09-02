@@ -18,27 +18,47 @@ const EST = {
 };
 const estMeta = (e) => EST[e] || EST.bodega;
 
-// Clasifica CUALQUIER texto de categoría (incluidas variantes viejas) a una de
-// las 4 estándar. Ignora mayúsculas/minúsculas y espacios. Fallback: 'Decos'.
-// REGLA: nunca puede devolver algo fuera de CATS → ningún equipo queda oculto.
-function catCanonica(raw) {
-  const s = (raw || '').toLowerCase().trim();
-  if (/antena/.test(s)) return 'Antenas';
-  if (/router/.test(s)) return 'Routers';
-  if (/mesh|repetidor/.test(s)) return 'Mesh (Repetidores)';
-  if (/deco|decodific|iptv/.test(s)) return 'Decos';
-  return 'Decos'; // comodín de seguridad: cualquier categoría desconocida es visible
+// ── Motor de clasificación ────────────────────────────────────────────────
+// Reglas por PREFIJO/patrón de código de serie (por fabricante). El ORDEN es la
+// prioridad: lo más específico primero (ej. ZTEY=Mesh debe ganar a ZTE=Router).
+const REGLAS_CODIGO = [
+  // MESH (Repetidores / extensores Wi-Fi)
+  ['Mesh (Repetidores)', /^(ZTEY|H196|HALO|DECO[-_]?[XME]|TL[-_]?WA|RE\d|COVR|EERO|TENDA|NOVA|MESH|EXT|REP)/],
+  // ANTENAS (CPE inalámbricos / radioenlaces)
+  ['Antenas', /^(UBNT|LBE|PBE|NBE|NSM|NS5|NS2|RBM|RP|LTU|AF|POWERBEAM|NANOSTATION|LITEBEAM|LHG|DISC|LDF|SXT|QRT|CAP|WAP|MANT|CAMB|EPMP|FORCE|MIMO|C5)/],
+  // DECOS (IPTV / OTT / TV Box)
+  ['Decos', /^(HEXATEK|HEXA|IPTV|MAG|STB|AMINO|SKY|KAON|ARRIS|TVBOX|OTT|DECO)/],
+  // ROUTERS / ONTs
+  ['Routers', /^(ZTEG|ZTEN|ZTE|HWTC|HG|EG|HN|48575443|TP[-_]?LINK|TPL|MERCUSYS|MC|RB|CCR|CRS|MIKROTIK|FHTT|ALCL|NOKIA|VSOL)/],
+];
+
+// Clasifica por el CÓDIGO de serie. Devuelve una de las 4 categorías, o null si
+// el prefijo no aparece en ninguna lista.
+function porCodigo(codigo) {
+  const s = (codigo || '').toUpperCase().trim();
+  if (!s) return null;
+  for (const [cat, re] of REGLAS_CODIGO) if (re.test(s)) return cat;
+  return null;
 }
 
-// Clasifica por el CÓDIGO de serie (para el modo escáner). Prefijos/patrones
-// conocidos → su categoría; desconocido → 'Decos' por defecto (siempre visible).
-function catPorCodigo(codigo) {
-  const s = (codigo || '').toUpperCase().trim();
-  if (/^(HEXATEK|DECO)/.test(s)) return 'Decos';
-  if (/ANTENA|ANT[-_]/.test(s)) return 'Antenas';
-  if (/ROUTER|RTR|RUT[-_]/.test(s)) return 'Routers';
-  if (/MESH|REPET/.test(s)) return 'Mesh (Repetidores)';
-  return 'Decos';
+// Clasifica por el TEXTO de categoría (variantes escritas a mano). null si no calza.
+function porTexto(cat) {
+  const s = (cat || '').toLowerCase().trim();
+  if (/antena/.test(s)) return 'Antenas';
+  if (/mesh|repetidor/.test(s)) return 'Mesh (Repetidores)';
+  if (/router|onu|ont/.test(s)) return 'Routers';
+  if (/deco|decodific|iptv/.test(s)) return 'Decos';
+  return null;
+}
+
+// Categoría final para AGRUPAR/MOSTRAR un equipo. REGLA DE INTEGRIDAD: siempre
+// devuelve una de las 4 → ningún equipo queda fuera (suma sesiones = Total).
+// Prioridad: código conocido → categoría canónica ya guardada → texto → 'Routers'.
+function clasificar(item) {
+  return porCodigo(item.codigo)
+    || (CATS.includes(item.categoria) ? item.categoria : null)
+    || porTexto(item.categoria)
+    || 'Routers';
 }
 
 // Opciones del <select> de categoría: siempre las 4 estándar. Si se edita un
@@ -84,6 +104,7 @@ function paint(root) {
         <label class="bod-scan-lbl">Modo escáner activo — dispara el código con la pistola</label>
         <input type="text" class="input bod-scan-inp" data-scan placeholder="Escanea o escribe el código y presiona Enter…" autocomplete="off" spellcheck="false">
         <span class="bod-scan-hint muted-sm" data-scan-hint>Se registra solo en bodega y se clasifica por el código.</span>
+        <div class="bod-scan-adjust" data-scan-adjust hidden></div>
       </div>
       <button class="icon-btn" data-scan-close title="Cerrar modo escáner">✕</button>
     </div>
@@ -158,21 +179,45 @@ async function registrarEscaneo(root, codigo) {
     if (hint) hint.textContent = `⚠️ ${codigo} ya existía — no se duplicó.`;
     return;
   }
-  const categoria = catPorCodigo(codigo);
+  const categoria = porCodigo(codigo) || 'Routers'; // desconocido → Routers por defecto
   try {
     // 2) Crear directo, estado inicial "En bodega" (lo pone el backend).
     const it = await store.addInventario({ codigo, categoria });
     items.unshift(it);
     pintarPills(root);
     pintarSecciones(root);
-    // 3) Confirmación visual.
+    // 3) Confirmación + selector rápido para ajustar la categoría a 1 clic.
     toast(`✅ ${codigo} registrado en ${categoria}`);
     if (hint) hint.textContent = `✅ Último: ${codigo} → ${categoria}. Listo para el siguiente.`;
+    mostrarAjuste(root, it, categoria);
   } catch (e) {
     // El backend también valida duplicados/errores: se avisa sin romper el flujo.
     toast(e.message || `No se pudo registrar ${codigo}`, 'info');
     if (hint) hint.textContent = `⚠️ ${codigo}: ${e.message || 'no se pudo registrar'}.`;
   }
+}
+
+// Selector rápido: tras escanear, permite cambiar la categoría del equipo con 1 clic.
+function mostrarAjuste(root, item, cat) {
+  const el = root.querySelector('[data-scan-adjust]');
+  if (!el) return;
+  el.hidden = false;
+  el.innerHTML = `<span class="bod-scan-ok">✅ <b>${esc(item.codigo)}</b> → ${esc(cat)}</span>`
+    + `<span class="bod-scan-chg">Cambiar:</span>`
+    + CATS.map((c) => `<button class="btn btn-sm ${c === cat ? 'btn-primary' : ''}" data-setcat="${esc(c)}">${esc(c)}</button>`).join('');
+  el.querySelectorAll('[data-setcat]').forEach((b) => (b.onclick = () => ajustarCategoria(root, item, b.dataset.setcat)));
+}
+
+async function ajustarCategoria(root, item, cat) {
+  if (item.categoria === cat) return;
+  try {
+    await store.updateInventario(item._uid, { categoria: cat });
+    item.categoria = cat;
+    pintarPills(root);
+    pintarSecciones(root);
+    toast(`↺ ${item.codigo} movido a ${cat}`);
+    mostrarAjuste(root, item, clasificar(item));
+  } catch (e) { toast(e.message || 'No se pudo cambiar la categoría', 'info'); }
 }
 
 // Acordeón: una sección por categoría estándar (siempre las 4), con su tabla.
@@ -190,7 +235,7 @@ function pintarSecciones(root) {
   const el = root.querySelector('[data-secciones]');
   if (!el) return;
   el.innerHTML = CATS.map((cat) => {
-    const list = items.filter((i) => catCanonica(i.categoria) === cat && pasaFiltro(i));
+    const list = items.filter((i) => clasificar(i) === cat && pasaFiltro(i));
     const abierta = !local.cerradas.has(cat);
     const cuerpo = list.length
       ? tablaHtml(list)
