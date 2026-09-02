@@ -1,7 +1,7 @@
 // ============================================================
 // WIFIRED · Componentes de UI reutilizables + modales
 // ============================================================
-import { esc, parseTecnico, fmtDate, fmtDateShort, bloqueShort, colorFor, initials, telLink, waLink, todayISO, toast, limpiaRut, normalizaFono, formatRut, mapsHref } from './util.js';
+import { esc, parseTecnico, fmtDate, fmtDateShort, bloqueShort, colorFor, initials, telLink, waLink, todayISO, toast, limpiaRut, normalizaFono, formatRut, mapsHref, zonaDeVisita } from './util.js';
 import { openPhoto } from './photos.js';
 import { downloadZip, dataUriToBytes } from './zip.js';
 import * as store from './store.js';
@@ -237,7 +237,7 @@ export function visitCard(v) {
     <div class="vc-client">${esc(v.cliente || 'Sin nombre')}</div>
     <div class="vc-type">${esc(v.tipo || '—')}</div>
     ${addr}
-    <div class="vc-foot">${statusBadge(v.estado)}${v.reagenda_solicitada ? '<span class="tag" style="color:var(--st-repr-fg)">⏳ reagenda</span>' : ''}${(v.evidencias || []).length ? `<span class="tag">📷 ${v.evidencias.length}</span>` : ''}</div>
+    <div class="vc-foot">${statusBadge(v.estado)}${(() => { const z = zonaDeVisita(v); return z ? `<span class="zona-badge" style="color:${z.color};border-color:color-mix(in srgb, ${z.color} 45%, var(--border));background:color-mix(in srgb, ${z.color} 15%, transparent)">📍 ${z.abbr}</span>` : ''; })()}${v.reagenda_solicitada ? '<span class="tag" style="color:var(--st-repr-fg)">⏳ reagenda</span>' : ''}${(v.evidencias || []).length ? `<span class="tag">📷 ${v.evidencias.length}</span>` : ''}</div>
   </div>`;
 }
 

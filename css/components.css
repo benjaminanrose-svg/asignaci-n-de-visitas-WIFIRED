@@ -307,6 +307,12 @@ table.data tbody tr:hover { background: var(--surface-2); }
 .modal > * { display:flex; flex-direction:column; min-height:0; flex:1 1 auto; width:100%; }
 .modal.md { max-width: 620px; }
 .modal.lg { max-width: 860px; }
+.modal.xl { max-width: 1120px; }
+/* Modal de día: columnas por técnico con reasignación rápida */
+.board-modal { margin: 0; }
+.daycol-card { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.daycol-reasign { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-3); font-weight: 600; }
+.daycol-reasign .select { flex: 1 1 auto; padding: 4px 8px; font-size: 12px; }
 /* Sacudida sutil cuando se intenta cerrar un formulario tocando fuera */
 .modal.modal-nudge { animation: modalNudge .3s ease; }
 @keyframes modalNudge { 0%,100%{ transform:translateX(0);} 20%{ transform:translateX(-7px);} 40%{ transform:translateX(6px);} 60%{ transform:translateX(-4px);} 80%{ transform:translateX(3px);} }

@@ -2,8 +2,8 @@
 // WIFIRED · Vista Calendario mensual
 // ============================================================
 import * as store from '../store.js';
-import { esc, parseDate, toISO, todayISO, parseTecnico, bloqueShort, zonaDeVisita, ZONAS } from '../util.js';
-import { statusBadge, visitDetailModal, openModal, closeModal } from '../components.js';
+import { esc, parseDate, toISO, todayISO, parseTecnico, bloqueShort, zonaDeVisita, ZONAS, toast } from '../util.js';
+import { statusBadge, visitDetailModal, openModal, closeModal, visitCard, techAvatar } from '../components.js';
 import { visitFormModal } from '../form.js';
 import { workOrderModal } from '../components.js';
 
@@ -126,13 +126,13 @@ export function renderCalendario(root) {
   }));
 
   // abrir día (celda o "+N más")
-  const openDay = (iso) => dayModal(iso, byDate[iso] || []);
+  const openDay = (iso) => dayModal(iso);
   root.querySelectorAll('[data-day-open]').forEach((el) => (el.onclick = (e) => { e.stopPropagation(); openDay(el.dataset.dayOpen); }));
   root.querySelectorAll('.cal-cell').forEach((el) => (el.onclick = () => openDay(el.dataset.day)));
 }
 
-// ---------- Modal de día ----------
-function dayModal(iso, list) {
+// ---------- Modal de día (columnas por técnico, estilo Asignación) ----------
+function dayModal(iso) {
   const dt = parseDate(iso);
   const titulo = `${['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][dt.getDay()]} ${dt.getDate()} de ${MESES[dt.getMonth()].toLowerCase()}`;
   const node = document.createElement('div');
@@ -141,29 +141,64 @@ function dayModal(iso, list) {
       <h3>${esc(titulo)}</h3>
       <button class="icon-btn" data-close>✕</button>
     </div>
-    <div class="modal-body">
-      ${list.length ? list.map((v) => {
-        const t = parseTecnico(v.tecnico);
-        return `<button class="day-row" data-open="${esc(v._uid)}">
-          <span class="cal-ev-dot" style="background:${STATUS_DOT[v.estado] || '#94a3b8'}"></span>
-          <span style="flex:1; min-width:0; text-align:left">
-            <span class="cell-strong truncate" style="display:block">${esc(v.cliente || 'Sin nombre')}</span>
-            <span class="cell-sub truncate" style="display:block">${esc(bloqueShort(v.bloque))} · ${esc(v.tipo || '—')}${v.tecnico ? ' · ' + esc(t.short) : ''} ${zonaBadge(v)}</span>
-          </span>
-          ${statusBadge(v.estado)}
-        </button>`;
-      }).join('') : '<p class="muted" style="padding:8px 0">No hay visitas este día.</p>'}
-    </div>
+    <div class="modal-body"><div class="board board-modal" data-daycols></div></div>
     <div class="modal-foot">
       <button class="btn" data-close>Cerrar</button>
       <button class="btn btn-primary" data-add>＋ Agregar visita este día</button>
     </div>`;
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
   node.querySelector('[data-add]').onclick = () => { closeModal(); visitFormModal(null, { fecha: iso }); };
-  node.querySelectorAll('[data-open]').forEach((el) => (el.onclick = () => {
+  renderDayCols(node.querySelector('[data-daycols]'), iso);
+  openModal(node, 'xl');
+}
+
+// Construye (y reconstruye) las columnas por técnico dentro del modal de día.
+function renderDayCols(cont, iso) {
+  const dia = store.visitas().filter((v) => v.fecha === iso);
+  if (!dia.length) { cont.innerHTML = '<p class="muted" style="padding:8px 0">No hay visitas este día.</p>'; return; }
+  const tecnicos = store.tecnicos();
+  const cols = [{ key: '', un: true, list: dia.filter((v) => !v.tecnico), head: '<div class="ch-meta"><div class="ch-name">📥 Por asignar</div><div class="ch-role">Reasigna con el selector ▾</div></div>' }];
+  tecnicos.forEach((tec) => {
+    const l = dia.filter((v) => v.tecnico === tec);
+    if (!l.length) return; // solo técnicos con visitas ese día (el selector permite mover a cualquiera)
+    const t = parseTecnico(tec);
+    const done = l.filter((v) => v.estado === 'Completada').length;
+    cols.push({ key: tec, list: l, head: `${techAvatar(tec)}<div class="ch-meta"><div class="ch-name">${esc(t.short)}</div><div class="ch-role">${done}/${l.length} completada${done === 1 ? '' : 's'}</div></div>` });
+  });
+  const optTec = (sel) => tecnicos.map((t) => `<option value="${esc(t)}" ${t === sel ? 'selected' : ''}>${esc(parseTecnico(t).short)}</option>`).join('');
+  cont.innerHTML = cols.map((c) => `
+    <div class="col${c.un ? ' is-unassigned' : ''}">
+      <div class="col-head">${c.head}<span class="count">${c.list.length}</span></div>
+      <div class="col-body">${c.list.length ? c.list.map((v) => `
+        <div class="daycol-card">
+          ${visitCard(v)}
+          <label class="daycol-reasign">Asignar a:
+            <select class="select" data-reasign="${esc(v._uid)}"><option value="">— Por asignar —</option>${optTec(v.tecnico)}</select>
+          </label>
+        </div>`).join('') : `<div class="col-empty">${c.un ? '✓ Nada por asignar' : 'Sin visitas'}</div>`}
+      </div>
+    </div>`).join('');
+
+  // Abrir detalle al tocar la tarjeta.
+  cont.querySelectorAll('[data-open]').forEach((el) => (el.onclick = () => {
     const v = store.byUid(el.dataset.open);
     closeModal();
     if (v) visitDetailModal(v, { onEdit: (x) => visitFormModal(x), onOrder: (x) => workOrderModal(x, store.company) });
   }));
-  openModal(node, 'md');
+  // Reasignación rápida con el selector (no cierra el modal; reconstruye columnas).
+  cont.querySelectorAll('[data-reasign]').forEach((sel) => (sel.onchange = async (e) => {
+    e.stopPropagation();
+    const v = store.byUid(sel.dataset.reasign);
+    if (!v) return;
+    const tec = sel.value;
+    if (tec === (v.tecnico || '')) return;
+    const patch = { tecnico: tec };
+    if (!tec) patch.estado = 'Pendiente';
+    else if (['Pendiente', ''].includes(v.estado) || !v.estado) patch.estado = 'Programada';
+    try {
+      await store.updateVisita(v._uid, patch);
+      toast(tec ? `Asignada a ${parseTecnico(tec).short}` : 'Marcada por asignar');
+      renderDayCols(cont, iso);
+    } catch (err) { toast(err.message || 'No se pudo reasignar', 'info'); }
+  }));
 }
