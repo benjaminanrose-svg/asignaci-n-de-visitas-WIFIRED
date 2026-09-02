@@ -28,8 +28,8 @@ function catOptions(sel) {
 }
 
 let items = [];              // cache del inventario
-const local = { q: '', estado: '', categoria: '' };
-// Vista por categorías: barra lateral de categorías + panel de productos de la seleccionada.
+const local = { q: '', estado: '', cerradas: new Set() }; // cerradas = categorías colapsadas
+// Vista en acordeón: una sección por cada categoría estándar, con tabla de equipos.
 
 function chip(text, color) {
   return `<span class="tag" style="background:color-mix(in srgb, ${color} 16%, transparent); border-color:color-mix(in srgb, ${color} 40%, var(--border)); color:${color}">${text}</span>`;
@@ -63,68 +63,78 @@ function paint(root) {
     <div class="day-summary">
       ${pills.map((p) => `<div class="ds-pill"><span class="ds-dot" style="background:${p.c}"></span><span class="ds-n">${p.n}</span><span class="ds-l">${p.l}</span></div>`).join('')}
     </div>
-    <div class="bod-layout">
-      <div class="bod-cats" data-cats></div>
-      <div class="bod-main">
-        <div class="filters">
-          <div class="search-box" style="width:280px;max-width:60vw">
-            <span class="search-ico">⌕</span>
-            <input type="search" data-q value="${esc(local.q)}" placeholder="Buscar por código, técnico o cliente…" autocomplete="off">
-          </div>
-          <select class="select" data-festado>
-            <option value="">Todos los estados</option>
-            ${Object.entries(EST).map(([k, m]) => `<option value="${k}" ${local.estado === k ? 'selected' : ''}>${m.emo} ${m.l}</option>`).join('')}
-          </select>
-        </div>
-        <div data-lista></div>
+    <div class="filters">
+      <div class="search-box" style="width:280px;max-width:60vw">
+        <span class="search-ico">⌕</span>
+        <input type="search" data-q value="${esc(local.q)}" placeholder="Buscar por código, técnico o cliente…" autocomplete="off">
       </div>
-    </div>`;
+      <select class="select" data-festado>
+        <option value="">Todos los estados</option>
+        ${Object.entries(EST).map(([k, m]) => `<option value="${k}" ${local.estado === k ? 'selected' : ''}>${m.emo} ${m.l}</option>`).join('')}
+      </select>
+    </div>
+    <div class="bod-secciones" data-secciones></div>`;
 
   root.querySelector('[data-nuevo]').onclick = () => formModal(root, null);
   const q = root.querySelector('[data-q]');
-  q.oninput = () => { local.q = q.value; pintarLista(root); };
-  root.querySelector('[data-festado]').onchange = (e) => { local.estado = e.target.value; pintarLista(root); };
-  pintarCats(root);
-  pintarLista(root);
+  q.oninput = () => { local.q = q.value; pintarSecciones(root); };
+  root.querySelector('[data-festado]').onchange = (e) => { local.estado = e.target.value; pintarSecciones(root); };
+  pintarSecciones(root);
 }
 
-// Barra lateral de categorías: "Todas" + cada categoría con su cantidad de equipos.
-function pintarCats(root) {
-  const el = root.querySelector('[data-cats]');
-  if (!el) return;
-  const cats = CATS; // lista estándar fija (siempre las mismas 4 categorías)
-  const row = (val, label, n) => `
-    <button class="bod-cat ${local.categoria === val ? 'active' : ''}" data-cat="${esc(val)}">
-      <span>${label}</span><span class="bod-cat-n">${n}</span>
-    </button>`;
-  el.innerHTML = `<div class="bod-cats-t">Categorías</div>` +
-    row('', 'Todas', items.length) +
-    cats.map((c) => row(c, esc(c), items.filter((i) => (i.categoria || 'Otro') === c).length)).join('');
-  el.querySelectorAll('[data-cat]').forEach((b) => (b.onclick = () => {
-    local.categoria = b.dataset.cat;
-    pintarCats(root);
-    pintarLista(root);
-  }));
-}
-
-function pintarLista(root) {
-  const el = root.querySelector('[data-lista]');
+// Acordeón: una sección por categoría estándar (siempre las 4), con su tabla.
+function pasaFiltro(i) {
+  if (local.estado && i.estado !== local.estado) return false;
   const qq = local.q.trim().toLowerCase();
-  let list = items.filter((i) => {
-    if (local.estado && i.estado !== local.estado) return false;
-    if (local.categoria && i.categoria !== local.categoria) return false;
-    if (qq) {
-      const hay = `${i.codigo} ${i.categoria} ${i.descripcion} ${i.tecnico} ${i.cliente}`.toLowerCase();
-      if (!hay.includes(qq)) return false;
-    }
-    return true;
-  });
-  if (!list.length) {
-    el.innerHTML = `<div class="empty-state"><div class="es-ico">📦</div>${items.length ? 'Sin equipos con esos filtros.' : 'Aún no hay equipos. Agrega el primero con “＋ Nuevo equipo”.'}</div>`;
-    return;
+  if (qq) {
+    const hay = `${i.codigo} ${i.categoria} ${i.descripcion} ${i.tecnico} ${i.cliente}`.toLowerCase();
+    if (!hay.includes(qq)) return false;
   }
-  el.innerHTML = `<div class="cli-grid">${list.map(cardHtml).join('')}</div>`;
+  return true;
+}
+
+function pintarSecciones(root) {
+  const el = root.querySelector('[data-secciones]');
+  if (!el) return;
+  el.innerHTML = CATS.map((cat) => {
+    const list = items.filter((i) => (i.categoria || 'Otro') === cat && pasaFiltro(i));
+    const abierta = !local.cerradas.has(cat);
+    const cuerpo = list.length
+      ? tablaHtml(list)
+      : `<div class="bod-acc-empty muted-sm">Sin equipos en esta categoría${(local.q || local.estado) ? ' con esos filtros' : ''}.</div>`;
+    return `
+      <section class="bod-acc ${abierta ? 'open' : ''}">
+        <button class="bod-acc-head" data-toggle="${esc(cat)}" aria-expanded="${abierta}">
+          <span class="bod-acc-caret">▸</span>
+          <span class="bod-acc-title">${esc(cat)}</span>
+          <span class="bod-acc-total">Total: ${list.length}</span>
+        </button>
+        <div class="bod-acc-body"${abierta ? '' : ' hidden'}>${cuerpo}</div>
+      </section>`;
+  }).join('');
+  el.querySelectorAll('[data-toggle]').forEach((b) => (b.onclick = () => {
+    const c = b.dataset.toggle;
+    if (local.cerradas.has(c)) local.cerradas.delete(c); else local.cerradas.add(c);
+    pintarSecciones(root);
+  }));
   el.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => detailModal(root, b.dataset.open)));
+  el.querySelectorAll('[data-edit]').forEach((b) => (b.onclick = () => formModal(root, items.find((x) => x._uid === b.dataset.edit))));
+}
+
+function tablaHtml(list) {
+  return `<div class="bod-tbl-wrap"><table class="bod-tbl">
+    <thead><tr><th>Código / Serie</th><th>Estado</th><th>Asignado a</th><th class="ta-r">Acciones</th></tr></thead>
+    <tbody>${list.map(rowHtml).join('')}</tbody>
+  </table></div>`;
+}
+
+function rowHtml(i) {
+  return `<tr>
+    <td class="bod-cod">${esc(i.codigo)}${i.descripcion ? `<span class="cell-sub">${esc(i.descripcion)}</span>` : ''}</td>
+    <td>${estadoChip(i.estado)}</td>
+    <td>${ubicacionTxt(i)}</td>
+    <td class="ta-r"><button class="btn btn-sm" data-open="${esc(i._uid)}">Ver</button> <button class="btn btn-sm" data-edit="${esc(i._uid)}">Editar</button></td>
+  </tr>`;
 }
 
 function ubicacionTxt(i) {
@@ -132,22 +142,6 @@ function ubicacionTxt(i) {
   if (i.estado === 'instalado') return `🏠 ${esc(i.cliente || 'cliente')}${i.tecnico ? ` · por ${esc(i.tecnico)}` : ''}`;
   if (i.estado === 'baja') return '⛔ Dado de baja';
   return '📦 En bodega';
-}
-
-function cardHtml(i) {
-  const m = estMeta(i.estado);
-  return `
-    <button class="card cli-card" data-open="${esc(i._uid)}" style="border-left:4px solid ${m.color}">
-      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
-        ${chip(esc(i.categoria || 'Otro'), '#55607a')}
-        ${estadoChip(i.estado)}
-      </div>
-      <div style="text-align:left;margin-top:10px">
-        <div class="cell-strong" style="font-family:ui-monospace,Menlo,monospace;word-break:break-all">${esc(i.codigo)}</div>
-        ${i.descripcion ? `<div class="cell-sub">${esc(i.descripcion)}</div>` : ''}
-        <div class="cell-sub" style="margin-top:6px">${ubicacionTxt(i)}</div>
-      </div>
-    </button>`;
 }
 
 // ---------- Nuevo / editar ----------
