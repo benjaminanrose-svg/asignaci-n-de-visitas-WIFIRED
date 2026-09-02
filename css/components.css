@@ -754,6 +754,14 @@ details[open] > .perf-head .perf-chev { transform: rotate(180deg); }
 .bod-cli-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; text-align: left; padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; background: var(--surface); color: var(--text); cursor: pointer; }
 .bod-cli-opt:hover { background: var(--surface-2); border-color: var(--border-2); }
 .bod-cli-sel { margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--brand-500); }
+/* Autocompletado de clientes en "Nueva visita" */
+.cli-ac { position: absolute; left: 0; right: 0; top: 100%; z-index: 20; margin-top: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); max-height: 240px; overflow-y: auto; }
+.cli-ac-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; text-align: left; padding: 8px 12px; border: 0; background: transparent; color: var(--text); cursor: pointer; }
+.cli-ac-opt:hover { background: var(--surface-2); }
+.cli-status { margin-top: 6px; }
+.cli-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; border: 1px solid; }
+.cli-badge.ok { color: #0f9d6b; background: color-mix(in srgb, #0f9d6b 14%, transparent); border-color: color-mix(in srgb, #0f9d6b 45%, var(--border)); }
+.cli-badge.new { color: #2b7fff; background: color-mix(in srgb, #2b7fff 14%, transparent); border-color: color-mix(in srgb, #2b7fff 45%, var(--border)); }
 /* Equipos instalados en la ficha del cliente */
 .cli-eq-list { display: flex; flex-direction: column; gap: 6px; }
 .cli-eq-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border-2); }

@@ -1,13 +1,104 @@
 // ============================================================
 // WIFIRED · Formulario de visita (crear / editar / asignar)
 // ============================================================
-import { esc, todayISO, toast, bindField, validaRut, formatRut, validaFono, formatFono, validaEmail, zonaDeVisita, zonaDeNodo } from './util.js';
+import { esc, todayISO, toast, bindField, validaRut, formatRut, validaFono, formatFono, validaEmail, zonaDeVisita, zonaDeNodo, normName, clientKey } from './util.js';
 import { openModal, closeModal } from './components.js';
 import * as store from './store.js';
 
 function opt(list, sel, placeholder) {
   const ph = placeholder ? `<option value="">${esc(placeholder)}</option>` : '';
   return ph + list.map((x) => `<option value="${esc(x)}" ${x === sel ? 'selected' : ''}>${esc(x)}</option>`).join('');
+}
+
+// Índice de clientes (visitas + servicios) para autocompletar en "Nueva visita".
+const svcCacheForm = { list: [] };
+function buildClientesIndex(servicios) {
+  const map = new Map();
+  const add = (src, servicio) => {
+    const nombre = src.cliente || src.nombre || '';
+    const key = clientKey({ rut: src.rut, telefono: src.telefono, nombre });
+    if (!key) return;
+    const cur = map.get(key) || { key, nombre: '', rut: '', telefono: '', email: '', direccion: '', servicio: null };
+    cur.nombre = cur.nombre || nombre;
+    cur.rut = cur.rut || src.rut || '';
+    cur.telefono = cur.telefono || src.telefono || '';
+    cur.email = cur.email || src.email || '';
+    cur.direccion = cur.direccion || src.direccion || '';
+    if (servicio) cur.servicio = servicio;
+    map.set(key, cur);
+  };
+  (store.visitas ? store.visitas() : []).forEach((x) => add(x, null));
+  (servicios || []).forEach((s) => add(s, s));
+  return [...map.values()];
+}
+
+// Autocompletado + badge de estado en el campo "Nombre del cliente".
+// Devuelve { getMatched } con el cliente existente que coincide (o null).
+function setupClienteAutocomplete(node) {
+  const inp = node.querySelector('[name=cliente]');
+  const acEl = node.querySelector('[data-ac]');
+  const statusEl = node.querySelector('[data-cli-status]');
+  const field = (n) => node.querySelector(`[name=${n}]`);
+  let index = [];
+  let matched = null;
+
+  const setStatus = () => {
+    const nombre = (inp.value || '').trim();
+    if (!nombre) { statusEl.innerHTML = ''; matched = null; return; }
+    const keyRut = clientKey({ rut: field('rut') ? field('rut').value : '' });
+    const m = (keyRut ? index.find((c) => clientKey({ rut: c.rut }) === keyRut) : null)
+      || index.find((c) => normName(c.nombre) === normName(nombre)) || null;
+    matched = m;
+    statusEl.innerHTML = m
+      ? '<span class="cli-badge ok">🟢 Cliente registrado</span>'
+      : '<span class="cli-badge new">🔵 Nuevo cliente</span>';
+  };
+
+  const pintarAC = () => {
+    const term = (inp.value || '').toLowerCase().trim();
+    const arr = term ? index.filter((c) => `${c.nombre} ${c.rut} ${c.direccion} ${c.telefono}`.toLowerCase().includes(term)).slice(0, 8) : [];
+    if (!arr.length) { acEl.hidden = true; acEl.innerHTML = ''; return; }
+    acEl.hidden = false;
+    acEl.innerHTML = arr.map((c) => `<button type="button" class="cli-ac-opt" data-k="${esc(c.key)}"><span class="cell-strong">${esc(c.nombre)}</span><span class="cell-sub">${[c.rut ? formatRut(c.rut) : '', c.direccion].filter(Boolean).map(esc).join(' · ') || '—'}</span></button>`).join('');
+    acEl.querySelectorAll('[data-k]').forEach((b) => (b.onclick = () => elegir(index.find((c) => c.key === b.dataset.k))));
+  };
+
+  const elegir = (c) => {
+    if (!c) return;
+    inp.value = c.nombre;
+    if (field('rut')) field('rut').value = c.rut ? formatRut(c.rut) : '';
+    if (field('telefono')) field('telefono').value = c.telefono || '';
+    if (field('email')) field('email').value = c.email || '';
+    if (field('direccion')) field('direccion').value = c.direccion || '';
+    matched = c;
+    acEl.hidden = true; acEl.innerHTML = '';
+    setStatus();
+  };
+
+  inp.addEventListener('input', () => { setStatus(); pintarAC(); });
+  inp.addEventListener('focus', pintarAC);
+  inp.addEventListener('blur', () => setTimeout(() => { acEl.hidden = true; }, 150));
+  if (field('rut')) field('rut').addEventListener('input', setStatus);
+
+  index = buildClientesIndex(svcCacheForm.list);
+  setStatus();
+  store.listServicios().then((r) => { svcCacheForm.list = (r && r.servicios) || []; index = buildClientesIndex(svcCacheForm.list); setStatus(); }).catch(() => {});
+
+  return { getMatched: () => matched };
+}
+
+// Sincroniza el cliente al crear la visita. La propia visita ya crea/actualiza
+// la ficha en la vista Clientes; si además el cliente tiene servicio de internet
+// y se editaron sus datos, se actualiza ese registro central.
+async function syncCliente(data, matched) {
+  const svc = matched && matched.servicio;
+  if (!svc || typeof store.updateServicio !== 'function') return;
+  const patch = {};
+  ['rut', 'telefono', 'email', 'direccion'].forEach((k) => {
+    const nuevo = (data[k] || '').trim();
+    if (nuevo && nuevo !== (svc[k] || '')) patch[k] = nuevo;
+  });
+  if (Object.keys(patch).length) { try { await store.updateServicio(svc._uid, patch); } catch (e) { /* no bloquea la creación */ } }
 }
 
 export function visitFormModal(existing = null, prefill = {}) {
@@ -30,9 +121,11 @@ export function visitFormModal(existing = null, prefill = {}) {
             <label>N° de Orden de Trabajo (OT)</label>
             <input class="input" name="ot" value="${esc(v.id || '')}" placeholder="OT-MEL-2026-001" autocomplete="off" />
           </div>`}
-          <div class="field full">
+          <div class="field full" style="position:relative">
             <label>Nombre del cliente *</label>
-            <input class="input" name="cliente" required value="${esc(v.cliente || prefill.cliente || '')}" placeholder="Nombre y apellidos" />
+            <input class="input" name="cliente" required value="${esc(v.cliente || prefill.cliente || '')}" placeholder="Nombre y apellidos" autocomplete="off" />
+            <div class="cli-ac" data-ac hidden></div>
+            <div class="cli-status" data-cli-status></div>
           </div>
           <div class="field" data-facti-hide>
             <label>RUT</label>
@@ -120,6 +213,9 @@ export function visitFormModal(existing = null, prefill = {}) {
   bindField(node.querySelector('[name=telefono]'), { validate: validaFono, format: formatFono, msg: '⚠ Teléfono inválido (debe tener 9 dígitos)', okMsg: '✓ Teléfono válido' });
   bindField(node.querySelector('[name=email]'), { validate: validaEmail, msg: '⚠ Correo inválido', okMsg: '✓ Correo válido' });
 
+  // Autocompletado de clientes (solo en el campo de nombre; útil sobre todo al crear).
+  const clienteAC = setupClienteAutocomplete(node);
+
   node.querySelector('[data-save]').onclick = async () => {
     const form = node.querySelector('#visit-form');
     if (!form.reportValidity()) return;
@@ -129,9 +225,12 @@ export function visitFormModal(existing = null, prefill = {}) {
       if (isNew) {
         if (!data.estado) data.estado = data.tecnico ? 'Programada' : 'Pendiente';
         await store.addVisita(data);
+        // Cliente existente con cambios → actualiza su ficha; nuevo → la visita ya lo crea.
+        await syncCliente(data, clienteAC.getMatched());
         toast('Visita creada correctamente');
       } else {
         await store.updateVisita(v._uid, data);
+        await syncCliente(data, clienteAC.getMatched());
         toast('Cambios guardados');
       }
       closeModal();
