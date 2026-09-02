@@ -8,7 +8,8 @@ import * as store from '../store.js';
 import { esc, toast } from '../util.js';
 import { openModal, closeModal } from '../components.js';
 
-const CATS = ['Deco IPTV', 'Router', 'Antena', 'ONU', 'Cable / Material', 'Otro'];
+// Categorías estándar de equipos (única fuente de verdad para toda la vista).
+const CATS = ['Antenas', 'Decos', 'Routers', 'Mesh (Repetidores)'];
 const EST = {
   bodega:    { l: 'En bodega',   emo: '📦', color: '#3a6098' },
   tecnico:   { l: 'Con técnico', emo: '🧑‍🔧', color: '#c79232' },
@@ -16,6 +17,15 @@ const EST = {
   baja:      { l: 'De baja',     emo: '⛔', color: '#c14b4b' },
 };
 const estMeta = (e) => EST[e] || EST.bodega;
+
+// Opciones del <select> de categoría: siempre las 4 estándar. Si se edita un
+// equipo con una categoría antigua (fuera de la lista), se conserva como opción
+// extra para no cambiarla sin querer al guardar.
+function catOptions(sel) {
+  const def = sel || 'Decos';
+  const list = (sel && !CATS.includes(sel)) ? [sel, ...CATS] : CATS;
+  return list.map((c) => `<option value="${esc(c)}" ${c === def ? 'selected' : ''}>${esc(c)}</option>`).join('');
+}
 
 let items = [];              // cache del inventario
 const local = { q: '', estado: '', categoria: '' };
@@ -82,7 +92,7 @@ function paint(root) {
 function pintarCats(root) {
   const el = root.querySelector('[data-cats]');
   if (!el) return;
-  const cats = [...new Set(items.map((i) => i.categoria || 'Otro'))].sort((a, b) => a.localeCompare(b, 'es'));
+  const cats = CATS; // lista estándar fija (siempre las mismas 4 categorías)
   const row = (val, label, n) => `
     <button class="bod-cat ${local.categoria === val ? 'active' : ''}" data-cat="${esc(val)}">
       <span>${label}</span><span class="bod-cat-n">${n}</span>
@@ -151,8 +161,7 @@ function formModal(root, item) {
         <div class="field full"><label>Código / serie *</label>
           <input class="input" data-f="codigo" value="${esc(item ? item.codigo : '')}" placeholder="Ej: HEXATEK251105394" autocomplete="off"></div>
         <div class="field"><label>Categoría</label>
-          <input class="input" list="bod-cats" data-f="categoria" value="${esc(item ? item.categoria : 'Deco IPTV')}" autocomplete="off">
-          <datalist id="bod-cats">${CATS.map((c) => `<option value="${esc(c)}">`).join('')}</datalist></div>
+          <select class="select" data-f="categoria">${catOptions(item ? item.categoria : '')}</select></div>
         <div class="field"><label>Descripción / modelo</label>
           <input class="input" data-f="descripcion" value="${esc(item ? item.descripcion : '')}" placeholder="Ej: Deco Hexatek negro"></div>
         <div class="field full"><label>Nota (opcional)</label>
@@ -166,7 +175,7 @@ function formModal(root, item) {
     const g = (k) => (node.querySelector(`[data-f="${k}"]`).value || '').trim();
     const codigo = g('codigo');
     if (!codigo) { toast('El código es obligatorio', 'info'); return; }
-    const data = { codigo, categoria: g('categoria') || 'Otro', descripcion: g('descripcion'), nota: g('nota') };
+    const data = { codigo, categoria: g('categoria') || 'Decos', descripcion: g('descripcion'), nota: g('nota') };
     e.currentTarget.disabled = true;
     try {
       if (ed) await store.updateInventario(item._uid, data);
