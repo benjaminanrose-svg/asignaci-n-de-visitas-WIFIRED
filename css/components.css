@@ -672,3 +672,20 @@ details[open] > .perf-head .perf-chev { transform: rotate(180deg); }
 .wa-out { align-self: flex-end; background: #DCF8C6; color: #111; border-top-right-radius: 3px; }
 .wa-ghost { opacity: .65; font-style: italic; }
 .chip-warn { background: color-mix(in srgb, #f59e0b 18%, transparent); color: #b45309; border: 1px solid color-mix(in srgb, #f59e0b 45%, var(--border)); font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+
+/* ---- Bodega: vista por categorías (barra lateral + productos) ---- */
+.bod-layout { display: flex; gap: 16px; align-items: flex-start; margin-top: 14px; }
+.bod-cats { flex: 0 0 210px; display: flex; flex-direction: column; gap: 4px; }
+.bod-cats-t { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); padding: 2px 6px 6px; }
+.bod-main { flex: 1 1 auto; min-width: 0; }
+.bod-cat { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--text); cursor: pointer; text-align: left; font-size: 14px; width: 100%; }
+.bod-cat:hover { background: var(--surface-2); }
+.bod-cat.active { background: color-mix(in srgb, var(--brand-500) 14%, transparent); border-color: color-mix(in srgb, var(--brand-500) 40%, var(--border)); color: var(--brand-500); font-weight: 600; }
+.bod-cat-n { font-size: 12px; background: var(--surface-2); border-radius: 999px; padding: 1px 8px; color: var(--text-3); }
+.bod-cat.active .bod-cat-n { background: color-mix(in srgb, var(--brand-500) 22%, transparent); color: var(--brand-500); }
+@media (max-width: 720px) {
+  .bod-layout { flex-direction: column; }
+  .bod-cats { flex-basis: auto; flex-direction: row; flex-wrap: wrap; width: 100%; }
+  .bod-cat { width: auto; }
+  .bod-cats-t { width: 100%; }
+}

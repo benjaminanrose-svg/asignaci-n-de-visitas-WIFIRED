@@ -37,7 +37,6 @@ export async function renderBodega(root) {
 
 function paint(root) {
   const cont = (f) => items.filter(f).length;
-  const cats = [...new Set(items.map((i) => i.categoria).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
   const pills = [
     { l: 'Total', n: items.length, c: '#55607a' },
     { l: 'En bodega', n: cont((i) => i.estado === 'bodega'), c: EST.bodega.color },
@@ -54,28 +53,48 @@ function paint(root) {
     <div class="day-summary">
       ${pills.map((p) => `<div class="ds-pill"><span class="ds-dot" style="background:${p.c}"></span><span class="ds-n">${p.n}</span><span class="ds-l">${p.l}</span></div>`).join('')}
     </div>
-    <div class="filters">
-      <div class="search-box" style="width:280px;max-width:60vw">
-        <span class="search-ico">⌕</span>
-        <input type="search" data-q value="${esc(local.q)}" placeholder="Buscar por código, técnico o cliente…" autocomplete="off">
+    <div class="bod-layout">
+      <div class="bod-cats" data-cats></div>
+      <div class="bod-main">
+        <div class="filters">
+          <div class="search-box" style="width:280px;max-width:60vw">
+            <span class="search-ico">⌕</span>
+            <input type="search" data-q value="${esc(local.q)}" placeholder="Buscar por código, técnico o cliente…" autocomplete="off">
+          </div>
+          <select class="select" data-festado>
+            <option value="">Todos los estados</option>
+            ${Object.entries(EST).map(([k, m]) => `<option value="${k}" ${local.estado === k ? 'selected' : ''}>${m.emo} ${m.l}</option>`).join('')}
+          </select>
+        </div>
+        <div data-lista></div>
       </div>
-      <select class="select" data-festado>
-        <option value="">Todos los estados</option>
-        ${Object.entries(EST).map(([k, m]) => `<option value="${k}" ${local.estado === k ? 'selected' : ''}>${m.emo} ${m.l}</option>`).join('')}
-      </select>
-      <select class="select" data-fcat>
-        <option value="">Todas las categorías</option>
-        ${cats.map((c) => `<option value="${esc(c)}" ${local.categoria === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
-      </select>
-    </div>
-    <div data-lista></div>`;
+    </div>`;
 
   root.querySelector('[data-nuevo]').onclick = () => formModal(root, null);
   const q = root.querySelector('[data-q]');
   q.oninput = () => { local.q = q.value; pintarLista(root); };
   root.querySelector('[data-festado]').onchange = (e) => { local.estado = e.target.value; pintarLista(root); };
-  root.querySelector('[data-fcat]').onchange = (e) => { local.categoria = e.target.value; pintarLista(root); };
+  pintarCats(root);
   pintarLista(root);
+}
+
+// Barra lateral de categorías: "Todas" + cada categoría con su cantidad de equipos.
+function pintarCats(root) {
+  const el = root.querySelector('[data-cats]');
+  if (!el) return;
+  const cats = [...new Set(items.map((i) => i.categoria || 'Otro'))].sort((a, b) => a.localeCompare(b, 'es'));
+  const row = (val, label, n) => `
+    <button class="bod-cat ${local.categoria === val ? 'active' : ''}" data-cat="${esc(val)}">
+      <span>${label}</span><span class="bod-cat-n">${n}</span>
+    </button>`;
+  el.innerHTML = `<div class="bod-cats-t">Categorías</div>` +
+    row('', 'Todas', items.length) +
+    cats.map((c) => row(c, esc(c), items.filter((i) => (i.categoria || 'Otro') === c).length)).join('');
+  el.querySelectorAll('[data-cat]').forEach((b) => (b.onclick = () => {
+    local.categoria = b.dataset.cat;
+    pintarCats(root);
+    pintarLista(root);
+  }));
 }
 
 function pintarLista(root) {
