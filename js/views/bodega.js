@@ -71,7 +71,9 @@ function catOptions(sel) {
 }
 
 let items = [];              // cache del inventario
-const local = { q: '', estado: '', cerradas: new Set(), scan: false }; // scan = modo escáner activo
+// scan = escáner activo; modo = 'ingreso'|'despacho'; tec = técnico que recibe;
+// sesion = resumen de entrega en curso { tec, items:[{codigo,cat}] }
+const local = { q: '', estado: '', cerradas: new Set(), scan: false, modo: 'ingreso', tec: '', sesion: { tec: '', items: [] } };
 // Vista en acordeón: una sección por cada categoría estándar, con tabla de equipos.
 
 function chip(text, color) {
@@ -101,13 +103,25 @@ function paint(root) {
     <div class="bod-scan" data-scanbox hidden>
       <div class="bod-scan-ico">⚡</div>
       <div class="bod-scan-main">
-        <label class="bod-scan-lbl">Modo escáner activo — dispara el código con la pistola</label>
+        <div class="bod-scan-modos">
+          <button type="button" class="bod-modo-btn" data-modo="ingreso">📥 Modo ingreso</button>
+          <button type="button" class="bod-modo-btn" data-modo="despacho">🚚 Modo despacho</button>
+        </div>
+        <div class="bod-scan-tec" data-tecwrap hidden>
+          <label class="bod-scan-lbl">Técnico que recibe</label>
+          <select class="select" data-tecsel>
+            <option value="">— Elige el técnico —</option>
+            ${(store.tecnicos ? store.tecnicos() : []).map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}
+          </select>
+        </div>
+        <label class="bod-scan-lbl" data-scan-lbl>Modo escáner activo — dispara el código con la pistola</label>
         <input type="text" class="input bod-scan-inp" data-scan placeholder="Escanea o escribe el código y presiona Enter…" autocomplete="off" spellcheck="false">
         <span class="bod-scan-hint muted-sm" data-scan-hint>Se registra solo en bodega y se clasifica por el código.</span>
         <div class="bod-scan-adjust" data-scan-adjust hidden></div>
       </div>
       <button class="icon-btn" data-scan-close title="Cerrar modo escáner">✕</button>
     </div>
+    <div class="bod-sesion" data-sesion hidden></div>
     <div class="filters">
       <div class="search-box" style="width:280px;max-width:60vw">
         <span class="search-ico">⌕</span>
@@ -158,17 +172,130 @@ function initScanner(root) {
   };
   toggle.onclick = () => setOn(!local.scan);
   root.querySelector('[data-scan-close]').onclick = () => setOn(false);
+
+  // Selector de modo: Ingreso (crea en bodega) vs Despacho (entrega a técnico).
+  root.querySelectorAll('[data-modo]').forEach((b) => (b.onclick = () => { local.modo = b.dataset.modo; pintarModo(root); inp.focus(); }));
+  const sel = root.querySelector('[data-tecsel]');
+  sel.onchange = () => {
+    local.tec = sel.value;
+    if (local.sesion.tec && local.sesion.tec !== local.tec) local.sesion = { tec: '', items: [] }; // técnico nuevo = sesión nueva
+    pintarSesion(root);
+    inp.focus();
+  };
+
   // La pistola envía los caracteres y termina con Enter: ese es el disparador.
   inp.onkeydown = (e) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
     const codigo = inp.value.trim();
+    if (!codigo) { inp.value = ''; return; }
+    if (local.modo === 'despacho' && !local.tec) {
+      toast('Primero elige el técnico que recibe', 'info');
+      return; // no limpiar: deja el código a la vista para reintentar
+    }
     inp.value = ''; // listo para el siguiente escaneo de inmediato
-    if (codigo) registrarEscaneo(root, codigo);
+    if (local.modo === 'despacho') registrarDespacho(root, codigo);
+    else registrarEscaneo(root, codigo);
   };
   // Mantener el foco mientras el modo esté activo (y no haya un modal abierto).
   inp.onblur = () => { if (local.scan && !modalAbierto()) setTimeout(() => { if (local.scan) inp.focus(); }, 40); };
+  pintarModo(root);
   setOn(local.scan);
+}
+
+// Refleja el modo activo en la UI (botones, selector de técnico, textos).
+function pintarModo(root) {
+  const despacho = local.modo === 'despacho';
+  root.querySelectorAll('[data-modo]').forEach((b) => b.classList.toggle('is-on', b.dataset.modo === local.modo));
+  const tw = root.querySelector('[data-tecwrap]'); if (tw) tw.hidden = !despacho;
+  const lbl = root.querySelector('[data-scan-lbl]');
+  if (lbl) lbl.textContent = despacho ? 'Escanea para ENTREGAR al técnico seleccionado' : 'Modo escáner activo — dispara el código con la pistola';
+  const hint = root.querySelector('[data-scan-hint]');
+  if (hint) hint.textContent = despacho ? 'El equipo pasa a "Con técnico". Si no existe, se crea y se entrega.' : 'Se registra solo en bodega y se clasifica por el código.';
+  const adj = root.querySelector('[data-scan-adjust]'); if (adj) { adj.hidden = true; adj.innerHTML = ''; }
+  pintarSesion(root);
+}
+
+// Reemplaza (o inserta) un equipo en la lista local por su _uid.
+function upsertItem(it) {
+  const i = items.findIndex((x) => x._uid === it._uid);
+  if (i >= 0) items[i] = it; else items.unshift(it);
+}
+
+// ── MODO DESPACHO: entrega/creación+entrega/reasignación al escanear ──────────
+async function registrarDespacho(root, codigo) {
+  const hint = root.querySelector('[data-scan-hint]');
+  const tec = local.tec;
+  const existente = items.find((x) => (x.codigo || '').toLowerCase() === codigo.toLowerCase());
+  try {
+    let it, msg;
+    if (!existente) {
+      // (b) No existe: crear (clasificando por prefijo) y entregar directo.
+      const categoria = porCodigo(codigo) || 'Routers';
+      const creado = await store.addInventario({ codigo, categoria });
+      it = await store.moverInventario(creado._uid, { accion: 'entregar', tecnico: tec });
+      msg = `✅ ${codigo} creado y entregado a ${tec}`;
+    } else if (existente.estado === 'tecnico' && existente.tecnico && existente.tecnico === tec) {
+      // Ya estaba con este mismo técnico: no se hace nada (ni se cuenta doble).
+      toast(`ℹ️ ${codigo} ya estaba con ${tec}`, 'info');
+      if (hint) hint.textContent = `ℹ️ ${codigo} ya estaba con ${tec}.`;
+      return;
+    } else if (existente.estado === 'tecnico' && existente.tecnico && existente.tecnico !== tec) {
+      // (c) Estaba con OTRO técnico: alerta de reasignación.
+      it = await store.moverInventario(existente._uid, { accion: 'entregar', tecnico: tec, nota: `Reasignado desde ${existente.tecnico}` });
+      toast(`⚠️ ${codigo} estaba con ${existente.tecnico} — reasignado a ${tec}`, 'info');
+      msg = `↺ ${codigo} reasignado de ${existente.tecnico} a ${tec}`;
+    } else {
+      // (a) Estaba en bodega (u otro estado): entregar al técnico.
+      it = await store.moverInventario(existente._uid, { accion: 'entregar', tecnico: tec });
+      msg = `✅ ${codigo} entregado a ${tec}`;
+    }
+    upsertItem(it);
+    addSesion(root, tec, it);
+    pintarPills(root);
+    pintarSecciones(root);
+    toast(msg);
+    if (hint) hint.textContent = `${msg}. Listo para el siguiente.`;
+  } catch (e) {
+    toast(e.message || `No se pudo entregar ${codigo}`, 'info');
+    if (hint) hint.textContent = `⚠️ ${codigo}: ${e.message || 'no se pudo entregar'}.`;
+  }
+}
+
+// Suma el equipo a la sesión de entrega en curso y refresca el panel flotante.
+function addSesion(root, tec, it) {
+  if (local.sesion.tec !== tec) local.sesion = { tec, items: [] };
+  local.sesion.items.push({ codigo: it.codigo, cat: clasificar(it) });
+  pintarSesion(root);
+}
+
+// Panel flotante: total y desglose por categoría + botón Finalizar entrega.
+function pintarSesion(root) {
+  const el = root.querySelector('[data-sesion]');
+  if (!el) return;
+  const s = local.sesion;
+  if (local.modo !== 'despacho' || !s.tec || !s.items.length) { el.hidden = true; el.innerHTML = ''; return; }
+  const porCat = {};
+  s.items.forEach((x) => { porCat[x.cat] = (porCat[x.cat] || 0) + 1; });
+  const desglose = Object.entries(porCat).map(([c, n]) => `${n} ${c}`).join(', ');
+  const n = s.items.length;
+  el.hidden = false;
+  el.innerHTML = `
+    <div class="bod-sesion-txt">📦 Entregando a <b>${esc(s.tec)}</b>: ${n} equipo${n !== 1 ? 's' : ''}
+      <span class="muted-sm">(${esc(desglose)})</span></div>
+    <button class="btn btn-sm btn-primary" data-fin>Finalizar entrega</button>`;
+  el.querySelector('[data-fin]').onclick = () => finalizarEntrega(root);
+}
+
+// Cierra la sesión y prepara la herramienta para el siguiente técnico.
+function finalizarEntrega(root) {
+  const n = local.sesion.items.length;
+  local.sesion = { tec: '', items: [] };
+  local.tec = '';
+  const sel = root.querySelector('[data-tecsel]'); if (sel) sel.value = '';
+  pintarSesion(root);
+  toast(`Entrega finalizada${n ? ` — ${n} equipo${n !== 1 ? 's' : ''}` : ''} ✓`);
+  const inp = root.querySelector('[data-scan]'); if (inp && local.scan) inp.focus();
 }
 
 async function registrarEscaneo(root, codigo) {

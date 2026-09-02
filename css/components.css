@@ -704,6 +704,14 @@ details[open] > .perf-head .perf-chev { transform: rotate(180deg); }
 .bod-scan-adjust { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
 .bod-scan-ok { font-size: 13px; color: var(--text); font-family: ui-monospace, Menlo, monospace; }
 .bod-scan-chg { font-size: 12px; color: var(--text-3); margin-left: 4px; }
+.bod-scan-modos { display: flex; gap: 6px; }
+.bod-modo-btn { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); font-size: 13px; font-weight: 700; cursor: pointer; }
+.bod-modo-btn:hover { background: var(--surface-2); }
+.bod-modo-btn.is-on { background: var(--brand-500); border-color: var(--brand-500); color: #fff; }
+.bod-scan-tec { display: flex; flex-direction: column; gap: 4px; }
+.bod-scan-tec .select { max-width: 320px; }
+.bod-sesion { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; position: sticky; bottom: 10px; z-index: 5; margin: 10px 0 2px; padding: 12px 16px; border-radius: 12px; background: color-mix(in srgb, var(--brand-500) 16%, var(--surface)); border: 1px solid color-mix(in srgb, var(--brand-500) 50%, var(--border)); box-shadow: 0 6px 20px rgba(0,0,0,.22); }
+.bod-sesion-txt { font-size: 14px; color: var(--text); }
 @media (max-width: 720px) {
   .bod-tbl thead { display: none; }
   .bod-tbl, .bod-tbl tbody, .bod-tbl tr, .bod-tbl td { display: block; width: 100%; }
