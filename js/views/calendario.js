@@ -157,7 +157,10 @@ function renderDayCols(cont, iso) {
   const dia = store.visitas().filter((v) => v.fecha === iso);
   if (!dia.length) { cont.innerHTML = '<p class="muted" style="padding:8px 0">No hay visitas este día.</p>'; return; }
   const tecnicos = store.tecnicos();
-  const cols = [{ key: '', un: true, list: dia.filter((v) => !v.tecnico), head: '<div class="ch-meta"><div class="ch-name">📥 Por asignar</div><div class="ch-role">Reasigna con el selector ▾</div></div>' }];
+  // "Por asignar" solo aparece si hay al menos 1 visita sin técnico ese día.
+  const unassigned = dia.filter((v) => !v.tecnico);
+  const cols = [];
+  if (unassigned.length) cols.push({ key: '', un: true, list: unassigned, head: '<div class="ch-meta"><div class="ch-name">📥 Por asignar</div><div class="ch-role">Reasigna con el selector ▾</div></div>' });
   tecnicos.forEach((tec) => {
     const l = dia.filter((v) => v.tecnico === tec);
     if (!l.length) return; // solo técnicos con visitas ese día (el selector permite mover a cualquiera)

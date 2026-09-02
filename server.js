@@ -244,7 +244,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '20mb' })); // amplio para fotos (carnet en contratación, evidencias)
+app.use(express.json({ limit: '100mb' })); // amplio para fotos y videos de evidencia (sin límite práctico de peso)
 // JSON malformado o cuerpo demasiado grande: respuesta clara en vez de error 500.
 app.use((err, req, res, next) => {
   if (err && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Datos enviados inválidos' });
