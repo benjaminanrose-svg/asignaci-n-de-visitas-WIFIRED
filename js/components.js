@@ -1,7 +1,7 @@
 // ============================================================
 // WIFIRED · Componentes de UI reutilizables + modales
 // ============================================================
-import { esc, parseTecnico, fmtDate, fmtDateShort, bloqueShort, colorFor, initials, telLink, waLink, todayISO, toast, limpiaRut, normalizaFono, formatRut, mapsHref, normName } from './util.js';
+import { esc, parseTecnico, fmtDate, fmtDateShort, bloqueShort, colorFor, initials, telLink, waLink, todayISO, toast, limpiaRut, normalizaFono, formatRut, mapsHref } from './util.js';
 import { openPhoto } from './photos.js';
 import { downloadZip, dataUriToBytes } from './zip.js';
 import * as store from './store.js';

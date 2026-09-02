@@ -48,12 +48,28 @@ function currentRoute() {
   return ROUTES[hash] ? hash : 'panel';
 }
 
+// Red de seguridad: si una vista lanza una excepción, se muestra un aviso en vez
+// de dejar la pantalla en blanco. El resto de la app (menú, otras vistas) sigue.
+function safeRender(fn, el) {
+  try {
+    fn(el, ctx);
+  } catch (e) {
+    console.error('Error al renderizar la vista:', e);
+    el.innerHTML = `<div class="empty-state"><div class="es-ico">⚠</div>
+      <p>No se pudo mostrar esta sección.</p>
+      <p class="muted-sm">${esc((e && e.message) || String(e))}</p>
+      <button class="btn btn-sm" id="err-reload" style="margin-top:10px">Recargar</button></div>`;
+    const rb = el.querySelector('#err-reload');
+    if (rb) rb.onclick = () => location.reload();
+  }
+}
+
 function render() {
   if (esTecnico) {
     current = 'mis-visitas';
     titleEl.textContent = 'Mis visitas';
     viewEl.innerHTML = '';
-    renderTecnico(viewEl);
+    safeRender(renderTecnico, viewEl);
     return;
   }
   current = currentRoute();
@@ -73,7 +89,7 @@ function render() {
   }
   document.querySelectorAll('.nav-item').forEach((a) => a.classList.toggle('active', a.dataset.route === current));
   viewEl.innerHTML = '';
-  route.render(viewEl, ctx);
+  safeRender(route.render, viewEl);
   document.getElementById('sidebar').classList.remove('open');
 }
 
