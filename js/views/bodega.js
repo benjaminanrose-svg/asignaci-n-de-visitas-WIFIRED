@@ -71,9 +71,7 @@ function catOptions(sel) {
 }
 
 let items = [];              // cache del inventario
-// scan = escáner activo; modo = 'ingreso'|'despacho'; tec = técnico que recibe;
-// sesion = resumen de entrega en curso { tec, items:[{codigo,cat}] }
-const local = { q: '', estado: '', cerradas: new Set(), scan: false, modo: 'ingreso', tec: '', sesion: { tec: '', items: [] } };
+const local = { q: '', estado: '', cerradas: new Set() }; // filtros de la tabla
 // Vista en acordeón: una sección por cada categoría estándar, con tabla de equipos.
 
 function chip(text, color) {
@@ -94,34 +92,13 @@ function paint(root) {
   root.innerHTML = `
     <div class="section-head">
       <div><h2>📦 Bodega de equipos</h2><span class="muted-sm">Sigue cada equipo por su código: dónde está, con qué técnico o en qué cliente.</span></div>
-      <div class="row" style="gap:8px">
-        <button class="btn" data-scan-toggle>⚡ Modo escáner</button>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn" data-ingresar>📥 Ingresar equipos</button>
+        <button class="btn" data-despachar>📤 Despachar a técnico</button>
         <button class="btn btn-primary" data-nuevo>＋ Nuevo equipo</button>
       </div>
     </div>
     <div class="day-summary" data-pills></div>
-    <div class="bod-scan" data-scanbox hidden>
-      <div class="bod-scan-ico">⚡</div>
-      <div class="bod-scan-main">
-        <div class="bod-scan-modos">
-          <button type="button" class="bod-modo-btn" data-modo="ingreso">📥 Modo ingreso</button>
-          <button type="button" class="bod-modo-btn" data-modo="despacho">🚚 Modo despacho</button>
-        </div>
-        <div class="bod-scan-tec" data-tecwrap hidden>
-          <label class="bod-scan-lbl">Técnico que recibe</label>
-          <select class="select" data-tecsel>
-            <option value="">— Elige el técnico —</option>
-            ${(store.tecnicos ? store.tecnicos() : []).map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}
-          </select>
-        </div>
-        <label class="bod-scan-lbl" data-scan-lbl>Modo escáner activo — dispara el código con la pistola</label>
-        <input type="text" class="input bod-scan-inp" data-scan placeholder="Escanea o escribe el código y presiona Enter…" autocomplete="off" spellcheck="false">
-        <span class="bod-scan-hint muted-sm" data-scan-hint>Se registra solo en bodega y se clasifica por el código.</span>
-        <div class="bod-scan-adjust" data-scan-adjust hidden></div>
-      </div>
-      <button class="icon-btn" data-scan-close title="Cerrar modo escáner">✕</button>
-    </div>
-    <div class="bod-sesion" data-sesion hidden></div>
     <div class="filters">
       <div class="search-box" style="width:280px;max-width:60vw">
         <span class="search-ico">⌕</span>
@@ -135,10 +112,11 @@ function paint(root) {
     <div class="bod-secciones" data-secciones></div>`;
 
   root.querySelector('[data-nuevo]').onclick = () => formModal(root, null);
+  root.querySelector('[data-ingresar]').onclick = () => openScanner(root, 'ingreso');
+  root.querySelector('[data-despachar]').onclick = () => openScanner(root, 'despacho');
   const q = root.querySelector('[data-q]');
   q.oninput = () => { local.q = q.value; pintarSecciones(root); };
   root.querySelector('[data-festado]').onchange = (e) => { local.estado = e.target.value; pintarSecciones(root); };
-  initScanner(root);
   pintarPills(root);
   pintarSecciones(root);
 }
@@ -158,62 +136,117 @@ function pintarPills(root) {
   el.innerHTML = pills.map((p) => `<div class="ds-pill"><span class="ds-dot" style="background:${p.c}"></span><span class="ds-n">${p.n}</span><span class="ds-l">${p.l}</span></div>`).join('');
 }
 
-// ---------- Modo escáner (registro automático por código de barras) ----------
-function initScanner(root) {
-  const box = root.querySelector('[data-scanbox]');
-  const inp = root.querySelector('[data-scan]');
-  const toggle = root.querySelector('[data-scan-toggle]');
-  const modalAbierto = () => !!document.getElementById('modal-root').children.length;
-  const setOn = (on) => {
-    local.scan = on;
-    box.hidden = !on;
-    toggle.classList.toggle('btn-primary', on);
-    if (on) inp.focus();
-  };
-  toggle.onclick = () => setOn(!local.scan);
-  root.querySelector('[data-scan-close]').onclick = () => setOn(false);
-
-  // Selector de modo: Ingreso (crea en bodega) vs Despacho (entrega a técnico).
-  root.querySelectorAll('[data-modo]').forEach((b) => (b.onclick = () => { local.modo = b.dataset.modo; pintarModo(root); inp.focus(); }));
-  const sel = root.querySelector('[data-tecsel]');
-  sel.onchange = () => {
-    local.tec = sel.value;
-    if (local.sesion.tec && local.sesion.tec !== local.tec) local.sesion = { tec: '', items: [] }; // técnico nuevo = sesión nueva
-    pintarSesion(root);
-    inp.focus();
-  };
-
-  // La pistola envía los caracteres y termina con Enter: ese es el disparador.
-  inp.onkeydown = (e) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const codigo = inp.value.trim();
-    if (!codigo) { inp.value = ''; return; }
-    if (local.modo === 'despacho' && !local.tec) {
-      toast('Primero elige el técnico que recibe', 'info');
-      return; // no limpiar: deja el código a la vista para reintentar
-    }
-    inp.value = ''; // listo para el siguiente escaneo de inmediato
-    if (local.modo === 'despacho') registrarDespacho(root, codigo);
-    else registrarEscaneo(root, codigo);
-  };
-  // Mantener el foco mientras el modo esté activo (y no haya un modal abierto).
-  inp.onblur = () => { if (local.scan && !modalAbierto()) setTimeout(() => { if (local.scan) inp.focus(); }, 40); };
-  pintarModo(root);
-  setOn(local.scan);
+// ---------- Escáner (drawer lateral: Ingreso o Despacho) ----------
+// Sonido/animación suave de confirmación al escanear.
+function beep(ok = true) {
+  try {
+    const A = window.AudioContext || window.webkitAudioContext; if (!A) return;
+    const a = new A(); const o = a.createOscillator(); const g = a.createGain();
+    o.connect(g); g.connect(a.destination); o.type = 'sine'; o.frequency.value = ok ? 880 : 200;
+    g.gain.value = 0.04; o.start(); setTimeout(() => { o.stop(); a.close(); }, 110);
+  } catch (e) {}
 }
 
-// Refleja el modo activo en la UI (botones, selector de técnico, textos).
-function pintarModo(root) {
-  const despacho = local.modo === 'despacho';
-  root.querySelectorAll('[data-modo]').forEach((b) => b.classList.toggle('is-on', b.dataset.modo === local.modo));
-  const tw = root.querySelector('[data-tecwrap]'); if (tw) tw.hidden = !despacho;
-  const lbl = root.querySelector('[data-scan-lbl]');
-  if (lbl) lbl.textContent = despacho ? 'Escanea para ENTREGAR al técnico seleccionado' : 'Modo escáner activo — dispara el código con la pistola';
-  const hint = root.querySelector('[data-scan-hint]');
-  if (hint) hint.textContent = despacho ? 'El equipo pasa a "Con técnico". Si no existe, se crea y se entrega.' : 'Se registra solo en bodega y se clasifica por el código.';
-  const adj = root.querySelector('[data-scan-adjust]'); if (adj) { adj.hidden = true; adj.innerHTML = ''; }
-  pintarSesion(root);
+// Abre el drawer del escáner en el modo indicado ('ingreso' | 'despacho').
+function openScanner(root, modo) {
+  const despacho = modo === 'despacho';
+  const ov = document.createElement('div');
+  ov.className = 'scan-overlay';
+  ov.innerHTML = `
+    <aside class="scan-drawer">
+      <div class="scan-head">
+        <div>
+          <h3>${despacho ? '📤 Despachar a técnico' : '📥 Ingresar equipos'}</h3>
+          <span class="muted-sm">${despacho ? 'Cada código se asigna al técnico elegido (Con técnico).' : 'Cada código entra al inventario (En bodega).'}</span>
+        </div>
+        <button class="icon-btn" data-close title="Cerrar">✕</button>
+      </div>
+      <div class="scan-body">
+        ${despacho ? `<div class="field"><label>Técnico a quien se despacha *</label>
+          <select class="select" data-tecsel><option value="">— Elige el técnico —</option>${(store.tecnicos ? store.tecnicos() : []).map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>` : ''}
+        <div class="field"><label>Escanea el código de serie</label>
+          <input type="text" class="input scan-input" data-scan placeholder="Dispara con la pistola o escribe y Enter…" autocomplete="off" spellcheck="false" ${despacho ? 'disabled' : ''}></div>
+        <div class="scan-badge" data-badge hidden></div>
+        <div class="scan-adjust" data-adjust hidden></div>
+        <div class="scan-counter" data-counter></div>
+      </div>
+      <div class="scan-foot">
+        ${despacho ? '<button class="btn btn-primary" data-fin>Finalizar entrega</button>' : ''}
+        <button class="btn" data-close>Cerrar</button>
+      </div>
+    </aside>`;
+  document.body.appendChild(ov);
+
+  const sc = { root, modo, drawer: ov, inp: ov.querySelector('[data-scan]'), tec: '', sesion: { tec: '', items: [] }, abierto: true };
+  const cerrar = () => { sc.abierto = false; ov.remove(); };
+  ov.querySelectorAll('[data-close]').forEach((b) => (b.onclick = cerrar));
+  ov.addEventListener('mousedown', (e) => { if (e.target === ov) cerrar(); });
+
+  const tecSel = ov.querySelector('[data-tecsel]');
+  if (tecSel) tecSel.onchange = () => {
+    sc.tec = tecSel.value;
+    sc.inp.disabled = !sc.tec;
+    if (sc.sesion.tec && sc.sesion.tec !== sc.tec) sc.sesion = { tec: '', items: [] };
+    renderCounter(sc);
+    if (sc.tec) sc.inp.focus();
+  };
+
+  sc.inp.onkeydown = (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const codigo = sc.inp.value.trim();
+    if (!codigo) { sc.inp.value = ''; return; }
+    if (despacho && !sc.tec) { badge(sc, 'Primero elige el técnico', false); return; }
+    sc.inp.value = '';
+    if (despacho) registrarDespacho(sc, codigo); else registrarEscaneo(sc, codigo);
+  };
+  // autoFocus fijo en el input mientras el drawer esté abierto.
+  sc.inp.onblur = () => setTimeout(() => {
+    if (!sc.abierto || sc.inp.disabled) return;
+    const ae = document.activeElement;
+    if (ov.contains(ae) && ae !== sc.inp) return; // permite usar el select o los botones
+    if (document.getElementById('modal-root').children.length) return;
+    sc.inp.focus();
+  }, 60);
+
+  const fin = ov.querySelector('[data-fin]');
+  if (fin) fin.onclick = () => {
+    const n = sc.sesion.items.length;
+    sc.sesion = { tec: '', items: [] }; sc.tec = '';
+    if (tecSel) tecSel.value = ''; sc.inp.disabled = true;
+    renderCounter(sc);
+    toast(`Entrega finalizada${n ? ` — ${n} equipo${n !== 1 ? 's' : ''}` : ''} ✓`);
+  };
+
+  renderCounter(sc);
+  if (!despacho) sc.inp.focus();
+}
+
+// Badge verde (éxito) o rojo (aviso) con animación suave + sonido.
+function badge(sc, txt, ok = true) {
+  const b = sc.drawer.querySelector('[data-badge]'); if (!b) return;
+  b.hidden = false;
+  b.className = 'scan-badge ' + (ok ? 'ok' : 'err');
+  b.textContent = txt;
+  b.classList.remove('pulse'); void b.offsetWidth; b.classList.add('pulse');
+  beep(ok);
+}
+
+// Suma un equipo a la sesión actual y refresca el contador.
+function addSesion(sc, it) {
+  if (sc.modo === 'despacho' && sc.sesion.tec !== sc.tec) sc.sesion = { tec: sc.tec, items: [] };
+  sc.sesion.items.push({ codigo: it.codigo, cat: clasificar(it) });
+  renderCounter(sc);
+}
+
+// Contador de equipos procesados en la sesión + desglose por categoría.
+function renderCounter(sc) {
+  const el = sc.drawer.querySelector('[data-counter]'); if (!el) return;
+  const s = sc.sesion; const n = s.items.length;
+  if (!n) { el.innerHTML = '<span class="muted-sm">Aún no escaneas equipos en esta sesión.</span>'; return; }
+  const porCat = {}; s.items.forEach((x) => { porCat[x.cat] = (porCat[x.cat] || 0) + 1; });
+  const desg = Object.entries(porCat).map(([c, k]) => `${k} ${c}`).join(', ');
+  el.innerHTML = `<div class="scan-count-n">${n}</div><div class="scan-count-meta"><div class="scan-count-l">equipo${n !== 1 ? 's' : ''} ${sc.modo === 'despacho' ? `para ${esc(sc.sesion.tec)}` : 'ingresados'}</div><div class="muted-sm">${esc(desg)}</div></div>`;
 }
 
 // Reemplaza (o inserta) un equipo en la lista local por su _uid.
@@ -223,9 +256,8 @@ function upsertItem(it) {
 }
 
 // ── MODO DESPACHO: entrega/creación+entrega/reasignación al escanear ──────────
-async function registrarDespacho(root, codigo) {
-  const hint = root.querySelector('[data-scan-hint]');
-  const tec = local.tec;
+async function registrarDespacho(sc, codigo) {
+  const root = sc.root; const tec = sc.tec;
   const existente = items.find((x) => (x.codigo || '').toLowerCase() === codigo.toLowerCase());
   try {
     let it, msg;
@@ -235,15 +267,12 @@ async function registrarDespacho(root, codigo) {
       const creado = await store.addInventario({ codigo, categoria });
       it = await store.moverInventario(creado._uid, { accion: 'entregar', tecnico: tec });
       msg = `✅ ${codigo} creado y entregado a ${tec}`;
-    } else if (existente.estado === 'tecnico' && existente.tecnico && existente.tecnico === tec) {
-      // Ya estaba con este mismo técnico: no se hace nada (ni se cuenta doble).
-      toast(`ℹ️ ${codigo} ya estaba con ${tec}`, 'info');
-      if (hint) hint.textContent = `ℹ️ ${codigo} ya estaba con ${tec}.`;
-      return;
-    } else if (existente.estado === 'tecnico' && existente.tecnico && existente.tecnico !== tec) {
-      // (c) Estaba con OTRO técnico: alerta de reasignación.
+    } else if (existente.estado === 'tecnico' && existente.tecnico === tec) {
+      // Ya estaba con este mismo técnico: no se cuenta doble.
+      badge(sc, `ℹ️ ${codigo} ya estaba con ${tec}`, false); return;
+    } else if (existente.estado === 'tecnico' && existente.tecnico) {
+      // (c) Estaba con OTRO técnico: reasignación.
       it = await store.moverInventario(existente._uid, { accion: 'entregar', tecnico: tec, nota: `Reasignado desde ${existente.tecnico}` });
-      toast(`⚠️ ${codigo} estaba con ${existente.tecnico} — reasignado a ${tec}`, 'info');
       msg = `↺ ${codigo} reasignado de ${existente.tecnico} a ${tec}`;
     } else {
       // (a) Estaba en bodega (u otro estado): entregar al técnico.
@@ -251,99 +280,48 @@ async function registrarDespacho(root, codigo) {
       msg = `✅ ${codigo} entregado a ${tec}`;
     }
     upsertItem(it);
-    addSesion(root, tec, it);
-    pintarPills(root);
-    pintarSecciones(root);
-    toast(msg);
-    if (hint) hint.textContent = `${msg}. Listo para el siguiente.`;
-  } catch (e) {
-    toast(e.message || `No se pudo entregar ${codigo}`, 'info');
-    if (hint) hint.textContent = `⚠️ ${codigo}: ${e.message || 'no se pudo entregar'}.`;
-  }
+    pintarPills(root); pintarSecciones(root);
+    badge(sc, msg, true);
+    addSesion(sc, it);
+  } catch (e) { badge(sc, `⚠️ ${codigo}: ${e.message || 'no se pudo entregar'}`, false); }
 }
 
-// Suma el equipo a la sesión de entrega en curso y refresca el panel flotante.
-function addSesion(root, tec, it) {
-  if (local.sesion.tec !== tec) local.sesion = { tec, items: [] };
-  local.sesion.items.push({ codigo: it.codigo, cat: clasificar(it) });
-  pintarSesion(root);
-}
-
-// Panel flotante: total y desglose por categoría + botón Finalizar entrega.
-function pintarSesion(root) {
-  const el = root.querySelector('[data-sesion]');
-  if (!el) return;
-  const s = local.sesion;
-  if (local.modo !== 'despacho' || !s.tec || !s.items.length) { el.hidden = true; el.innerHTML = ''; return; }
-  const porCat = {};
-  s.items.forEach((x) => { porCat[x.cat] = (porCat[x.cat] || 0) + 1; });
-  const desglose = Object.entries(porCat).map(([c, n]) => `${n} ${c}`).join(', ');
-  const n = s.items.length;
-  el.hidden = false;
-  el.innerHTML = `
-    <div class="bod-sesion-txt">📦 Entregando a <b>${esc(s.tec)}</b>: ${n} equipo${n !== 1 ? 's' : ''}
-      <span class="muted-sm">(${esc(desglose)})</span></div>
-    <button class="btn btn-sm btn-primary" data-fin>Finalizar entrega</button>`;
-  el.querySelector('[data-fin]').onclick = () => finalizarEntrega(root);
-}
-
-// Cierra la sesión y prepara la herramienta para el siguiente técnico.
-function finalizarEntrega(root) {
-  const n = local.sesion.items.length;
-  local.sesion = { tec: '', items: [] };
-  local.tec = '';
-  const sel = root.querySelector('[data-tecsel]'); if (sel) sel.value = '';
-  pintarSesion(root);
-  toast(`Entrega finalizada${n ? ` — ${n} equipo${n !== 1 ? 's' : ''}` : ''} ✓`);
-  const inp = root.querySelector('[data-scan]'); if (inp && local.scan) inp.focus();
-}
-
-async function registrarEscaneo(root, codigo) {
-  const hint = root.querySelector('[data-scan-hint]');
-  // 1) Evitar duplicados (chequeo local instantáneo, insensible a mayúsculas).
+// ── MODO INGRESO: crea el equipo en bodega y lo clasifica por código ──────────
+async function registrarEscaneo(sc, codigo) {
+  const root = sc.root;
   if (items.some((x) => (x.codigo || '').toLowerCase() === codigo.toLowerCase())) {
-    toast(`⚠️ El código ${codigo} ya está registrado`, 'info');
-    if (hint) hint.textContent = `⚠️ ${codigo} ya existía — no se duplicó.`;
-    return;
+    badge(sc, `⚠️ ${codigo} ya está registrado`, false); return;
   }
   const categoria = porCodigo(codigo) || 'Routers'; // desconocido → Routers por defecto
   try {
-    // 2) Crear directo, estado inicial "En bodega" (lo pone el backend).
     const it = await store.addInventario({ codigo, categoria });
     items.unshift(it);
-    pintarPills(root);
-    pintarSecciones(root);
-    // 3) Confirmación + selector rápido para ajustar la categoría a 1 clic.
-    toast(`✅ ${codigo} registrado en ${categoria}`);
-    if (hint) hint.textContent = `✅ Último: ${codigo} → ${categoria}. Listo para el siguiente.`;
-    mostrarAjuste(root, it, categoria);
-  } catch (e) {
-    // El backend también valida duplicados/errores: se avisa sin romper el flujo.
-    toast(e.message || `No se pudo registrar ${codigo}`, 'info');
-    if (hint) hint.textContent = `⚠️ ${codigo}: ${e.message || 'no se pudo registrar'}.`;
-  }
+    pintarPills(root); pintarSecciones(root);
+    badge(sc, `✅ ${codigo} → ${categoria}`, true);
+    addSesion(sc, it);
+    mostrarAjuste(sc, it, categoria);
+  } catch (e) { badge(sc, `⚠️ ${codigo}: ${e.message || 'no se pudo registrar'}`, false); }
 }
 
-// Selector rápido: tras escanear, permite cambiar la categoría del equipo con 1 clic.
-function mostrarAjuste(root, item, cat) {
-  const el = root.querySelector('[data-scan-adjust]');
+// Selector rápido: tras escanear (ingreso), cambia la categoría del equipo con 1 clic.
+function mostrarAjuste(sc, item, cat) {
+  const el = sc.drawer.querySelector('[data-adjust]');
   if (!el) return;
   el.hidden = false;
-  el.innerHTML = `<span class="bod-scan-ok">✅ <b>${esc(item.codigo)}</b> → ${esc(cat)}</span>`
-    + `<span class="bod-scan-chg">Cambiar:</span>`
+  el.innerHTML = `<span class="scan-adjust-l">Categoría: <b>${esc(cat)}</b> · cambiar:</span>`
     + CATS.map((c) => `<button class="btn btn-sm ${c === cat ? 'btn-primary' : ''}" data-setcat="${esc(c)}">${esc(c)}</button>`).join('');
-  el.querySelectorAll('[data-setcat]').forEach((b) => (b.onclick = () => ajustarCategoria(root, item, b.dataset.setcat)));
+  el.querySelectorAll('[data-setcat]').forEach((b) => (b.onclick = () => ajustarCategoria(sc, item, b.dataset.setcat)));
 }
 
-async function ajustarCategoria(root, item, cat) {
+async function ajustarCategoria(sc, item, cat) {
   if (item.categoria === cat) return;
   try {
     await store.updateInventario(item._uid, { categoria: cat });
     item.categoria = cat;
-    pintarPills(root);
-    pintarSecciones(root);
+    pintarPills(sc.root); pintarSecciones(sc.root);
     toast(`↺ ${item.codigo} movido a ${cat}`);
-    mostrarAjuste(root, item, clasificar(item));
+    mostrarAjuste(sc, item, clasificar(item));
+    if (sc.inp && !sc.inp.disabled) sc.inp.focus();
   } catch (e) { toast(e.message || 'No se pudo cambiar la categoría', 'info'); }
 }
 
