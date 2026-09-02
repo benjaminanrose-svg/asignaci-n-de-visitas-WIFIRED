@@ -693,6 +693,14 @@ details[open] > .perf-head .perf-chev { transform: rotate(180deg); }
 .bod-tbl .ta-r { text-align: right; white-space: nowrap; }
 .bod-cod { font-family: ui-monospace, Menlo, monospace; font-weight: 600; word-break: break-all; }
 .bod-cod .cell-sub { display: block; font-family: inherit; font-weight: 400; }
+/* Modo escáner (registro automático por código de barras) */
+.bod-scan { display: flex; align-items: center; gap: 14px; margin: 12px 0 2px; padding: 14px 16px; border-radius: 12px; background: color-mix(in srgb, var(--brand-500) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--brand-500) 45%, var(--border)); }
+.bod-scan-ico { flex: 0 0 auto; font-size: 24px; line-height: 1; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--brand-500) 60%, transparent)); }
+.bod-scan-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.bod-scan-lbl { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--brand-500); }
+.bod-scan-inp { font-family: ui-monospace, Menlo, monospace; font-size: 15px; letter-spacing: .02em; }
+.bod-scan-inp:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-500) 22%, transparent); }
+.bod-scan-hint { font-size: 12px; }
 @media (max-width: 720px) {
   .bod-tbl thead { display: none; }
   .bod-tbl, .bod-tbl tbody, .bod-tbl tr, .bod-tbl td { display: block; width: 100%; }

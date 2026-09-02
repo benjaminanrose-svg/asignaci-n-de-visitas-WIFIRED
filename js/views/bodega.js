@@ -30,6 +30,17 @@ function catCanonica(raw) {
   return 'Decos'; // comodín de seguridad: cualquier categoría desconocida es visible
 }
 
+// Clasifica por el CÓDIGO de serie (para el modo escáner). Prefijos/patrones
+// conocidos → su categoría; desconocido → 'Decos' por defecto (siempre visible).
+function catPorCodigo(codigo) {
+  const s = (codigo || '').toUpperCase().trim();
+  if (/^(HEXATEK|DECO)/.test(s)) return 'Decos';
+  if (/ANTENA|ANT[-_]/.test(s)) return 'Antenas';
+  if (/ROUTER|RTR|RUT[-_]/.test(s)) return 'Routers';
+  if (/MESH|REPET/.test(s)) return 'Mesh (Repetidores)';
+  return 'Decos';
+}
+
 // Opciones del <select> de categoría: siempre las 4 estándar. Si se edita un
 // equipo con una categoría antigua (fuera de la lista), se conserva como opción
 // extra para no cambiarla sin querer al guardar.
@@ -40,7 +51,7 @@ function catOptions(sel) {
 }
 
 let items = [];              // cache del inventario
-const local = { q: '', estado: '', cerradas: new Set() }; // cerradas = categorías colapsadas
+const local = { q: '', estado: '', cerradas: new Set(), scan: false }; // scan = modo escáner activo
 // Vista en acordeón: una sección por cada categoría estándar, con tabla de equipos.
 
 function chip(text, color) {
@@ -58,22 +69,23 @@ export async function renderBodega(root) {
 }
 
 function paint(root) {
-  const cont = (f) => items.filter(f).length;
-  const pills = [
-    { l: 'Total', n: items.length, c: '#55607a' },
-    { l: 'En bodega', n: cont((i) => i.estado === 'bodega'), c: EST.bodega.color },
-    { l: 'Con técnico', n: cont((i) => i.estado === 'tecnico'), c: EST.tecnico.color },
-    { l: 'Instalados', n: cont((i) => i.estado === 'instalado'), c: EST.instalado.color },
-    { l: 'De baja', n: cont((i) => i.estado === 'baja'), c: EST.baja.color },
-  ];
-
   root.innerHTML = `
     <div class="section-head">
       <div><h2>📦 Bodega de equipos</h2><span class="muted-sm">Sigue cada equipo por su código: dónde está, con qué técnico o en qué cliente.</span></div>
-      <button class="btn btn-primary" data-nuevo>＋ Nuevo equipo</button>
+      <div class="row" style="gap:8px">
+        <button class="btn" data-scan-toggle>⚡ Modo escáner</button>
+        <button class="btn btn-primary" data-nuevo>＋ Nuevo equipo</button>
+      </div>
     </div>
-    <div class="day-summary">
-      ${pills.map((p) => `<div class="ds-pill"><span class="ds-dot" style="background:${p.c}"></span><span class="ds-n">${p.n}</span><span class="ds-l">${p.l}</span></div>`).join('')}
+    <div class="day-summary" data-pills></div>
+    <div class="bod-scan" data-scanbox hidden>
+      <div class="bod-scan-ico">⚡</div>
+      <div class="bod-scan-main">
+        <label class="bod-scan-lbl">Modo escáner activo — dispara el código con la pistola</label>
+        <input type="text" class="input bod-scan-inp" data-scan placeholder="Escanea o escribe el código y presiona Enter…" autocomplete="off" spellcheck="false">
+        <span class="bod-scan-hint muted-sm" data-scan-hint>Se registra solo en bodega y se clasifica por el código.</span>
+      </div>
+      <button class="icon-btn" data-scan-close title="Cerrar modo escáner">✕</button>
     </div>
     <div class="filters">
       <div class="search-box" style="width:280px;max-width:60vw">
@@ -91,7 +103,76 @@ function paint(root) {
   const q = root.querySelector('[data-q]');
   q.oninput = () => { local.q = q.value; pintarSecciones(root); };
   root.querySelector('[data-festado]').onchange = (e) => { local.estado = e.target.value; pintarSecciones(root); };
+  initScanner(root);
+  pintarPills(root);
   pintarSecciones(root);
+}
+
+// Tarjetas de conteo (arriba). En función aparte para refrescarlas al escanear.
+function pintarPills(root) {
+  const el = root.querySelector('[data-pills]');
+  if (!el) return;
+  const cont = (f) => items.filter(f).length;
+  const pills = [
+    { l: 'Total', n: items.length, c: '#55607a' },
+    { l: 'En bodega', n: cont((i) => i.estado === 'bodega'), c: EST.bodega.color },
+    { l: 'Con técnico', n: cont((i) => i.estado === 'tecnico'), c: EST.tecnico.color },
+    { l: 'Instalados', n: cont((i) => i.estado === 'instalado'), c: EST.instalado.color },
+    { l: 'De baja', n: cont((i) => i.estado === 'baja'), c: EST.baja.color },
+  ];
+  el.innerHTML = pills.map((p) => `<div class="ds-pill"><span class="ds-dot" style="background:${p.c}"></span><span class="ds-n">${p.n}</span><span class="ds-l">${p.l}</span></div>`).join('');
+}
+
+// ---------- Modo escáner (registro automático por código de barras) ----------
+function initScanner(root) {
+  const box = root.querySelector('[data-scanbox]');
+  const inp = root.querySelector('[data-scan]');
+  const toggle = root.querySelector('[data-scan-toggle]');
+  const modalAbierto = () => !!document.getElementById('modal-root').children.length;
+  const setOn = (on) => {
+    local.scan = on;
+    box.hidden = !on;
+    toggle.classList.toggle('btn-primary', on);
+    if (on) inp.focus();
+  };
+  toggle.onclick = () => setOn(!local.scan);
+  root.querySelector('[data-scan-close]').onclick = () => setOn(false);
+  // La pistola envía los caracteres y termina con Enter: ese es el disparador.
+  inp.onkeydown = (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const codigo = inp.value.trim();
+    inp.value = ''; // listo para el siguiente escaneo de inmediato
+    if (codigo) registrarEscaneo(root, codigo);
+  };
+  // Mantener el foco mientras el modo esté activo (y no haya un modal abierto).
+  inp.onblur = () => { if (local.scan && !modalAbierto()) setTimeout(() => { if (local.scan) inp.focus(); }, 40); };
+  setOn(local.scan);
+}
+
+async function registrarEscaneo(root, codigo) {
+  const hint = root.querySelector('[data-scan-hint]');
+  // 1) Evitar duplicados (chequeo local instantáneo, insensible a mayúsculas).
+  if (items.some((x) => (x.codigo || '').toLowerCase() === codigo.toLowerCase())) {
+    toast(`⚠️ El código ${codigo} ya está registrado`, 'info');
+    if (hint) hint.textContent = `⚠️ ${codigo} ya existía — no se duplicó.`;
+    return;
+  }
+  const categoria = catPorCodigo(codigo);
+  try {
+    // 2) Crear directo, estado inicial "En bodega" (lo pone el backend).
+    const it = await store.addInventario({ codigo, categoria });
+    items.unshift(it);
+    pintarPills(root);
+    pintarSecciones(root);
+    // 3) Confirmación visual.
+    toast(`✅ ${codigo} registrado en ${categoria}`);
+    if (hint) hint.textContent = `✅ Último: ${codigo} → ${categoria}. Listo para el siguiente.`;
+  } catch (e) {
+    // El backend también valida duplicados/errores: se avisa sin romper el flujo.
+    toast(e.message || `No se pudo registrar ${codigo}`, 'info');
+    if (hint) hint.textContent = `⚠️ ${codigo}: ${e.message || 'no se pudo registrar'}.`;
+  }
 }
 
 // Acordeón: una sección por categoría estándar (siempre las 4), con su tabla.
