@@ -9,3 +9,6 @@ node_modules/
 *.dc.html
 canvas.json
 wifired-panel-renovado.html
+
+# Vault de notas (Obsidian) — notas de trabajo, no forman parte de la app
+Wifired/
