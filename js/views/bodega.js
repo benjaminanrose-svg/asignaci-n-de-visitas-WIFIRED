@@ -5,7 +5,7 @@
 // Sólo coordinación.
 // ============================================================
 import * as store from '../store.js';
-import { esc, toast } from '../util.js';
+import { esc, toast, normName, clientKey, formatRut } from '../util.js';
 import { openModal, closeModal } from '../components.js';
 
 // Categorías estándar de equipos (única fuente de verdad para toda la vista).
@@ -409,6 +409,22 @@ function ubicacionTxt(i) {
   return '📦 En bodega';
 }
 
+// Índice de clientes (visitas + servicios) para el picker de instalación.
+const svcCacheBodega = { list: [] };
+function indexClientes(servicios) {
+  const map = new Map();
+  const add = (nombre, rut, telefono, direccion) => {
+    const key = clientKey({ rut, telefono, nombre });
+    if (!key) return;
+    const prev = map.get(key);
+    if (!prev) map.set(key, { key, nombre: nombre || '', rut: rut || '', direccion: direccion || '' });
+    else { prev.nombre = prev.nombre || nombre || ''; prev.rut = prev.rut || rut || ''; prev.direccion = prev.direccion || direccion || ''; }
+  };
+  (store.visitas ? store.visitas() : []).forEach((v) => add(v.cliente, v.rut, v.telefono, v.direccion));
+  (servicios || []).forEach((s) => add(s.nombre, s.rut, s.telefono, s.direccion));
+  return [...map.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+}
+
 // ---------- Nuevo / editar ----------
 function formModal(root, item) {
   const ed = !!item;
@@ -523,18 +539,48 @@ function accionModal(root, i, accion) {
       <p class="muted-sm" style="margin-bottom:10px">Equipo <b style="font-family:ui-monospace,Menlo,monospace">${esc(i.codigo)}</b></p>
       ${cfg.pideTec ? `<div class="field"><label>Técnico que lo recibe *</label>
         <select class="select" data-tec><option value="">— Elegir técnico —</option>${tecnicos.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>` : ''}
-      ${cfg.pideCli ? `<div class="field"><label>Cliente / dirección donde se instaló</label>
-        <input class="input" data-cli placeholder="Nombre del cliente o dirección" autocomplete="off"></div>` : ''}
+      ${cfg.pideCli ? `<div class="field"><label>Cliente donde se instaló *</label>
+        <input class="input" data-cliq placeholder="Buscar por nombre, RUT o dirección…" autocomplete="off">
+        <div class="bod-cli-pick" data-clilist></div>
+        <div class="bod-cli-sel" data-clisel hidden></div></div>` : ''}
       <div class="field" style="margin-top:10px"><label>Nota (opcional)</label>
         <textarea class="textarea" data-nota placeholder="Observación del movimiento…"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn" data-x2>Cancelar</button><button class="btn btn-primary" data-ok>Confirmar</button></div>`;
   node.querySelector('[data-x]').onclick = closeModal;
   node.querySelector('[data-x2]').onclick = closeModal;
+
+  let cliSel = null; // cliente elegido del picker
+  if (cfg.pideCli) {
+    const q = node.querySelector('[data-cliq]');
+    const listEl = node.querySelector('[data-clilist]');
+    const selEl = node.querySelector('[data-clisel]');
+    let clientes = indexClientes(svcCacheBodega.list);
+    const pintar = () => {
+      const term = (q.value || '').toLowerCase().trim();
+      const arr = (term ? clientes.filter((c) => `${c.nombre} ${c.rut} ${c.direccion}`.toLowerCase().includes(term)) : clientes).slice(0, 30);
+      listEl.innerHTML = arr.length
+        ? arr.map((c) => `<button type="button" class="bod-cli-opt" data-k="${esc(c.key)}"><span class="cell-strong">${esc(c.nombre)}</span><span class="cell-sub">${[c.rut ? formatRut(c.rut) : '', c.direccion].filter(Boolean).map(esc).join(' · ') || '—'}</span></button>`).join('')
+        : '<div class="muted-sm" style="padding:8px 2px">Sin coincidencias — se guardará el texto tal cual.</div>';
+      listEl.querySelectorAll('[data-k]').forEach((b) => (b.onclick = () => {
+        cliSel = clientes.find((c) => c.key === b.dataset.k);
+        q.value = cliSel.nombre; selEl.hidden = false;
+        selEl.textContent = `✓ ${cliSel.nombre}${cliSel.rut ? ' · ' + formatRut(cliSel.rut) : ''}`;
+        listEl.innerHTML = '';
+      }));
+    };
+    q.oninput = () => { cliSel = null; selEl.hidden = true; pintar(); };
+    pintar();
+    store.listServicios().then((r) => { svcCacheBodega.list = (r && r.servicios) || []; clientes = indexClientes(svcCacheBodega.list); if (node.isConnected) pintar(); }).catch(() => {});
+  }
+
   node.querySelector('[data-ok]').onclick = async (e) => {
     const data = { accion };
     if (cfg.pideTec) { data.tecnico = (node.querySelector('[data-tec]').value || '').trim(); if (!data.tecnico) { toast('Elige el técnico', 'info'); return; } }
-    if (cfg.pideCli) data.cliente = (node.querySelector('[data-cli]').value || '').trim();
+    if (cfg.pideCli) {
+      data.cliente = cliSel ? cliSel.nombre : (node.querySelector('[data-cliq]').value || '').trim();
+      if (!data.cliente) { toast('Elige o escribe el cliente', 'info'); return; }
+    }
     data.nota = (node.querySelector('[data-nota]').value || '').trim();
     e.currentTarget.disabled = true;
     try { await store.moverInventario(i._uid, data); toast('Movimiento registrado ✓'); closeModal(); renderBodega(root); }

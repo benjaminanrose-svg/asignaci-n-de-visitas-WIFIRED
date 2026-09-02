@@ -120,6 +120,18 @@ export function mapsHref(dir) {
 /** Deja solo dígitos y la K del RUT, en mayúscula */
 export function limpiaRut(r) { return (r || '').replace(/[^0-9kK]/g, '').toUpperCase(); }
 
+/** Nombre normalizado (minúsculas, espacios colapsados) para comparar clientes. */
+export function normName(s) { return (s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+/** Clave estable de cliente: RUT → teléfono → nombre. '' si no hay ningún dato. */
+export function clientKey({ rut, telefono, nombre } = {}) {
+  const r = limpiaRut(rut);
+  if (r && r.length >= 2) return 'r:' + r;
+  const f = normalizaFono(telefono);
+  if (f) return 'f:' + f;
+  const n = normName(nombre);
+  return n ? 'n:' + n : '';
+}
+
 /** Valida un RUT chileno con dígito verificador (módulo 11) */
 export function validaRut(r) {
   const s = limpiaRut(r);

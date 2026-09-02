@@ -69,6 +69,27 @@ async function cargarServicios() {
   catch (e) { /* si falla, seguimos solo con visitas */ }
   return svcCache.list;
 }
+// Caché de inventario (equipos instalados) para el contador por cliente.
+const invCache = { ts: 0, list: [] };
+async function cargarInventario() {
+  if (Date.now() - invCache.ts < 60000 && invCache.list.length) return invCache.list;
+  try { const r = await store.listInventario(); invCache.list = (r && r.inventario) || []; invCache.ts = Date.now(); }
+  catch (e) { /* sin permiso o sin datos: contador queda en 0 */ }
+  return invCache.list;
+}
+function equiposDe(nombre) {
+  const nn = normName(nombre);
+  return nn ? invCache.list.filter((it) => it.estado === 'instalado' && normName(it.cliente) === nn).length : 0;
+}
+function estadoCliente(c) {
+  const s = c.servicio;
+  if (!s) return { txt: 'Pendiente', tint: '#c79232' };
+  if (s.estado === 'cortado') return { txt: 'Suspendido', tint: '#dc2626' };
+  return { txt: 'Activo', tint: '#0f9d68' };
+}
+function tagEstado(est) {
+  return `<span class="tag" style="background:color-mix(in srgb, ${est.tint} 16%, transparent);border-color:color-mix(in srgb, ${est.tint} 40%, var(--border));color:${est.tint}">${est.txt}</span>`;
+}
 /** Misma clave que clientKey pero desde un servicio: RUT → teléfono → nombre. */
 function servicioKey(s) {
   const rut = limpiaRut(s.rut);
@@ -146,20 +167,21 @@ export function renderClientes(root) {
     }
 
     host.innerHTML = `
-      <div class="cli-grid">
-        ${list.map(cardHtml).join('')}
-      </div>
+      <div class="bod-tbl-wrap"><table class="bod-tbl cli-tbl">
+        <thead><tr><th>Cliente</th><th>Dirección</th><th>Servicio / Plan</th><th>Equipos</th><th>Estado</th><th class="ta-r">Acciones</th></tr></thead>
+        <tbody>${list.map(filaCliente).join('')}</tbody>
+      </table></div>
       <div class="muted-sm" style="padding:14px 4px 0">${list.length} cliente${list.length === 1 ? '' : 's'}${local.q ? ` · búsqueda: "${esc(local.q)}"` : ''}</div>`;
 
-    host.querySelectorAll('[data-key]').forEach((el) => (el.onclick = () => {
-      const c = list.find((x) => x.key === el.dataset.key);
-      if (c) abrirFicha(c, root);
-    }));
+    const abrir = (key) => { const c = list.find((x) => x.key === key); if (c) abrirFicha(c, root); };
+    host.querySelectorAll('tr[data-key]').forEach((tr) => (tr.onclick = () => abrir(tr.dataset.key)));
+    host.querySelectorAll('[data-ver]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); abrir(b.dataset.ver); }));
   }
 
   paint();
-  // Cargar servicios y volver a pintar unificado (no bloquea la vista inicial).
+  // Cargar servicios + inventario y volver a pintar (no bloquea la vista inicial).
   cargarServicios().then(() => paint());
+  cargarInventario().then(() => paint());
 }
 
 /** Visita "fantasma" (solo en memoria) para abrir la misma ficha cuando el
@@ -187,41 +209,26 @@ function abrirFicha(c, root) {
   clientCardModal(rep, opts);
 }
 
-function cardHtml(c) {
-  const ident = [c.rut ? '🪪 ' + esc(formatRut(c.rut)) : '', c.telefono ? '📞 ' + esc(c.telefono) : '']
-    .filter(Boolean).join('  ·  ');
-  const chip = (n, sing, plur, tint) => n
-    ? `<span class="tag" style="background:color-mix(in srgb, ${tint} 16%, transparent); border-color:color-mix(in srgb, ${tint} 40%, var(--border)); color:${tint}">${n} ${n === 1 ? sing : plur}</span>`
-    : '';
+function filaCliente(c) {
+  const est = estadoCliente(c);
+  const rut = c.rut ? formatRut(c.rut) : '';
   const svc = c.servicio;
-  const svcTint = svc && svc.estado === 'cortado' ? '#dc2626' : '#0f9d68';
-  const svcBadge = svc
-    ? `<span class="tag" style="background:color-mix(in srgb, ${svcTint} 16%, transparent); border-color:color-mix(in srgb, ${svcTint} 40%, var(--border)); color:${svcTint}">📡 ${esc(svc.plan || 'Servicio')}${svc.estado === 'cortado' ? ' · Cortado' : ''}</span>`
-    : '';
-  const badges = [
-    chip(c.activas, 'activa', 'activas', 'var(--brand-500)'),
-    chip(c.completadas, 'completada', 'completadas', 'var(--accent)'),
-    chip(c.canceladas, 'cancelada', 'canceladas', 'var(--text-3)'),
-    svcBadge,
-  ].filter(Boolean).join(' ');
-  const foot = c.rep
-    ? `Última: ${esc(fmtDateShort(c.ultimaFecha) || '—')} · ${esc(parseTecnico(c.rep.tecnico).short || 'sin asignar')}`
-    : '📡 Cliente con servicio (sin visitas aún)';
-  const cuenta = c.rep ? c.total : '📡';
-  return `
-    <button class="card cli-card" data-key="${esc(c.key)}">
-      <div class="row" style="gap:12px; align-items:flex-start">
-        ${clientAvatar(c.nombre)}
-        <div style="flex:1; min-width:0; text-align:left">
-          <div class="cell-strong truncate">${esc(c.nombre)}</div>
-          ${ident ? `<div class="cell-sub truncate">${ident}</div>` : ''}
-          ${c.direccion ? `<div class="cell-sub truncate">📍 ${esc(c.direccion)}</div>` : ''}
-        </div>
-        <span class="cli-count">${cuenta}</span>
-      </div>
-      <div class="row" style="gap:6px; flex-wrap:wrap; margin-top:10px">
-        ${badges || '<span class="muted-sm">Sin visitas activas</span>'}
-      </div>
-      <div class="cli-foot muted-sm">${foot}</div>
-    </button>`;
+  const plan = svc
+    ? `📡 ${esc(svc.plan || 'Servicio')}${svc.ip ? `<div class="cell-sub">${esc(svc.ip)}</div>` : ''}`
+    : '<span class="muted-sm">—</span>';
+  const eqN = equiposDe(c.nombre);
+  const eqCell = eqN
+    ? `<span class="tag">📦 ${eqN} ${eqN === 1 ? 'equipo' : 'equipos'}</span>`
+    : '<span class="muted-sm">0</span>';
+  return `<tr data-key="${esc(c.key)}" style="cursor:pointer">
+    <td>
+      <div class="row" style="gap:10px;align-items:center">${clientAvatar(c.nombre)}
+        <span style="min-width:0"><span class="cell-strong truncate" style="display:block">${esc(c.nombre)}</span>${rut ? `<span class="cell-sub">🪪 ${esc(rut)}</span>` : ''}</span></div>
+    </td>
+    <td class="cli-td-dir">${c.direccion ? esc(c.direccion) : '<span class="muted-sm">—</span>'}</td>
+    <td>${plan}</td>
+    <td>${eqCell}</td>
+    <td>${tagEstado(est)}</td>
+    <td class="ta-r"><button class="btn btn-sm" data-ver="${esc(c.key)}">Ver ficha</button></td>
+  </tr>`;
 }

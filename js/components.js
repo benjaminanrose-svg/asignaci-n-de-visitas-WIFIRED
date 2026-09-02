@@ -1,7 +1,7 @@
 // ============================================================
 // WIFIRED · Componentes de UI reutilizables + modales
 // ============================================================
-import { esc, parseTecnico, fmtDate, fmtDateShort, bloqueShort, colorFor, initials, telLink, waLink, todayISO, toast, limpiaRut, normalizaFono, formatRut, mapsHref } from './util.js';
+import { esc, parseTecnico, fmtDate, fmtDateShort, bloqueShort, colorFor, initials, telLink, waLink, todayISO, toast, limpiaRut, normalizaFono, formatRut, mapsHref, normName } from './util.js';
 import { openPhoto } from './photos.js';
 import { downloadZip, dataUriToBytes } from './zip.js';
 import * as store from './store.js';
@@ -362,6 +362,7 @@ export function clientCardModal(v, opts = {}) {
       </div>
       ${dir ? `<div class="muted-sm" style="margin-bottom:12px">📍 <a href="${mapsHref(dir)}" target="_blank" rel="noopener" style="color:var(--brand-500)">${esc(dir)} · ver mapa ›</a></div>` : ''}
       ${svcBlock}
+      <div data-equipos-cli></div>
       <div class="hist-head" style="margin-bottom:6px"><span class="ev-title">🗂 Todas sus visitas (${n})</span></div>
       <div class="kpi-vlist">${n ? visitas.map(row).join('') : '<div class="muted-sm" style="padding:8px 2px">Sin visitas registradas aún.</div>'}</div>
     </div>
@@ -375,7 +376,40 @@ export function clientCardModal(v, opts = {}) {
     closeModal();
     visitDetailModal(x, opts);
   }));
+  if (store.isCoordinador && store.isCoordinador()) cargarEquiposCliente(node, v.cliente);
   openModal(node, 'md');
+}
+
+// Sección "📦 Equipos instalados" de la ficha: vincula por nombre de cliente
+// (mismo campo `cliente` que guarda Bodega). Permite devolver a bodega o dar de baja.
+const CAT_TINT = { Decos: '#3a6098', Routers: '#3f9d6d', Antenas: '#c79232', 'Mesh (Repetidores)': '#8a63d2' };
+function equipoFechaInstal(it) {
+  const h = Array.isArray(it.historial) ? it.historial : [];
+  for (let k = h.length - 1; k >= 0; k--) if (h[k].estado === 'instalado') return h[k].ts;
+  return it.updated_at || '';
+}
+async function cargarEquiposCliente(node, nombreCliente) {
+  const host = node.querySelector('[data-equipos-cli]');
+  if (!host || typeof store.listInventario !== 'function' || !normName(nombreCliente)) return;
+  let equipos = [];
+  try {
+    const r = await store.listInventario();
+    equipos = (r.inventario || []).filter((it) => it.estado === 'instalado' && normName(it.cliente) === normName(nombreCliente));
+  } catch (e) { return; }
+  const badge = (cat) => { const t = CAT_TINT[cat] || '#55607a'; return `<span class="tag" style="background:color-mix(in srgb, ${t} 16%, transparent);border-color:color-mix(in srgb, ${t} 40%, var(--border));color:${t}">${esc(cat || 'Equipo')}</span>`; };
+  host.innerHTML = `
+    <div class="hist-head" style="margin:14px 0 6px"><span class="ev-title">📦 Equipos instalados (${equipos.length})</span></div>
+    ${equipos.length ? `<div class="cli-eq-list">${equipos.map((it) => `
+      <div class="cli-eq-row">
+        <span class="cli-eq-main">${badge(it.categoria)}<span class="cli-eq-cod">${esc(it.codigo)}</span><span class="muted-sm">🗓 ${esc(fmtDateShort(equipoFechaInstal(it)) || '—')}</span></span>
+        <span class="cli-eq-acc"><button class="btn btn-sm" data-eq-dev="${esc(it._uid)}" title="Devolver a bodega">↩ A bodega</button><button class="btn btn-sm btn-danger" data-eq-baja="${esc(it._uid)}" title="Dar de baja">⛔</button></span>
+      </div>`).join('')}</div>` : '<div class="muted-sm" style="padding:6px 2px">Sin equipos instalados vinculados.</div>'}`;
+  const retirar = async (uid, accion) => {
+    try { await store.moverInventario(uid, { accion, nota: 'Retirado desde ficha de cliente' }); toast(accion === 'baja' ? 'Equipo dado de baja' : 'Equipo devuelto a bodega'); cargarEquiposCliente(node, nombreCliente); }
+    catch (e) { toast(e.message || 'No se pudo retirar', 'info'); }
+  };
+  host.querySelectorAll('[data-eq-dev]').forEach((b) => (b.onclick = () => retirar(b.dataset.eqDev, 'devolver')));
+  host.querySelectorAll('[data-eq-baja]').forEach((b) => (b.onclick = () => { if (confirm('¿Dar de baja este equipo? Sale del inventario activo.')) retirar(b.dataset.eqBaja, 'baja'); }));
 }
 
 // ---------------- Detalle de visita ----------------
