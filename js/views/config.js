@@ -135,8 +135,14 @@ export function renderConfig(root) {
       <button class="btn btn-primary" data-save>Guardar cambios</button>
     </div>
 
+    <div class="cfg-tabs" role="tablist">
+      <button class="cfg-tab is-on" data-tab="empresa">🏢 Empresa y General</button>
+      <button class="cfg-tab" data-tab="red">📡 Red y Nodos</button>
+      <button class="cfg-tab" data-tab="agenda">📅 Agendamiento</button>
+      <button class="cfg-tab" data-tab="sistema">🤖 Sistema e Integraciones</button>
+    </div>
     <div class="cfg-wrap">
-      <div class="card cfg-card">
+      <div class="card cfg-card" data-group="empresa">
         <h3 class="cfg-title">🧾 Datos de la empresa (orden de trabajo)</h3>
         <div class="form-grid">
           <div class="field full"><label>Nombre / Razón social</label><input class="input" data-emp="nombre" value="${esc(emp.nombre || '')}"></div>
@@ -147,7 +153,7 @@ export function renderConfig(root) {
         </div>
       </div>
 
-      <div class="card cfg-card">
+      <div class="card cfg-card" data-group="empresa">
         <h3 class="cfg-title">📧 Avisos automáticos al cliente</h3>
         <p class="muted-sm">Cuando está encendido, el cliente recibe por correo un aviso al agendarse su visita y un recordatorio el día antes. Requiere tener el correo configurado en el servidor y que la visita tenga correo del cliente.</p>
         <label class="cfg-switch" style="display:flex;align-items:center;gap:10px;margin-top:10px;cursor:pointer">
@@ -156,7 +162,7 @@ export function renderConfig(root) {
         </label>
       </div>
 
-      <div class="card cfg-card">
+      <div class="card cfg-card" data-group="sistema">
         <h3 class="cfg-title">🤖 Bot de WhatsApp</h3>
         <p class="muted-sm">El asistente que atiende a tus clientes por WhatsApp: menú, tickets, planes, horario y (pronto) avisos automáticos. Tiene su propia sección para no mezclarla con el resto.</p>
         <div class="row" style="align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px">
@@ -167,7 +173,7 @@ export function renderConfig(root) {
         </div>
       </div>
 
-      <div class="card cfg-card">
+      <div class="card cfg-card" data-group="empresa">
         <h3 class="cfg-title">🔐 Seguridad · Mi contraseña</h3>
         <p class="muted-sm">Cambia la contraseña con la que entras a la app. Hazlo sobre todo si todavía usas la de fábrica. Mínimo 6 caracteres.</p>
         <div class="form-grid" style="margin-top:8px">
@@ -178,18 +184,18 @@ export function renderConfig(root) {
         <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn btn-primary" data-savepw>Cambiar contraseña</button></div>
       </div>
 
-      <div class="card cfg-card">
+      <div class="card cfg-card" data-group="red">
         <h3 class="cfg-title">🛠 Tipos de servicio</h3>
         <p class="muted-sm">Aparecen en “Tipo de visita” al agendar.</p>
         ${listEditor('tipos', cfg.tipos)}
       </div>
 
-      <div class="card cfg-card">
+      <div class="card cfg-card" data-group="agenda">
         <h3 class="cfg-title">🕐 Bloques horarios</h3>
         ${listEditor('bloques', cfg.bloques)}
       </div>
 
-      <div class="cfg-two">
+      <div class="cfg-two" data-group="agenda">
         <div class="card cfg-card">
           <h3 class="cfg-title">🏷 Estados</h3>
           <p class="muted-sm">Ojo: <b>Pendiente</b>, <b>Completada</b> y <b>Cancelada</b> tienen comportamiento especial; conviene no quitarlos.</p>
@@ -202,7 +208,7 @@ export function renderConfig(root) {
         </div>
       </div>
 
-      <div class="card cfg-card">
+      <div class="card cfg-card" data-group="red">
         <h3 class="cfg-title">📡 Nodos</h3>
         <p class="muted-sm">Los nodos (zonas / puntos de red) que se pueden asignar a cada visita. Se usan para las estadísticas por nodo del panel.</p>
         ${listEditor('nodos', cfg.nodos)}
@@ -215,13 +221,13 @@ export function renderConfig(root) {
         </div>
       </div>
 
-      <div class="card cfg-card">
+      <div class="card cfg-card" data-group="sistema">
         <h3 class="cfg-title">💾 Respaldo de datos</h3>
         <p class="muted-sm">Descarga una copia de seguridad completa (clientes, visitas, asignaciones, estados y configuración) en un archivo. Guárdala en tu computador, Google Drive o un pendrive. El servidor también genera un respaldo automático cada madrugada.</p>
         <button class="btn" data-backup style="margin-top:10px">⭳ Descargar respaldo completo ahora</button>
       </div>
 
-      <div class="card cfg-card cfg-danger">
+      <div class="card cfg-card cfg-danger" data-group="sistema">
         <h3 class="cfg-title">🧹 Empezar de cero (vaciar historial)</h3>
         <p class="muted-sm">Borra <b>todas</b> las visitas para arrancar con las asignaciones reales. <b>No borra</b> tus técnicos ni tu configuración. Antes de borrar, el sistema descarga solo un respaldo de todo por seguridad. <b style="color:var(--danger,#ef4444)">Esta acción no se puede deshacer.</b></p>
         <button class="btn btn-danger" data-wipe style="margin-top:10px">🗑 Vaciar historial de visitas…</button>
@@ -255,6 +261,16 @@ export function renderConfig(root) {
       badge.style.background = `color-mix(in srgb, ${z.color} 15%, transparent)`;
     }
   }));
+
+  // Pestañas: muestra solo el grupo activo. Todos los inputs siguen en el DOM,
+  // así el "Guardar cambios" global no pierde nada al cambiar de pestaña.
+  const tabBtns = root.querySelectorAll('.cfg-tab');
+  const setTab = (tab) => {
+    tabBtns.forEach((b) => b.classList.toggle('is-on', b.dataset.tab === tab));
+    root.querySelectorAll('[data-group]').forEach((el) => { el.hidden = el.dataset.group !== tab; });
+  };
+  tabBtns.forEach((b) => (b.onclick = () => setTab(b.dataset.tab)));
+  setTab('empresa');
 
   // Validación de correos
   bindField(root.querySelector('[data-emp="email"]'), { validate: validaEmail, msg: 'Correo inválido' });
