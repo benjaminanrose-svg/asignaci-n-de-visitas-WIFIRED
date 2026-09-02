@@ -18,6 +18,18 @@ const EST = {
 };
 const estMeta = (e) => EST[e] || EST.bodega;
 
+// Clasifica CUALQUIER texto de categoría (incluidas variantes viejas) a una de
+// las 4 estándar. Ignora mayúsculas/minúsculas y espacios. Fallback: 'Decos'.
+// REGLA: nunca puede devolver algo fuera de CATS → ningún equipo queda oculto.
+function catCanonica(raw) {
+  const s = (raw || '').toLowerCase().trim();
+  if (/antena/.test(s)) return 'Antenas';
+  if (/router/.test(s)) return 'Routers';
+  if (/mesh|repetidor/.test(s)) return 'Mesh (Repetidores)';
+  if (/deco|decodific|iptv/.test(s)) return 'Decos';
+  return 'Decos'; // comodín de seguridad: cualquier categoría desconocida es visible
+}
+
 // Opciones del <select> de categoría: siempre las 4 estándar. Si se edita un
 // equipo con una categoría antigua (fuera de la lista), se conserva como opción
 // extra para no cambiarla sin querer al guardar.
@@ -97,7 +109,7 @@ function pintarSecciones(root) {
   const el = root.querySelector('[data-secciones]');
   if (!el) return;
   el.innerHTML = CATS.map((cat) => {
-    const list = items.filter((i) => (i.categoria || 'Otro') === cat && pasaFiltro(i));
+    const list = items.filter((i) => catCanonica(i.categoria) === cat && pasaFiltro(i));
     const abierta = !local.cerradas.has(cat);
     const cuerpo = list.length
       ? tablaHtml(list)
