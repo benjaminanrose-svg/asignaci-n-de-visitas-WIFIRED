@@ -11,7 +11,10 @@ import { clientAvatar, clientCardModal, workOrderModal } from '../components.js'
 import { visitFormModal } from '../form.js';
 import { editServicioModal } from './servicios.js';
 
-const local = { q: '', orden: 'reciente' };
+const local = { q: '', orden: 'reciente', nodo: '' };
+
+/** Nodo de un cliente: del servicio de internet, o de su visita representante. */
+function clientNodo(c) { return (c.servicio && c.servicio.nodo) || (c.rep && c.rep.nodo) || ''; }
 
 function normName(s) { return (s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
 
@@ -138,6 +141,7 @@ export function renderClientes(root) {
         <option value="visitas" ${local.orden === 'visitas' ? 'selected' : ''}>Más visitas primero</option>
         <option value="activas" ${local.orden === 'activas' ? 'selected' : ''}>Con visitas activas primero</option>
       </select>
+      <select class="select" data-nodo><option value="">Todos los nodos</option></select>
       <div class="grow"></div>
       <button class="btn btn-sm" data-clear>Limpiar</button>
     </div>
@@ -147,10 +151,27 @@ export function renderClientes(root) {
   const inputQ = root.querySelector('[data-q]');
   inputQ.oninput = () => { local.q = inputQ.value.trim().toLowerCase(); paint(); };
   root.querySelector('[data-orden]').onchange = (e) => { local.orden = e.target.value; paint(); };
-  root.querySelector('[data-clear]').onclick = () => { local.q = ''; local.orden = 'reciente'; renderClientes(root); };
+  root.querySelector('[data-nodo]').onchange = (e) => { local.nodo = e.target.value; paint(); };
+  root.querySelector('[data-clear]').onclick = () => { local.q = ''; local.orden = 'reciente'; local.nodo = ''; renderClientes(root); };
+
+  // Puebla el <select> de nodos con los nodos del sistema + los de los servicios.
+  function pintarNodos(full) {
+    const sel = root.querySelector('[data-nodo]');
+    if (!sel) return;
+    const set = new Set();
+    (store.nodos ? store.nodos() : []).forEach((n) => { if (n) set.add(n); });
+    full.forEach((c) => { const nd = clientNodo(c); if (nd) set.add(nd); });
+    const nodos = [...set].sort((a, b) => a.localeCompare(b, 'es'));
+    if (local.nodo && !nodos.includes(local.nodo)) local.nodo = ''; // nodo ya inexistente
+    sel.innerHTML = '<option value="">Todos los nodos</option>' + nodos.map((n) => `<option value="${esc(n)}" ${n === local.nodo ? 'selected' : ''}>${esc(n)}</option>`).join('');
+  }
 
   function paint() {
-    let list = buildMerged(svcCache.list);
+    const full = buildMerged(svcCache.list);
+    pintarNodos(full);
+    // Filtro por nodo. Los clientes sin nodo solo aparecen en "Todos los nodos"
+    // (no se pierden: quedan visibles al quitar el filtro).
+    let list = local.nodo ? full.filter((c) => clientNodo(c) === local.nodo) : full;
     if (local.q) {
       list = list.filter((c) =>
         [c.nombre, c.rut, c.telefono, c.email, c.direccion, c.servicio && c.servicio.plan, c.servicio && c.servicio.pppoe_user]
@@ -162,7 +183,7 @@ export function renderClientes(root) {
     else list.sort((a, b) => (b.ultimaFecha || '').localeCompare(a.ultimaFecha || '')); // reciente
 
     if (!list.length) {
-      host.innerHTML = `<div class="empty-state"><div class="es-ico">🔍</div><p>${local.q ? 'No se encontraron clientes con esa búsqueda.' : 'Aún no hay clientes registrados.'}</p></div>`;
+      host.innerHTML = `<div class="empty-state"><div class="es-ico">🔍</div><p>${(local.q || local.nodo) ? 'No se encontraron clientes con esos filtros.' : 'Aún no hay clientes registrados.'}</p></div>`;
       return;
     }
 
@@ -171,7 +192,7 @@ export function renderClientes(root) {
         <thead><tr><th>Cliente</th><th>Dirección</th><th>Servicio / Plan</th><th>Equipos</th><th>Estado</th><th class="ta-r">Acciones</th></tr></thead>
         <tbody>${list.map(filaCliente).join('')}</tbody>
       </table></div>
-      <div class="muted-sm" style="padding:14px 4px 0">${list.length} cliente${list.length === 1 ? '' : 's'}${local.q ? ` · búsqueda: "${esc(local.q)}"` : ''}</div>`;
+      <div class="muted-sm" style="padding:14px 4px 0">${list.length} cliente${list.length === 1 ? '' : 's'}${local.nodo ? ` · nodo: ${esc(local.nodo)}` : ''}${local.q ? ` · búsqueda: "${esc(local.q)}"` : ''}</div>`;
 
     const abrir = (key) => { const c = list.find((x) => x.key === key); if (c) abrirFicha(c, root); };
     host.querySelectorAll('tr[data-key]').forEach((tr) => (tr.onclick = () => abrir(tr.dataset.key)));

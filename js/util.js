@@ -132,6 +132,53 @@ export function clientKey({ rut, telefono, nombre } = {}) {
   return n ? 'n:' + n : '';
 }
 
+// Zonas / comunas con su color de acento (Melipilla azul-cian, Paine morado).
+export const ZONAS = {
+  melipilla: { key: 'melipilla', label: 'Melipilla', abbr: 'MEL', color: '#0891b2' },
+  paine: { key: 'paine', label: 'Paine', abbr: 'PAI', color: '#8b5cf6' },
+};
+// Mapeo de respaldo por nombre de nodo (claves normalizadas). Sirve cuando la
+// config aún no tiene la zona guardada, para no perder la clasificación.
+const DEFAULT_NODO_ZONA = {};
+[['melipilla', ['Bollenar', 'El Sauce', 'Huechun', 'Huilco', 'La Vega 1072', 'Melipilla', 'Ulloa', 'Codigua', 'Culipran']],
+ ['paine', ['Paine 2', 'Bosques', 'Aculeo', 'Mirador Paine']]].forEach(([z, arr]) => arr.forEach((n) => { DEFAULT_NODO_ZONA[normName(n)] = z; }));
+
+// Zona configurada por nodo (se inyecta desde la config: { "Nodo": "Melipilla" }).
+let NODO_ZONA = {};
+export function setNodoZonas(map) {
+  NODO_ZONA = {};
+  if (map && typeof map === 'object') for (const k in map) {
+    const z = String(map[k] || '').toLowerCase();
+    NODO_ZONA[normName(k)] = z.includes('paine') ? 'paine' : (z.includes('melip') ? 'melipilla' : '');
+  }
+}
+/** Clave de zona de un nodo: config → mapeo de respaldo → substring del nombre. '' si no se sabe. */
+function zonaKeyDeNodo(nodo) {
+  if (!nodo) return '';
+  const nn = normName(nodo);
+  if (NODO_ZONA[nn]) return NODO_ZONA[nn];
+  if (DEFAULT_NODO_ZONA[nn]) return DEFAULT_NODO_ZONA[nn];
+  if (nn.includes('paine')) return 'paine';
+  if (nn.includes('melip')) return 'melipilla';
+  return '';
+}
+/** Zona (objeto de ZONAS) de un nodo por su nombre. null si no se sabe. */
+export function zonaDeNodo(nodo) { const k = zonaKeyDeNodo(nodo); return k ? ZONAS[k] : null; }
+
+/** Zona de una visita: campo `zona` explícito → zona del nodo → técnico (Jeremy/Moisés). null si no se sabe. */
+export function zonaDeVisita(v) {
+  if (!v) return null;
+  const z = (v.zona || '').toLowerCase();
+  if (z.includes('melip')) return ZONAS.melipilla;
+  if (z.includes('paine')) return ZONAS.paine;
+  const zn = zonaDeNodo(v.nodo);
+  if (zn) return zn;
+  const t = (parseTecnico(v.tecnico).short || '').toLowerCase();
+  if (t.includes('jeremy')) return ZONAS.melipilla;
+  if (/mois[eé]s/.test(t)) return ZONAS.paine;
+  return null;
+}
+
 /** Valida un RUT chileno con dígito verificador (módulo 11) */
 export function validaRut(r) {
   const s = limpiaRut(r);

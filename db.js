@@ -120,6 +120,8 @@ async function loadConfig(getSetting) {
     estados: arr(stored.estados, DEFAULT_CONFIG.estados),
     prioridades: arr(stored.prioridades, DEFAULT_CONFIG.prioridades),
     nodos: arr(stored.nodos, DEFAULT_CONFIG.nodos),
+    // Zona/comuna de cada nodo: { "Nombre nodo": "Melipilla" | "Paine" }
+    nodosZona: (stored.nodosZona && typeof stored.nodosZona === 'object' && !Array.isArray(stored.nodosZona)) ? stored.nodosZona : {},
     empresa: { ...DEFAULT_CONFIG.empresa, ...(stored.empresa && typeof stored.empresa === 'object' ? stored.empresa : {}) },
     // Avisos automáticos por correo al cliente (agendada + recordatorio). Encendidos por defecto.
     avisos_cliente: stored.avisos_cliente !== false,

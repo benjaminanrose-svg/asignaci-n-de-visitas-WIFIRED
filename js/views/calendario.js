@@ -2,7 +2,7 @@
 // WIFIRED · Vista Calendario mensual
 // ============================================================
 import * as store from '../store.js';
-import { esc, parseDate, toISO, todayISO, parseTecnico, bloqueShort } from '../util.js';
+import { esc, parseDate, toISO, todayISO, parseTecnico, bloqueShort, zonaDeVisita, ZONAS } from '../util.js';
 import { statusBadge, visitDetailModal, openModal, closeModal } from '../components.js';
 import { visitFormModal } from '../form.js';
 import { workOrderModal } from '../components.js';
@@ -14,8 +14,15 @@ const STATUS_DOT = {
   Completada: 'var(--st-comp-dot)', Reprogramada: 'var(--st-repr-dot)', Cancelada: 'var(--st-canc-dot)',
 };
 
-// mes visible (persiste durante la navegación)
-const local = { y: null, m: null };
+// mes visible (persiste durante la navegación) + filtro de zona ('', 'melipilla', 'paine')
+const local = { y: null, m: null, zona: '' };
+
+// Insignia de zona (usada en el modal diario).
+function zonaBadge(v) {
+  const z = zonaDeVisita(v);
+  if (!z) return '';
+  return `<span class="zona-badge" style="color:${z.color};border-color:color-mix(in srgb, ${z.color} 45%, var(--border));background:color-mix(in srgb, ${z.color} 15%, transparent)">📍 ${z.label}</span>`;
+}
 
 export function renderCalendario(root) {
   if (local.y === null) {
@@ -54,11 +61,15 @@ export function renderCalendario(root) {
       <div class="cal-cell ${inMonth ? '' : 'out'} ${isToday ? 'today' : ''}" data-day="${iso}">
         <div class="cal-daynum">${d.getDate()}${isToday ? '<span class="cal-todaydot"></span>' : ''}</div>
         <div class="cal-events">
-          ${shown.map((v) => `
-            <button class="cal-ev" data-open="${esc(v._uid)}" title="${esc(v.cliente)} · ${esc(v.tipo)}">
+          ${shown.map((v) => {
+            const z = zonaDeVisita(v);
+            const dim = local.zona && (!z || z.key !== local.zona) ? ' cal-ev--dim' : '';
+            return `
+            <button class="cal-ev${dim}" data-open="${esc(v._uid)}" data-zona="${z ? z.key : ''}" title="${esc(v.cliente)} · ${esc(v.tipo)}${z ? ' · ' + z.label : ''}" ${z ? `style="border-left:3px solid ${z.color}"` : ''}>
               <span class="cal-ev-dot" style="background:${STATUS_DOT[v.estado] || '#94a3b8'}"></span>
-              <span class="cal-ev-txt">${esc(bloqueShort(v.bloque))} · ${esc(v.cliente || v.tipo || 'Visita')}</span>
-            </button>`).join('')}
+              <span class="cal-ev-txt">${z ? `📍 ${z.abbr} · ` : ''}${esc(bloqueShort(v.bloque))} · ${esc(v.cliente || v.tipo || 'Visita')}</span>
+            </button>`;
+          }).join('')}
           ${extra > 0 ? `<button class="cal-more" data-day-open="${iso}">+${extra} más</button>` : ''}
         </div>
       </div>`);
@@ -81,6 +92,11 @@ export function renderCalendario(root) {
       <div class="cal-legend">
         ${Object.entries(STATUS_DOT).map(([k, c]) => `<span class="cal-lg"><span class="sw" style="background:${c}"></span>${k}</span>`).join('')}
       </div>
+      <div class="cal-zonas">
+        <button class="cal-zbtn ${!local.zona ? 'is-on' : ''}" data-zona-f="">Todas las zonas</button>
+        <button class="cal-zbtn ${local.zona === 'melipilla' ? 'is-on' : ''}" data-zona-f="melipilla" style="--z:${ZONAS.melipilla.color}">📍 Melipilla</button>
+        <button class="cal-zbtn ${local.zona === 'paine' ? 'is-on' : ''}" data-zona-f="paine" style="--z:${ZONAS.paine.color}">📍 Paine</button>
+      </div>
       <button class="btn btn-primary btn-sm" data-new>＋ Nueva visita</button>
     </div>
 
@@ -99,6 +115,7 @@ export function renderCalendario(root) {
   root.querySelector('[data-today]').onclick = () => {
     const n = new Date(); local.y = n.getFullYear(); local.m = n.getMonth(); renderCalendario(root);
   };
+  root.querySelectorAll('[data-zona-f]').forEach((b) => (b.onclick = () => { local.zona = b.dataset.zonaF; renderCalendario(root); }));
   root.querySelector('[data-new]').onclick = () => visitFormModal();
 
   // abrir visita
@@ -131,7 +148,7 @@ function dayModal(iso, list) {
           <span class="cal-ev-dot" style="background:${STATUS_DOT[v.estado] || '#94a3b8'}"></span>
           <span style="flex:1; min-width:0; text-align:left">
             <span class="cell-strong truncate" style="display:block">${esc(v.cliente || 'Sin nombre')}</span>
-            <span class="cell-sub truncate" style="display:block">${esc(bloqueShort(v.bloque))} · ${esc(v.tipo || '—')}${v.tecnico ? ' · ' + esc(t.short) : ''}</span>
+            <span class="cell-sub truncate" style="display:block">${esc(bloqueShort(v.bloque))} · ${esc(v.tipo || '—')}${v.tecnico ? ' · ' + esc(t.short) : ''} ${zonaBadge(v)}</span>
           </span>
           ${statusBadge(v.estado)}
         </button>`;

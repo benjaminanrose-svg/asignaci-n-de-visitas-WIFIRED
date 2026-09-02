@@ -5,7 +5,7 @@
 // la orden de trabajo.
 // ============================================================
 import * as store from '../store.js';
-import { esc, toast, bindField, validaEmail } from '../util.js';
+import { esc, toast, bindField, validaEmail, zonaDeNodo, ZONAS } from '../util.js';
 import { openModal, closeModal } from '../components.js';
 import { broadcastModal, contactosModal } from './servicios.js';
 
@@ -27,6 +27,34 @@ function listEditor(key, items) {
 function collectList(root, key) {
   return Array.from(root.querySelectorAll(`[data-list="${key}"] [data-item]`))
     .map((i) => i.value.trim()).filter(Boolean);
+}
+
+// Insignia de zona para el panel de nodos (según zona actual del nodo).
+function zonaBadgeCfg(nodo) {
+  const z = zonaDeNodo(nodo);
+  if (!z) return '<span class="zona-badge" style="color:var(--text-3)">Sin zona</span>';
+  return `<span class="zona-badge" data-nodozona-badge style="color:${z.color};border-color:color-mix(in srgb, ${z.color} 45%, var(--border));background:color-mix(in srgb, ${z.color} 15%, transparent)">📍 ${z.label}</span>`;
+}
+// Fila del panel "Zona de cada nodo": nombre + insignia + selector.
+function nodoZonaRow(nodo) {
+  const z = zonaDeNodo(nodo);
+  const k = z ? z.key : 'melipilla'; // por defecto Melipilla si no se sabe
+  return `
+    <div class="cfg-nodo-row">
+      <span class="cfg-nodo-name">${esc(nodo)}</span>
+      ${zonaBadgeCfg(nodo)}
+      <select class="select cfg-nodo-sel" data-nodozona="${esc(nodo)}">
+        <option value="Melipilla" ${k === 'melipilla' ? 'selected' : ''}>📍 Melipilla</option>
+        <option value="Paine" ${k === 'paine' ? 'selected' : ''}>📍 Paine</option>
+      </select>
+    </div>`;
+}
+// Recoge la zona elegida por nodo. Garantiza zona para todo nodo (nunca vacío).
+function collectNodosZona(root, nodos) {
+  const out = {};
+  root.querySelectorAll('[data-nodozona]').forEach((sel) => { if (sel.value) out[sel.dataset.nodozona] = sel.value; });
+  (nodos || []).forEach((n) => { if (!out[n]) { const z = zonaDeNodo(n); out[n] = z ? z.label : 'Melipilla'; } });
+  return out;
 }
 
 /** Descarga un respaldo completo como archivo JSON. Lanza si falla. */
@@ -178,6 +206,13 @@ export function renderConfig(root) {
         <h3 class="cfg-title">📡 Nodos</h3>
         <p class="muted-sm">Los nodos (zonas / puntos de red) que se pueden asignar a cada visita. Se usan para las estadísticas por nodo del panel.</p>
         ${listEditor('nodos', cfg.nodos)}
+        <h4 class="cfg-subtitle" style="margin:16px 0 4px">📍 Zona / comuna de cada nodo</h4>
+        <p class="muted-sm">Define a qué comuna pertenece cada nodo. Esto pinta los colores del Calendario y alimenta los filtros por zona.</p>
+        <div class="cfg-nodozona" data-nodozona-list>
+          ${(cfg.nodos || []).length
+            ? cfg.nodos.map((n) => nodoZonaRow(n)).join('')
+            : '<p class="muted-sm">Crea primero un nodo arriba para asignarle su zona.</p>'}
+        </div>
       </div>
 
       <div class="card cfg-card">
@@ -208,6 +243,18 @@ export function renderConfig(root) {
     div.querySelector('[data-item]').focus();
   }));
   root.querySelectorAll('[data-remove]').forEach((b) => (b.onclick = () => b.closest('[data-row]').remove()));
+
+  // Cambio rápido de zona de un nodo: actualiza su insignia al instante.
+  root.querySelectorAll('[data-nodozona]').forEach((sel) => (sel.onchange = () => {
+    const badge = sel.parentElement.querySelector('.zona-badge');
+    const z = sel.value.toLowerCase().includes('paine') ? ZONAS.paine : ZONAS.melipilla;
+    if (badge) {
+      badge.textContent = `📍 ${z.label}`;
+      badge.style.color = z.color;
+      badge.style.borderColor = `color-mix(in srgb, ${z.color} 45%, var(--border))`;
+      badge.style.background = `color-mix(in srgb, ${z.color} 15%, transparent)`;
+    }
+  }));
 
   // Validación de correos
   bindField(root.querySelector('[data-emp="email"]'), { validate: validaEmail, msg: 'Correo inválido' });
@@ -264,6 +311,7 @@ export function renderConfig(root) {
       nodos: collectList(root, 'nodos'),
       avisos_cliente: root.querySelector('[data-avisos]').checked,
     };
+    payload.nodosZona = collectNodosZona(root, payload.nodos);
     if (!payload.tipos.length) { toast('Deja al menos un tipo de servicio', 'info'); return; }
     if (!payload.estados.length) { toast('Deja al menos un estado', 'info'); return; }
     if (!payload.prioridades.length) { toast('Deja al menos una prioridad', 'info'); return; }

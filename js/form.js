@@ -1,7 +1,7 @@
 // ============================================================
 // WIFIRED · Formulario de visita (crear / editar / asignar)
 // ============================================================
-import { esc, todayISO, toast, bindField, validaRut, formatRut, validaFono, formatFono, validaEmail } from './util.js';
+import { esc, todayISO, toast, bindField, validaRut, formatRut, validaFono, formatFono, validaEmail, zonaDeVisita, zonaDeNodo } from './util.js';
 import { openModal, closeModal } from './components.js';
 import * as store from './store.js';
 
@@ -101,6 +101,18 @@ export function visitFormModal(existing = null, prefill = {}) {
   };
   tipoSel.addEventListener('change', aplicarModoFacti);
   aplicarModoFacti(); // aplicar al abrir (por si se edita una visita de Factibilidad)
+
+  // Al elegir técnico, autoseleccionar el nodo de su zona (Jeremy→Melipilla,
+  // Moisés→Paine) si existe entre los nodos. Se puede cambiar a mano después.
+  const tecSel = node.querySelector('[name=tecnico]');
+  const nodoSel = node.querySelector('[name=nodo]');
+  if (tecSel && nodoSel) tecSel.addEventListener('change', () => {
+    const z = zonaDeVisita({ tecnico: tecSel.value });
+    if (!z) return;
+    // Elige un nodo cuya zona configurada coincida con la del técnico.
+    const opt = [...nodoSel.options].find((o) => o.value && (zonaDeNodo(o.value) || {}).key === z.key);
+    if (opt) nodoSel.value = opt.value;
+  });
 
   // Validación en vivo (RUT chileno, teléfono y correo). Los campos son opcionales:
   // solo se valida cuando el usuario escribe algo.

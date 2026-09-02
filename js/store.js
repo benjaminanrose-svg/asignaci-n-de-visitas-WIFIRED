@@ -2,7 +2,7 @@
 // WIFIRED · Store — API REST + caché local + cola offline
 // Permite completar tareas sin conexión y sincroniza al volver.
 // ============================================================
-import { toast } from './util.js';
+import { toast, setNodoZonas } from './util.js';
 import { getToken, logout } from './auth.js';
 
 const COMPANY = {
@@ -19,6 +19,8 @@ const QUEUE = 'wifired_queue';
 function applyCompany() {
   const e = state.config && state.config.empresa;
   company = e ? { ...COMPANY, ...e, fonos: Array.isArray(e.fonos) && e.fonos.length ? e.fonos : COMPANY.fonos } : { ...COMPANY };
+  // Registra la zona de cada nodo para que zonaDeVisita/zonaDeNodo la usen.
+  setNodoZonas(state.config && state.config.nodosZona);
 }
 
 let state = { visitas: [], tecnicos: [], tickets: [], config: { bloques: [], tipos: [], estados: [], prioridades: ['Alta', 'Media', 'Baja'], nodos: [], empresa: null } };
