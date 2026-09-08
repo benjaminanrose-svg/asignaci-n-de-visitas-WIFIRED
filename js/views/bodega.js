@@ -5,7 +5,7 @@
 // Sólo coordinación.
 // ============================================================
 import * as store from '../store.js';
-import { esc, toast, normName, clientKey, formatRut } from '../util.js';
+import { esc, toast, clientKey, formatRut } from '../util.js';
 import { openModal, closeModal } from '../components.js';
 
 // Categorías estándar de equipos (única fuente de verdad para toda la vista).
@@ -52,11 +52,14 @@ function porTexto(cat) {
 }
 
 // Categoría final para AGRUPAR/MOSTRAR un equipo. REGLA DE INTEGRIDAD: siempre
-// devuelve una de las 4 → ningún equipo queda fuera (suma sesiones = Total).
-// Prioridad: código conocido → categoría canónica ya guardada → texto → 'Routers'.
+// devuelve una de las 4 → ningún equipo queda fuera (suma secciones = Total).
+// Prioridad: categoría guardada (si es una de las 4) → código → texto → 'Routers'.
+// La guardada va PRIMERO para que un cambio manual de categoría mande sobre el
+// prefijo del código; al crear ya se guarda el resultado del código, así que el
+// automático se respeta igual.
 function clasificar(item) {
-  return porCodigo(item.codigo)
-    || (CATS.includes(item.categoria) ? item.categoria : null)
+  return (CATS.includes(item.categoria) ? item.categoria : null)
+    || porCodigo(item.codigo)
     || porTexto(item.categoria)
     || 'Routers';
 }
@@ -450,7 +453,7 @@ function detailModal(root, uid) {
   node.innerHTML = `
     <div class="modal-head">
       <div>
-        <div class="row" style="gap:8px">${chip(esc(i.categoria || 'Otro'), '#55607a')}${estadoChip(i.estado)}</div>
+        <div class="row" style="gap:8px">${chip(esc(clasificar(i)), '#55607a')}${estadoChip(i.estado)}</div>
         <h3 style="margin-top:6px;font-family:ui-monospace,Menlo,monospace;font-size:16px;word-break:break-all">${esc(i.codigo)}</h3>
       </div>
       <button class="icon-btn" data-x>✕</button>
