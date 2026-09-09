@@ -7,7 +7,10 @@ import { downloadZip, dataUriToBytes } from './zip.js';
 import * as store from './store.js';
 
 /** Reagendar (coordinación): nueva fecha, resuelve la solicitud, conserva evidencia */
-export function reagendarModal(v) {
+export async function reagendarModal(v) {
+  // Trae las fotos/firmas reales (la carga inicial viene liviana).
+  if (v && v._media === false) { try { v = await store.conMedia(v); } catch (e) { /* sin conexión: se muestra sin fotos */ } }
+
   const node = document.createElement('div');
   node.innerHTML = `
     <div class="modal-head"><h3>Reagendar visita</h3><button class="icon-btn" data-close>✕</button></div>
@@ -39,12 +42,13 @@ export function reagendarModal(v) {
     const nota = (notaEl.value || '').trim();
     if (!nota) { toast('Deja una nota o motivo de la reprogramación', 'info'); notaEl.focus(); return; }
     const autor = (store.currentUser() && store.currentUser().nombre) || 'Coordinación';
-    const detalle = `Nueva fecha: ${fecha} ${bloque}${tecnico ? ' · ' + tecnico : ''} — ${nota}`;
+    const detalle = `Nueva fecha: ${fecha} ${bloque}${tecnico ? ' · ' + tecnico : ''} — ${nota} (OT anterior: ${v.id})`;
     const hist = JSON.stringify((v.historial || []).concat([{ ts: Date.now(), autor, tipo: 'reagendada', detalle, motivo: nota }]));
     store.updateVisita(v._uid, {
       fecha, bloque, tecnico,
       estado: node.querySelector('[name=estado]').value,
       reagenda_solicitada: '', reagenda_motivo: '', evidencias: '[]', historial: hist, // limpia evidencia activa; el historial se conserva
+      renovar_ot: 1, // al reagendar, la OT pasa al siguiente número de su zona
     });
     toast('Visita reagendada'); closeModal();
   };
@@ -94,6 +98,9 @@ export function historialBlock(v) {
 
 /** Empaqueta todo el historial (fotos, firmas, documentos, OT en PDF) en un ZIP */
 export async function downloadHistorialZip(v) {
+  // Trae las fotos/firmas reales (la carga inicial viene liviana).
+  if (v && v._media === false) { try { v = await store.conMedia(v); } catch (e) { /* sin conexión: se muestra sin fotos */ } }
+
   const files = [];
   const pad = (n) => String(n).padStart(2, '0');
   const h = Array.isArray(v.historial) ? v.historial : [];
@@ -413,7 +420,10 @@ async function cargarEquiposCliente(node, nombreCliente) {
 }
 
 // ---------------- Detalle de visita ----------------
-export function visitDetailModal(v, { onEdit, onOrder, readOnly = false, onBack } = {}) {
+export async function visitDetailModal(v, { onEdit, onOrder, readOnly = false, onBack } = {}) {
+  // Trae las fotos/firmas reales (la carga inicial viene liviana).
+  if (v && v._media === false) { try { v = await store.conMedia(v); } catch (e) { /* sin conexión: se muestra sin fotos */ } }
+
   const t = parseTecnico(v.tecnico);
   const otrasCliente = clientVisits(v).length;
   const node = document.createElement('div');
@@ -505,7 +515,10 @@ export function visitDetailModal(v, { onEdit, onOrder, readOnly = false, onBack 
 }
 
 // ---------------- Orden de trabajo imprimible ----------------
-export function workOrderModal(v, company) {
+export async function workOrderModal(v, company) {
+  // Trae las fotos/firmas reales (la carga inicial viene liviana).
+  if (v && v._media === false) { try { v = await store.conMedia(v); } catch (e) { /* sin conexión: se muestra sin fotos */ } }
+
   const t = parseTecnico(v.tecnico);
   const node = document.createElement('div');
   node.innerHTML = `

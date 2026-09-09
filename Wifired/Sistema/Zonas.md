@@ -22,17 +22,26 @@ Orden de prioridad (`zonaDeVisita` en `js/util.js`):
 Relacionado: [[Vistas]] · [[Base de datos]]
 
 ## Sigla de la OT según el nodo
-El número de orden se arma con la **zona del nodo elegido** (se genera en el
-servidor, en `db.js` → `nextOt` / `siglaZona`):
+El número de orden se arma con la **zona del nodo elegido** (servidor: `db.js` →
+`nextOt` / `siglaZona`):
 
-- Nodo de **Paine** → `OT-**PAIN**-2026-NNN`
-- Nodo de **Melipilla** → `OT-**MEL**-2026-NNN`
-- Sin nodo o nodo desconocido → **MEL** por defecto.
-- Las visitas de **Factibilidad** mantienen su propia serie `OT-FAC-...`.
+- Nodo de **Paine** → `OT-PAIN-2026-NNN`
+- Nodo de **Melipilla** → `OT-MEL-2026-NNN`
+- Sin nodo o desconocido → **MEL** por defecto.
+- **Factibilidad** mantiene su serie `OT-FAC-...`.
 
 Usa la zona configurada en Configuración → Red y Nodos; si el nodo no la tiene,
-cae al mapeo por nombre. **El correlativo es único** (MEL y PAIN comparten
-numeración) para que nunca se repita un número.
+cae al mapeo por nombre.
 
-> La OT se fija al **crear** la visita: si después cambias el nodo, la sigla no
-> cambia (la OT es su identificador).
+### Correlativo por zona (y cómo reiniciarlo)
+Cada sigla lleva **su propia numeración** (MEL, PAIN y FAC por separado).
+En **Configuración → Red y Nodos** hay dos campos: *Próximo N° de OT* para
+Melipilla y para Paine.
+- **0** = automático (sigue el correlativo solo). Es lo normal.
+- Un número = desde ahí parte. Si ese número ya está usado, salta al primero
+  libre → **nunca se repite una OT**.
+
+### Al reagendar, la OT se renueva
+Coordinación reagenda → la visita recibe el **siguiente número de su zona**
+(el frontend manda `renovar_ot`). La **OT anterior queda registrada en el
+historial** de la visita, así no se pierde el rastro.

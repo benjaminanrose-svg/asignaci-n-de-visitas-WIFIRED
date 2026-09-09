@@ -362,6 +362,29 @@ api.post('/mi-clave', auth, wrap(async (req, res) => {
 }));
 
 // --- Bootstrap (filtra por rol) ---
+// ── Carga rápida ─────────────────────────────────────────────────────────────
+// Al abrir la app se manda la lista de visitas SIN los archivos pesados (fotos,
+// firmas). NO se borra nada: siguen en la base y se piden con
+// GET /visitas/:id/media al abrir el detalle. Se conserva la CANTIDAD de fotos
+// (arreglos del mismo largo) para que los contadores sigan funcionando igual.
+function aligerarVisita(v) {
+  const ev = Array.isArray(v.evidencias) ? v.evidencias : [];
+  const hist = Array.isArray(v.historial) ? v.historial : [];
+  return {
+    ...v,
+    evidencias: ev.map(() => ({ url: '' })),
+    historial: hist.map((e) => ({
+      ...e,
+      fotos: Array.isArray(e.fotos) ? e.fotos.map(() => '') : [],
+      firma_cliente: e.firma_cliente ? '1' : '',
+      firma_tecnico: e.firma_tecnico ? '1' : '',
+    })),
+    firma_cliente: v.firma_cliente ? '1' : '',
+    firma_tecnico: v.firma_tecnico ? '1' : '',
+    _media: false, // marca: los archivos aún no están cargados
+  };
+}
+
 api.get('/bootstrap', auth, wrap(async (req, res) => {
   const s = await getStore();
   const [visitas, tecnicos, config] = await Promise.all([s.listVisitas(), s.listTecnicos(), s.getConfig()]);
@@ -370,10 +393,10 @@ api.get('/bootstrap', auth, wrap(async (req, res) => {
   const mail = mailConfigured();
   if (req.user.rol === 'tecnico') {
     const mine = visitas.filter((v) => v.tecnico === me.tecnico);
-    return res.json({ visitas: mine, tecnicos: tecnicos.filter((t) => t.id === req.user.tecnico_id), config, me, persistent, mail });
+    return res.json({ visitas: mine.map(aligerarVisita), tecnicos: tecnicos.filter((t) => t.id === req.user.tecnico_id), config, me, persistent, mail });
   }
   const tickets = typeof s.listTickets === 'function' ? await s.listTickets() : [];
-  res.json({ visitas, tecnicos, config, me, persistent, mail, tickets });
+  res.json({ visitas: visitas.map(aligerarVisita), tecnicos, config, me, persistent, mail, tickets });
 }));
 
 // --- Revisión ligera: firma corta para saber si hubo cambios (sin transferir fotos) ---
@@ -493,6 +516,25 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
 }));
 
 // Descargar la orden de trabajo en PDF (la misma que se envía al cliente/soporte)
+// Archivos pesados de UNA visita (fotos, firmas e historial completo).
+// Se pide sólo al abrir el detalle, así la carga inicial es liviana.
+api.get('/visitas/:id/media', auth, wrap(async (req, res) => {
+  const s = await getStore();
+  const v = (await s.listVisitas()).find((x) => x._uid === String(req.params.id));
+  if (!v) return res.status(404).json({ error: 'Visita no encontrada' });
+  if (req.user.rol === 'tecnico') {
+    const display = await techDisplay(req.user);
+    if (v.tecnico !== display) return res.status(403).json({ error: 'No puedes ver esta visita' });
+  }
+  res.json({
+    _uid: v._uid,
+    evidencias: v.evidencias || [],
+    historial: v.historial || [],
+    firma_cliente: v.firma_cliente || '',
+    firma_tecnico: v.firma_tecnico || '',
+  });
+}));
+
 api.get('/visitas/:id/orden.pdf', auth, wrap(async (req, res) => {
   const s = await getStore();
   const v = (await s.listVisitas()).find((x) => x._uid === String(req.params.id));

@@ -15,3 +15,21 @@ App de una sola página (**SPA**) en **JavaScript puro** (sin frameworks).
 - `mailer.js` (correos), `mikrotik.js` (routers), `push.js` (notificaciones).
 
 Relacionado: [[Base de datos]] · [[Vistas]] · [[Despliegue]]
+
+## ⚡ Carga rápida (por qué la app abre liviana)
+`/api/bootstrap` manda las visitas **sin las fotos ni firmas** (función
+`aligerarVisita` en `server.js`). Las fotos se piden **al abrir cada visita**
+con `GET /visitas/:id/media` (`store.conMedia`).
+
+- **No se borra nada**: todo sigue en la base. El **respaldo** (`/backup`) y la
+  **orden de trabajo en PDF** usan los datos completos.
+- Se conserva la **cantidad** de fotos (arreglos del mismo largo), así los
+  contadores 📷 siguen funcionando sin cambios.
+- La caché del navegador también se guarda liviana (no revienta el límite).
+
+> 🔴 **Regla dura:** nunca reescribir `historial` ni `evidencias` partiendo de la
+> versión liviana — se perderían las fotos. Por eso `store.updateVisita` tiene una
+> **barrera**: si faltan los archivos, avisa y NO guarda. Antes de cualquier
+> acción que escriba historial hay que llamar a `store.conMedia(v)`.
+
+Relacionado: [[Base de datos]] · [[Vistas]]

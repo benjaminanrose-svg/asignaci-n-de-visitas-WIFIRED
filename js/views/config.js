@@ -125,6 +125,7 @@ export function renderConfig(root) {
   const fonos = Array.isArray(emp.fonos) ? emp.fonos.join(', ') : (emp.fonos || '');
   const avisos = cfg.avisos_cliente !== false;
   const bot = cfg.bot || {};
+  const otIni = cfg.otInicio || {};
 
   root.innerHTML = `
     <div class="section-head">
@@ -218,6 +219,16 @@ export function renderConfig(root) {
           ${(cfg.nodos || []).length
             ? cfg.nodos.map((n) => nodoZonaRow(n)).join('')
             : '<p class="muted-sm">Crea primero un nodo arriba para asignarle su zona.</p>'}
+        </div>
+        <h4 class="cfg-subtitle" style="margin:18px 0 4px">🔢 Próximo N° de OT por zona</h4>
+        <p class="muted-sm">Normalmente déjalo en <b>0</b>: el número sigue solo. Pon un número
+        únicamente si necesitas <b>reiniciar</b> la cuenta o continuar desde otro valor. Si el
+        número que pongas ya existe, se usa el siguiente libre (nunca se repite una OT).</p>
+        <div class="form-grid">
+          <div class="field"><label>📍 Melipilla · <code>OT-MEL-2026-…</code></label>
+            <input class="input" type="number" min="0" step="1" data-ot="MEL" value="${esc(String(otIni.MEL || 0))}"></div>
+          <div class="field"><label>📍 Paine · <code>OT-PAIN-2026-…</code></label>
+            <input class="input" type="number" min="0" step="1" data-ot="PAIN" value="${esc(String(otIni.PAIN || 0))}"></div>
         </div>
       </div>
 
@@ -328,6 +339,8 @@ export function renderConfig(root) {
       avisos_cliente: root.querySelector('[data-avisos]').checked,
     };
     payload.nodosZona = collectNodosZona(root, payload.nodos);
+    const otNum = (k) => { const el = root.querySelector(`[data-ot="${k}"]`); const v = parseInt(el ? el.value : 0, 10); return Number.isFinite(v) && v > 0 ? v : 0; };
+    payload.otInicio = { MEL: otNum('MEL'), PAIN: otNum('PAIN') };
     if (!payload.tipos.length) { toast('Deja al menos un tipo de servicio', 'info'); return; }
     if (!payload.estados.length) { toast('Deja al menos un estado', 'info'); return; }
     if (!payload.prioridades.length) { toast('Deja al menos una prioridad', 'info'); return; }

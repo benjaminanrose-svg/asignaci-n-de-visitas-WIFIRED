@@ -102,9 +102,17 @@ export function renderTecnico(root) {
     catch (e) { toast(e.message, 'info'); notifBtn.disabled = false; notifBtn.textContent = 'Activar'; }
   };
   root.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { local.filtro = b.dataset.tab; renderTecnico(root); }));
-  root.querySelectorAll('[data-act]').forEach((b) => (b.onclick = (e) => {
+  root.querySelectorAll('[data-act]').forEach((b) => (b.onclick = async (e) => {
     e.stopPropagation();
     const uid = b.dataset.uid, act = b.dataset.act;
+    // Trae las fotos reales antes de cualquier acción: la carga inicial viene
+    // liviana y hay que evitar reescribir el historial sin sus fotos.
+    const vv = store.byUid(uid);
+    if (vv && vv._media === false) {
+      b.disabled = true;
+      try { await store.conMedia(vv); } catch (err) { toast('Sin conexión: intenta de nuevo', 'info'); b.disabled = false; return; }
+      b.disabled = false;
+    }
     if (act === 'completar') completarModal(uid);
     else if (act === 'cancelar') cancelarModal(uid);
     else if (act === 'solicitar') solicitarModal(uid);

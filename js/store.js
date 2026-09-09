@@ -31,7 +31,7 @@ const listeners = new Set();
 
 function load(k, def) { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch (e) { return def; } }
 function saveQueue() { try { localStorage.setItem(QUEUE, JSON.stringify(queue)); } catch (e) {} }
-function saveCache() { try { localStorage.setItem(CACHE, JSON.stringify({ visitas: state.visitas, tecnicos: state.tecnicos, tickets: state.tickets, config: state.config, me })); } catch (e) {} }
+function saveCache() { try { localStorage.setItem(CACHE, JSON.stringify({ visitas: state.visitas.map(sinMedia), tecnicos: state.tecnicos, tickets: state.tickets, config: state.config, me })); } catch (e) {} }
 
 export function currentUser() { return me; }
 export function isCoordinador() { return me && me.rol === 'coordinador'; }
@@ -55,6 +55,35 @@ async function rawApi(method, url, body) {
     const err = new Error(msg); err.status = res.status; throw err;
   }
   return res.status === 204 ? null : res.json();
+}
+
+// ── Archivos pesados (fotos/firmas) ──────────────────────────────────────────
+// La carga inicial trae las visitas SIN fotos (para que abra rápido en celular).
+// Nada se borra: siguen en el servidor y se piden al abrir cada visita.
+const sinMedia = (v) => ({
+  ...v,
+  evidencias: (v.evidencias || []).map(() => ({ url: '' })),
+  historial: (v.historial || []).map((e) => ({
+    ...e,
+    fotos: (e.fotos || []).map(() => ''),
+    firma_cliente: e.firma_cliente ? '1' : '',
+    firma_tecnico: e.firma_tecnico ? '1' : '',
+  })),
+  firma_cliente: v.firma_cliente ? '1' : '',
+  firma_tecnico: v.firma_tecnico ? '1' : '',
+  _media: false,
+});
+
+/** Carga las fotos/firmas reales de una visita y las deja en memoria. */
+export async function conMedia(v) {
+  if (!v || v._media) return v;
+  const m = await rawApi('GET', '/visitas/' + v._uid + '/media');
+  v.evidencias = m.evidencias || [];
+  v.historial = m.historial || [];
+  v.firma_cliente = m.firma_cliente || '';
+  v.firma_tecnico = m.firma_tecnico || '';
+  v._media = true;
+  return v;
 }
 
 export async function initStore() {
@@ -137,6 +166,11 @@ export async function updateVisita(uid, patch) {
   const idx = state.visitas.findIndex((v) => v._uid === uid);
   if (idx < 0) return;
   const prev = state.visitas[idx];
+  // PROTECCIÓN: nunca reescribir fotos/historial partiendo de la versión liviana.
+  if (prev._media === false && ('historial' in patch || 'evidencias' in patch)) {
+    toast('Abre la visita de nuevo antes de guardar (se estaban cargando sus fotos)', 'info');
+    throw new Error('media-no-cargada');
+  }
   state.visitas[idx] = { ...prev, ...patch }; // optimista
   emit();
   try {
@@ -146,6 +180,7 @@ export async function updateVisita(uid, patch) {
       else toast('Visita completada. Correo no enviado: ' + updated._email.reason, 'info');
       delete updated._email;
     }
+    updated._media = true; // la respuesta del servidor trae todo
     state.visitas[idx] = updated; emit();
   } catch (e) {
     if (e.network) { enqueue({ method: 'PUT', url: '/visitas/' + uid, body: patch }); } // conservar cambio local

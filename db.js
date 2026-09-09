@@ -120,6 +120,12 @@ async function loadConfig(getSetting) {
     estados: arr(stored.estados, DEFAULT_CONFIG.estados),
     prioridades: arr(stored.prioridades, DEFAULT_CONFIG.prioridades),
     nodos: arr(stored.nodos, DEFAULT_CONFIG.nodos),
+    // Proximo N de OT por zona (0 = automatico, sigue el correlativo)
+    otInicio: (() => {
+      const o = (stored.otInicio && typeof stored.otInicio === 'object') ? stored.otInicio : {};
+      const num = (v) => { const k = parseInt(v, 10); return Number.isFinite(k) && k > 0 ? k : 0; };
+      return { MEL: num(o.MEL), PAIN: num(o.PAIN) };
+    })(),
     // Zona/comuna de cada nodo: { "Nombre nodo": "Melipilla" | "Paine" }
     nodosZona: (stored.nodosZona && typeof stored.nodosZona === 'object' && !Array.isArray(stored.nodosZona)) ? stored.nodosZona : {},
     empresa: { ...DEFAULT_CONFIG.empresa, ...(stored.empresa && typeof stored.empresa === 'object' ? stored.empresa : {}) },
@@ -182,22 +188,29 @@ function siglaZona(nodo, nodosZona) {
   if (nn.includes('melip')) return 'MEL';
   return 'MEL';
 }
-// Lee el mapa de zonas por nodo desde la configuración guardada (string JSON).
-function nodosZonaDe(rawConfig) {
-  try { return (JSON.parse(rawConfig || '{}') || {}).nodosZona || {}; } catch (e) { return {}; }
+// Lee la configuración guardada (string JSON) para sacar zonas por nodo y OT inicial.
+function cfgGuardada(rawConfig) {
+  try { return JSON.parse(rawConfig || '{}') || {}; } catch (e) { return {}; }
 }
 
-function nextOt(existing, tipo, nodo, nodosZona) {
+function nextOt(existing, tipo, nodo, nodosZona, otInicio) {
   const facti = String(tipo || '').trim().toLowerCase() === 'factibilidad';
   const sigla = facti ? 'FAC' : siglaZona(nodo, nodosZona);
   const prefix = `OT-${sigla}-2026-`;
-  // La numeración sigue siendo una sola serie para las OT normales (MEL y PAIN
-  // comparten correlativo) para que nunca se repita un número.
-  const nums = existing
-    .filter((ot) => (facti ? String(ot).startsWith('OT-FAC-') : !String(ot).startsWith('OT-FAC-')))
-    .map((ot) => parseInt((String(ot).match(/(\d+)\s*$/) || [])[1] || '0', 10))
-    .filter((n) => !isNaN(n));
-  const n = (nums.length ? Math.max(...nums) : 0) + 1;
+  // Correlativo POR SIGLA: MEL, PAIN y FAC llevan su propia numeración.
+  const usados = new Set();
+  let max = 0;
+  (existing || []).forEach((ot) => {
+    const s = String(ot || '');
+    if (!s.startsWith(`OT-${sigla}-`)) return;
+    const k = parseInt((s.match(/(\d+)\s*$/) || [])[1] || '0', 10);
+    if (Number.isFinite(k) && k > 0) { usados.add(k); if (k > max) max = k; }
+  });
+  // Si coordinación fijó un "próximo número" para esa zona, se parte de ahí;
+  // si ese número ya está usado, avanza al primero libre (nunca se repite una OT).
+  const inicio = parseInt((otInicio || {})[sigla], 10);
+  let n = (Number.isFinite(inicio) && inicio > 0) ? inicio : max + 1;
+  while (usados.has(n)) n++;
   return `${prefix}${String(n).padStart(3, '0')}`;
 }
 
@@ -340,7 +353,8 @@ function memoryStore() {
       return sig;
     },
     async addVisita(d) {
-      const ot = nextOt(visitas.map((x) => x.ot), d.tipo, d.nodo, nodosZonaDe(settings.config));
+      const cfgV = cfgGuardada(settings.config);
+      const ot = nextOt(visitas.map((x) => x.ot), d.tipo, d.nodo, cfgV.nodosZona, cfgV.otInicio);
       const v = { id: ++vSeq, ot, ...pick(d) };
       if (!v.estado) v.estado = 'Pendiente';
       visitas.unshift(v); return outV(v);
@@ -349,6 +363,11 @@ function memoryStore() {
       const v = visitas.find((x) => x.id == id); if (!v) return null;
       VISIT_FIELDS.forEach((k) => { if (k in patch) v[k] = patch[k]; });
       if ('ot' in patch && String(patch.ot || '').trim()) v.ot = String(patch.ot).trim();
+      // Al reagendar, la OT pasa al siguiente número de su zona (sigue el orden).
+      if (patch.renovar_ot) {
+        const cfgV = cfgGuardada(settings.config);
+        v.ot = nextOt(visitas.map((x) => x.ot), v.tipo, v.nodo, cfgV.nodosZona, cfgV.otInicio);
+      }
       return outV(v);
     },
     async deleteVisita(id) { visitas = visitas.filter((x) => x.id != id); },
@@ -810,7 +829,8 @@ function pgStore(url) {
     async addVisita(d) {
       const { rows: ex } = await pool.query('SELECT ot FROM visitas');
       const { rows: cfgRows } = await pool.query('SELECT value FROM settings WHERE key=$1', ['config']);
-      const ot = nextOt(ex.map((r) => r.ot), d.tipo, d.nodo, nodosZonaDe(cfgRows[0] ? cfgRows[0].value : null));
+      const cfgV = cfgGuardada(cfgRows[0] ? cfgRows[0].value : null);
+      const ot = nextOt(ex.map((r) => r.ot), d.tipo, d.nodo, cfgV.nodosZona, cfgV.otInicio);
       const { rows } = await pool.query(
         `INSERT INTO visitas (ot,estado,tipo,fecha,bloque,cliente,rut,telefono,direccion,gps,detalle,tecnico,asignado_por,prioridad,email,nodo)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
@@ -819,9 +839,21 @@ function pgStore(url) {
       return outV(rows[0]);
     },
     async updateVisita(id, patch) {
+      // Al reagendar, la OT pasa al siguiente número de su zona (sigue el orden).
+      let otNueva = '';
+      if (patch.renovar_ot) {
+        const { rows: cur } = await pool.query('SELECT tipo, nodo FROM visitas WHERE id=$1', [id]);
+        const tipo = ('tipo' in patch) ? patch.tipo : (cur[0] ? cur[0].tipo : '');
+        const nodo = ('nodo' in patch) ? patch.nodo : (cur[0] ? cur[0].nodo : '');
+        const { rows: exOt } = await pool.query('SELECT ot FROM visitas');
+        const { rows: cfgR } = await pool.query('SELECT value FROM settings WHERE key=$1', ['config']);
+        const cfgV = cfgGuardada(cfgR[0] ? cfgR[0].value : null);
+        otNueva = nextOt(exOt.map((r) => r.ot), tipo, nodo, cfgV.nodosZona, cfgV.otInicio);
+      }
       const cols = [], vals = []; let i = 1;
       VISIT_FIELDS.forEach((k) => { if (k in patch) { cols.push(`${k}=$${i++}`); vals.push(patch[k]); } });
       if ('ot' in patch && String(patch.ot || '').trim()) { cols.push(`ot=$${i++}`); vals.push(String(patch.ot).trim()); }
+      if (otNueva) { cols.push(`ot=$${i++}`); vals.push(otNueva); }
       if (!cols.length) return null;
       cols.push(`updated_at=now()`);
       vals.push(id);

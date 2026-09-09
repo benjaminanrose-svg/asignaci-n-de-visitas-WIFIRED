@@ -2,6 +2,10 @@
 
 > Registro corto de lo hecho. Lo nuevo arriba.
 
+- **2026-09** ⚡ **Carga rápida**: la app ya no descarga todas las fotos al abrir
+  (solo al ver cada visita). En pruebas: de ~424 MB a ~0,08 MB. Sin perder datos.
+- **2026-09** OT: sigla por zona (PAIN/MEL), correlativo por zona, campo para
+  reiniciar el número en Configuración, y OT nueva al reagendar.
 - **2026-09** 🐛 Fix: el modal del día no abría (un script mío borró sin querer la
   función que arma las columnas). Restaurada desde el commit anterior.
 - **2026-09** 🔒 Cerebro **protegido**: se quitó una contraseña que estaba escrita
