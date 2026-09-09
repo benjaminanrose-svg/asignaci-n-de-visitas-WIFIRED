@@ -2,6 +2,8 @@
 
 > Registro corto de lo hecho. Lo nuevo arriba.
 
+- **2026-09** Se eliminó la sección **Agenda / Asignación** (ya no se usaba).
+  Ahora se asigna desde el modal del día en [[Zonas]]/Calendario.
 - **2026-09** ⚡ **Carga rápida**: la app ya no descarga todas las fotos al abrir
   (solo al ver cada visita). En pruebas: de ~424 MB a ~0,08 MB. Sin perder datos.
 - **2026-09** OT: sigla por zona (PAIN/MEL), correlativo por zona, campo para

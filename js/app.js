@@ -5,8 +5,7 @@ import { initStore, subscribe, currentUser, isPersistent, refresh } from './stor
 import * as store from './store.js';
 import { visitFormModal } from './form.js';
 import { visitDetailModal, workOrderModal, openModal, closeModal, downloadHistorialZip } from './components.js';
-import { renderPanel } from './views/panel.js';
-import { renderAgenda } from './views/agenda.js';
+import { renderPanel } from './views/panel.js';
 import { renderCalendario } from './views/calendario.js';
 import { renderVisitas } from './views/visitas.js';
 import { renderClientes } from './views/clientes.js';
@@ -23,8 +22,7 @@ import { registerSW } from './push.js';
 import { debounce, initials, esc, parseTecnico, toast } from './util.js';
 
 const ROUTES = {
-  panel:      { title: 'Panel de control',    render: renderPanel },
-  agenda:     { title: 'Agenda / Asignación', render: renderAgenda },
+  panel:      { title: 'Panel de control',    render: renderPanel },
   calendario: { title: 'Calendario',          render: renderCalendario },
   visitas:    { title: 'Historial de visitas', render: renderVisitas },
   clientes:   { title: 'Clientes',            render: renderClientes },
@@ -35,7 +33,7 @@ const ROUTES = {
   ubicaciones:{ title: 'Ubicación de técnicos', render: renderUbicaciones },
   config:     { title: 'Configuración',       render: renderConfig },
 };
-const REACTIVE = ['panel', 'agenda', 'calendario', 'visitas', 'clientes', 'tickets', 'tecnicos', 'mis-visitas'];
+const REACTIVE = ['panel', 'calendario', 'visitas', 'clientes', 'tickets', 'tecnicos', 'mis-visitas'];
 
 const viewEl = document.getElementById('view');
 const titleEl = document.getElementById('page-title');

@@ -150,7 +150,7 @@ export function renderPanel(root) {
       <div class="card">
         <div class="card-head">
           <h3>Próximas visitas</h3>
-          <a class="btn btn-sm btn-ghost" href="#/agenda">Ver agenda →</a>
+          <a class="btn btn-sm btn-ghost" href="#/calendario">Ver calendario →</a>
         </div>
         <div class="card-pad" style="padding-top:6px">
           ${proximas.length ? proximas.map((v) => proxRow(v)).join('') : '<p class="muted" style="padding:16px 0">No hay visitas activas programadas.</p>'}

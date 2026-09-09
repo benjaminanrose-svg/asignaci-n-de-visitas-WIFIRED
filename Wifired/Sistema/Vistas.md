@@ -3,8 +3,6 @@
 En `js/views/`. Roles: **coordinador** (ve todo) y **técnico** (ve lo suyo).
 
 - **Panel** — resumen.
-- **Agenda / Asignación** — asignar visitas a técnicos; se pueden **arrastrar**
-  para reordenar (incluso dentro del mismo técnico).
 - **Calendario** — mensual con colores por [[Zonas]] (barra + `📍 MEL/PAI`) y
   filtro por zona. **Cada día es un botón**: tocar cualquier parte (incluida una
   píldora) abre la **lista de asignaciones del día**, nunca una visita suelta.
