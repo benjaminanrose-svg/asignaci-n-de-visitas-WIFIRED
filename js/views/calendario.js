@@ -169,3 +169,56 @@ function dayModal(iso) {
   renderDayCols(cols, cur);
   openModal(node, 'xl');
 }
+// Construye (y reconstruye) las columnas por técnico dentro del modal de día.
+function renderDayCols(cont, iso) {
+  const dia = store.visitas().filter((v) => v.fecha === iso);
+  if (!dia.length) { cont.innerHTML = '<p class="muted" style="padding:8px 0">No hay visitas este día.</p>'; return; }
+  const tecnicos = store.tecnicos();
+  // "Por asignar" solo aparece si hay al menos 1 visita sin técnico ese día.
+  const unassigned = dia.filter((v) => !v.tecnico);
+  const cols = [];
+  if (unassigned.length) cols.push({ key: '', un: true, list: unassigned, head: '<div class="ch-meta"><div class="ch-name">📥 Por asignar</div><div class="ch-role">Reasigna con el selector ▾</div></div>' });
+  tecnicos.forEach((tec) => {
+    const l = dia.filter((v) => v.tecnico === tec);
+    if (!l.length) return; // solo técnicos con visitas ese día (el selector permite mover a cualquiera)
+    const t = parseTecnico(tec);
+    const done = l.filter((v) => v.estado === 'Completada').length;
+    cols.push({ key: tec, list: l, head: `${techAvatar(tec)}<div class="ch-meta"><div class="ch-name">${esc(t.short)}</div><div class="ch-role">${done}/${l.length} completada${done === 1 ? '' : 's'}</div></div>` });
+  });
+  const optTec = (sel) => tecnicos.map((t) => `<option value="${esc(t)}" ${t === sel ? 'selected' : ''}>${esc(parseTecnico(t).short)}</option>`).join('');
+  cont.innerHTML = cols.map((c) => `
+    <div class="col${c.un ? ' is-unassigned' : ''}">
+      <div class="col-head">${c.head}<span class="count">${c.list.length}</span></div>
+      <div class="col-body">${c.list.length ? c.list.map((v) => `
+        <div class="daycol-card">
+          ${visitCard(v)}
+          <label class="daycol-reasign">Asignar a:
+            <select class="select" data-reasign="${esc(v._uid)}"><option value="">— Por asignar —</option>${optTec(v.tecnico)}</select>
+          </label>
+        </div>`).join('') : `<div class="col-empty">${c.un ? '✓ Nada por asignar' : 'Sin visitas'}</div>`}
+      </div>
+    </div>`).join('');
+
+  // Abrir detalle al tocar la tarjeta.
+  cont.querySelectorAll('[data-open]').forEach((el) => (el.onclick = () => {
+    const v = store.byUid(el.dataset.open);
+    closeModal();
+    if (v) visitDetailModal(v, { onEdit: (x) => visitFormModal(x), onOrder: (x) => workOrderModal(x, store.company) });
+  }));
+  // Reasignación rápida con el selector (no cierra el modal; reconstruye columnas).
+  cont.querySelectorAll('[data-reasign]').forEach((sel) => (sel.onchange = async (e) => {
+    e.stopPropagation();
+    const v = store.byUid(sel.dataset.reasign);
+    if (!v) return;
+    const tec = sel.value;
+    if (tec === (v.tecnico || '')) return;
+    const patch = { tecnico: tec };
+    if (!tec) patch.estado = 'Pendiente';
+    else if (['Pendiente', ''].includes(v.estado) || !v.estado) patch.estado = 'Programada';
+    try {
+      await store.updateVisita(v._uid, patch);
+      toast(tec ? `Asignada a ${parseTecnico(tec).short}` : 'Marcada por asignar');
+      renderDayCols(cont, iso);
+    } catch (err) { toast(err.message || 'No se pudo reasignar', 'info'); }
+  }));
+}
