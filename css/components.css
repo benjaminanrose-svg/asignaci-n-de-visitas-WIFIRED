@@ -777,3 +777,7 @@ details[open] > .perf-head .perf-chev { transform: rotate(180deg); }
   .bod-tbl tbody td { border: 0; padding: 4px 16px; }
   .bod-tbl .ta-r { text-align: left; }
 }
+
+/* Navegación de día dentro del modal del calendario */
+.day-nav { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.day-nav h3 { margin: 0 4px; }

@@ -12,6 +12,7 @@ Melipilla, Chile) + un **bot de WhatsApp** para clientes.
 - [[Base de datos]] — dónde vive cada dato (db.js)
 - [[Vistas]] — las pantallas de la app
 - [[Bodega]] — inventario de equipos por código de serie
+- [[Zonas]] — Melipilla / Paine (colores y filtros)
 - [[Bot WhatsApp]] — el bot (Baileys, menú, comunicados)
 - [[Seguridad]] — cómo se protege
 - [[Despliegue]] — cómo se publica (Coolify / PM2)
