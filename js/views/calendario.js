@@ -118,12 +118,8 @@ export function renderCalendario(root) {
   root.querySelectorAll('[data-zona-f]').forEach((b) => (b.onclick = () => { local.zona = b.dataset.zonaF; renderCalendario(root); }));
   root.querySelector('[data-new]').onclick = () => visitFormModal();
 
-  // abrir visita
-  root.querySelectorAll('[data-open]').forEach((el) => (el.onclick = (e) => {
-    e.stopPropagation();
-    const v = store.byUid(el.dataset.open);
-    if (v) visitDetailModal(v, { onEdit: (x) => visitFormModal(x), onOrder: (x) => workOrderModal(x, store.company) });
-  }));
+  // Nota: en el calendario NO se abre la visita suelta. Tocar cualquier parte
+  // del día (incluida una píldora) abre la lista de asignaciones de ese día.
 
   // abrir día (celda o "+N más")
   const openDay = (iso) => dayModal(iso);
