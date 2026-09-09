@@ -20,3 +20,19 @@ Orden de prioridad (`zonaDeVisita` en `js/util.js`):
   (se puede cambiar a mano si apoya en otra comuna).
 
 Relacionado: [[Vistas]] · [[Base de datos]]
+
+## Sigla de la OT según el nodo
+El número de orden se arma con la **zona del nodo elegido** (se genera en el
+servidor, en `db.js` → `nextOt` / `siglaZona`):
+
+- Nodo de **Paine** → `OT-**PAIN**-2026-NNN`
+- Nodo de **Melipilla** → `OT-**MEL**-2026-NNN`
+- Sin nodo o nodo desconocido → **MEL** por defecto.
+- Las visitas de **Factibilidad** mantienen su propia serie `OT-FAC-...`.
+
+Usa la zona configurada en Configuración → Red y Nodos; si el nodo no la tiene,
+cae al mapeo por nombre. **El correlativo es único** (MEL y PAIN comparten
+numeración) para que nunca se repita un número.
+
+> La OT se fija al **crear** la visita: si después cambias el nodo, la sigla no
+> cambia (la OT es su identificador).

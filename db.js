@@ -157,9 +157,42 @@ function displayTecnico(rol, nombre) {
   return (nombre ? `${rol} ${nombre}` : rol).trim();
 }
 
-function nextOt(existing, tipo) {
+// Sigla de la OT según la ZONA del nodo: Paine -> PAIN, Melipilla -> MEL.
+// Prioridad: zona configurada del nodo (Configuración -> Red y Nodos) ->
+// mapeo de respaldo por nombre -> texto del nombre -> MEL por defecto.
+function normNodo(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+const NODO_SIGLA_DEF = {
+  'paine': 'PAIN', 'paine 2': 'PAIN', 'bosques': 'PAIN', 'aculeo': 'PAIN', 'mirador paine': 'PAIN',
+  'bollenar': 'MEL', 'el sauce': 'MEL', 'huechun': 'MEL', 'huilco': 'MEL', 'la vega 1072': 'MEL',
+  'melipilla': 'MEL', 'ulloa': 'MEL', 'codigua': 'MEL', 'culipran': 'MEL',
+};
+function siglaZona(nodo, nodosZona) {
+  const nn = normNodo(nodo);
+  if (!nn) return 'MEL';
+  const cfg = (nodosZona && typeof nodosZona === 'object') ? nodosZona : {};
+  for (const k in cfg) {
+    if (normNodo(k) === nn) {
+      const z = String(cfg[k] || '').toLowerCase();
+      if (z.includes('paine')) return 'PAIN';
+      if (z.includes('melip')) return 'MEL';
+    }
+  }
+  if (NODO_SIGLA_DEF[nn]) return NODO_SIGLA_DEF[nn];
+  if (nn.includes('paine')) return 'PAIN';
+  if (nn.includes('melip')) return 'MEL';
+  return 'MEL';
+}
+// Lee el mapa de zonas por nodo desde la configuración guardada (string JSON).
+function nodosZonaDe(rawConfig) {
+  try { return (JSON.parse(rawConfig || '{}') || {}).nodosZona || {}; } catch (e) { return {}; }
+}
+
+function nextOt(existing, tipo, nodo, nodosZona) {
   const facti = String(tipo || '').trim().toLowerCase() === 'factibilidad';
-  const prefix = facti ? 'OT-FAC-2026-' : 'OT-MEL-2026-';
+  const sigla = facti ? 'FAC' : siglaZona(nodo, nodosZona);
+  const prefix = `OT-${sigla}-2026-`;
+  // La numeración sigue siendo una sola serie para las OT normales (MEL y PAIN
+  // comparten correlativo) para que nunca se repita un número.
   const nums = existing
     .filter((ot) => (facti ? String(ot).startsWith('OT-FAC-') : !String(ot).startsWith('OT-FAC-')))
     .map((ot) => parseInt((String(ot).match(/(\d+)\s*$/) || [])[1] || '0', 10))
@@ -307,7 +340,7 @@ function memoryStore() {
       return sig;
     },
     async addVisita(d) {
-      const ot = nextOt(visitas.map((x) => x.ot), d.tipo);
+      const ot = nextOt(visitas.map((x) => x.ot), d.tipo, d.nodo, nodosZonaDe(settings.config));
       const v = { id: ++vSeq, ot, ...pick(d) };
       if (!v.estado) v.estado = 'Pendiente';
       visitas.unshift(v); return outV(v);
@@ -776,7 +809,8 @@ function pgStore(url) {
     },
     async addVisita(d) {
       const { rows: ex } = await pool.query('SELECT ot FROM visitas');
-      const ot = nextOt(ex.map((r) => r.ot), d.tipo);
+      const { rows: cfgRows } = await pool.query('SELECT value FROM settings WHERE key=$1', ['config']);
+      const ot = nextOt(ex.map((r) => r.ot), d.tipo, d.nodo, nodosZonaDe(cfgRows[0] ? cfgRows[0].value : null));
       const { rows } = await pool.query(
         `INSERT INTO visitas (ot,estado,tipo,fecha,bloque,cliente,rut,telefono,direccion,gps,detalle,tecnico,asignado_por,prioridad,email,nodo)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
