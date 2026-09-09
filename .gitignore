@@ -10,5 +10,6 @@ node_modules/
 canvas.json
 wifired-panel-renovado.html
 
-# Vault de notas (Obsidian) — notas de trabajo, no forman parte de la app
-Wifired/
+
+# Config interna de la app Obsidian (cambia sola) — las NOTAS sí se versionan
+Wifired/.obsidian/

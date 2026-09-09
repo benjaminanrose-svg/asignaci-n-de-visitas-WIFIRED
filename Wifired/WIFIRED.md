@@ -26,3 +26,17 @@ Melipilla, Chile) + un **bot de WhatsApp** para clientes.
 ## Quién es el usuario
 Benjamín, **administrador y post-venta** (NO programador). Explicar simple,
 en español. Ahorrar tokens siempre.
+
+## Referencia técnica (detalle fino)
+Usar solo si las notas de arriba no alcanzan:
+- [[MEMORIA_ARQUITECTURA]] — tabla Módulo | Ruta | Archivo | Propósito (todas las rutas API).
+- [[Mapa del proyecto]] — qué hay dentro de cada archivo (funciones y líneas).
+- [[Proyecto - Resumen]] — resumen largo del sistema.
+- [[Posibles mejoras]] — ideas detalladas (las activas van en [[Pendientes]]).
+
+## 🔴 Protección de datos (regla dura)
+- **Nunca** escribir contraseñas, API keys ni tokens en estas notas: el vault
+  vive dentro del repo. Las claves van **solo** en variables de entorno.
+- Si una nota necesita nombrar una credencial, poner **el nombre de la variable**
+  (ej. `BOT_API_KEY`), nunca su valor.
+- Ver [[Seguridad]] · [[Reglas]]

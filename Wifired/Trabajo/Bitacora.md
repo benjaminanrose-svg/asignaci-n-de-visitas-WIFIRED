@@ -2,6 +2,11 @@
 
 > Registro corto de lo hecho. Lo nuevo arriba.
 
+- **2026-09** 🔒 Cerebro **protegido**: se quitó una contraseña que estaba escrita
+  en las notas y se agregó la regla dura de no escribir claves nunca.
+- **2026-09** Cerebro **terminado**: notas al día (Bodega, Vistas, Base de datos),
+  nota nueva [[Zonas]], todo enlazado al hub y el vault ya versiona bien.
+- **2026-09** Calendario: botones **‹ › y Hoy** para cambiar de día sin cerrar el modal.
 - **2026-09** Bodega: **escáner en drawer** (Ingresar / Despachar a técnico) con
   badge verde, beep y contador de la sesión.
 - **2026-09** Bodega: categorías estandarizadas a **4** (Antenas, Decos, Routers,
