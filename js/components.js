@@ -413,13 +413,14 @@ async function cargarEquiposCliente(node, nombreCliente) {
 }
 
 // ---------------- Detalle de visita ----------------
-export function visitDetailModal(v, { onEdit, onOrder, readOnly = false } = {}) {
+export function visitDetailModal(v, { onEdit, onOrder, readOnly = false, onBack } = {}) {
   const t = parseTecnico(v.tecnico);
   const otrasCliente = clientVisits(v).length;
   const node = document.createElement('div');
   node.innerHTML = `
     <div class="modal-head">
       <div>
+        ${onBack ? `<button class="btn btn-sm" data-back style="margin-bottom:10px">← Volver a la lista</button>` : ''}
         <div class="row" style="gap:10px">
           <span class="cell-id" style="font-size:14px">${esc(v.id)}</span>
           ${statusBadge(v.estado)}
@@ -461,6 +462,8 @@ export function visitDetailModal(v, { onEdit, onOrder, readOnly = false } = {}) 
       <button class="btn ${v.reagenda_solicitada ? '' : 'btn-primary'}" data-edit>✎ Editar</button>`}
     </div>`;
   node.querySelector('[data-close]').onclick = closeModal;
+  const backBtn = node.querySelector('[data-back]');
+  if (backBtn) backBtn.onclick = () => { closeModal(); onBack(); };
   const ccBtn = node.querySelector('[data-clientcard]');
   if (ccBtn) ccBtn.onclick = () => { closeModal(); clientCardModal(v, { onEdit, onOrder, readOnly }); };
   const editBtn = node.querySelector('[data-edit]');

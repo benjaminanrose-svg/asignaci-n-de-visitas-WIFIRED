@@ -10,6 +10,8 @@ En `js/views/`. Roles: **coordinador** (ve todo) y **técnico** (ve lo suyo).
   tarjetas de Asignación) con **reasignación rápida** desde un selector.
   La columna "Por asignar" solo aparece si hay visitas sin técnico. El modal
   tiene botones **‹ ›** y **Hoy** para cambiar de día sin cerrarlo.
+  Al abrir una visita desde ahí, el detalle trae **← Volver a la lista**
+  (no te devuelve hasta el calendario).
 - **Historial** — todas las visitas con búsqueda y filtros.
 - **Clientes** — **tabla**: Cliente (nombre+RUT) · Dirección · Servicio/Plan ·
   Equipos · Estado · Ver ficha. Filtro por **nodo**. La ficha muestra sus

@@ -203,7 +203,7 @@ function renderDayCols(cont, iso) {
   cont.querySelectorAll('[data-open]').forEach((el) => (el.onclick = () => {
     const v = store.byUid(el.dataset.open);
     closeModal();
-    if (v) visitDetailModal(v, { onEdit: (x) => visitFormModal(x), onOrder: (x) => workOrderModal(x, store.company) });
+    if (v) visitDetailModal(v, { onEdit: (x) => visitFormModal(x), onOrder: (x) => workOrderModal(x, store.company), onBack: () => dayModal(iso) });
   }));
   // Reasignación rápida con el selector (no cierra el modal; reconstruye columnas).
   cont.querySelectorAll('[data-reasign]').forEach((sel) => (sel.onchange = async (e) => {
