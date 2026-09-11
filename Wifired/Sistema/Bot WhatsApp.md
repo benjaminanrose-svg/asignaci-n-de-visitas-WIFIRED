@@ -24,3 +24,24 @@ Puede responder **solo a números de un nodo** (zona) si se configura.
 Patrón **outbox**: la web deja mensajes → el bot los envía cada ~8s.
 
 Relacionado: [[Despliegue]] · [[Seguridad]]
+
+## Confirmación de visitas (SÍ / NO)
+Se activa en **Configuración → Bot → Confirmación automática de visitas**.
+Ese interruptor es el **interruptor maestro** (`bot.confirma_visita.activo`):
+
+- **Encendido**: a la hora configurada se encola un WhatsApp para las visitas de
+  **mañana** (`correrConfirmaciones` en `server.js`). En el detalle de una visita
+  aparece el botón manual *"Pedir confirmación ahora"*.
+- **Apagado** (3 barreras):
+  1. El envío automático no corre.
+  2. El botón manual se oculta y el servidor lo rechaza.
+  3. `GET /bot/outbox` **no entrega** mensajes tipo `confirmacion`, y al guardar la
+     config apagada se **cancelan** los que quedaron en cola (quedan marcados
+     `cancelado`, no se borran).
+
+> Antes (hasta 2026-09-11) el botón manual y la cola NO respetaban el interruptor:
+> una confirmación encolada antes de apagarlo salía igual después (por ej. al
+> reiniciarse el servidor/bot tras un despliegue).
+
+Para revisar qué pasó: en los logs del servidor buscar `[CONFIRMACION]`
+(`solicitudes encoladas` = automático · `solicitud manual encolada` = botón).

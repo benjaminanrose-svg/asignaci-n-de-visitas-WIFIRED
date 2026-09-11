@@ -214,7 +214,10 @@ function confirmacionBlock(v, readOnly) {
   if (v.confirmacion === 'si') estado = '<span style="color:#10b981;font-weight:600">✅ Confirmada por el cliente</span>';
   else if (v.confirmacion === 'no') estado = '<span style="color:#ef4444;font-weight:600">❌ Cancelada por el cliente</span>';
   else if (v.confirmacion_enviada) estado = '<span style="color:#f59e0b;font-weight:600">⏳ Esperando respuesta del cliente</span>';
-  const puedePedir = !readOnly && store.isCoordinador() && v.telefono && activa && v.confirmacion !== 'si';
+  // Solo si el interruptor de confirmaciones del bot está encendido (Configuración → Bot).
+  const cfgBot = (store.configFull && store.configFull() && store.configFull().bot) || {};
+  const confirmaOn = !!(cfgBot.confirma_visita && cfgBot.confirma_visita.activo);
+  const puedePedir = confirmaOn && !readOnly && store.isCoordinador() && v.telefono && activa && v.confirmacion !== 'si';
   if (!estado && !puedePedir) return '';
   return `<div class="detail-list" style="margin-top:10px">
       <div class="detail-row"><span class="dl-k">Confirmación</span><span class="dl-v">${estado || '<span class="muted">Sin pedir aún</span>'}</span></div>

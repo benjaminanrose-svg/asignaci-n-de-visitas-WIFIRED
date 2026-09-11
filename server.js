@@ -590,7 +590,15 @@ api.get('/config', auth, wrap(async (req, res) => res.json(await (await getStore
 api.put('/config', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
   if (typeof s.saveConfig !== 'function') return res.status(400).json({ error: 'Configuración no editable en este modo' });
-  res.json(await s.saveConfig(req.body || {}));
+  const guardada = await s.saveConfig(req.body || {});
+  // Interruptor de confirmaciones APAGADO → cancelar las que quedaron en cola
+  // (se marcan 'cancelado', no se borran), para que no salgan después.
+  const cvG = (guardada && guardada.bot && guardada.bot.confirma_visita) || {};
+  if (!cvG.activo && typeof s.cancelOutboxPending === 'function') {
+    const nC = await s.cancelOutboxPending('confirmacion');
+    if (nC) console.log(`[CONFIRMACION] interruptor apagado: ${nC} solicitud(es) en cola canceladas`);
+  }
+  res.json(guardada);
 }));
 
 // --- Servicios (perfiles de cliente con cuenta PPPoE + control del router) ---
@@ -1025,6 +1033,7 @@ api.post('/visitas/:id/confirmar-ahora', auth, soloCoordinador, wrap(async (req,
   if (!v.telefono) return res.status(400).json({ error: 'La visita no tiene teléfono del cliente' });
   const cfg = await s.getConfig();
   const cv = (cfg.bot && cfg.bot.confirma_visita) || {};
+  if (!cv.activo) return res.status(400).json({ error: 'La confirmación automática de visitas está desactivada (Configuración → Bot).' });
   await s.addOutbox(v.telefono, plantillaConfirma(cv.mensaje, v), 'confirmacion');
   await s.updateVisita(req.params.id, { confirmacion_enviada: v.fecha || hoyChile(), confirmacion: '' });
   console.log(`[CONFIRMACION] solicitud manual encolada · visita ${v.id}`);
@@ -1054,7 +1063,12 @@ api.get('/bot/config', requireBotKey, wrap(async (req, res) => {
 // Bandeja de salida: mensajes automáticos que el bot debe enviar por WhatsApp
 api.get('/bot/outbox', requireBotKey, wrap(async (req, res) => {
   const s = await getStore();
-  res.json(typeof s.listOutboxPending === 'function' ? await s.listOutboxPending() : []);
+  let lista = typeof s.listOutboxPending === 'function' ? await s.listOutboxPending() : [];
+  // Barrera: con el interruptor de confirmaciones apagado, esas NO se entregan.
+  const cfgO = await s.getConfig();
+  const cvO = (cfgO.bot && cfgO.bot.confirma_visita) || {};
+  if (!cvO.activo) lista = lista.filter((m) => m.tipo !== 'confirmacion');
+  res.json(lista);
 }));
 api.post('/bot/outbox/:id/sent', requireBotKey, wrap(async (req, res) => {
   const s = await getStore();

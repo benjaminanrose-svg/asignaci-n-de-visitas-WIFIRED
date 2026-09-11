@@ -2,6 +2,8 @@
 
 > Registro corto de lo hecho. Lo nuevo arriba.
 
+- **2026-09** 🐛 Bot: pedía confirmaciones con el interruptor apagado. Ahora el
+  interruptor es maestro: bloquea envío automático, botón manual y la cola. Ver [[Bot WhatsApp]].
 - **2026-09** Se eliminó la sección **Agenda / Asignación** (ya no se usaba).
   Ahora se asigna desde el modal del día en [[Zonas]]/Calendario.
 - **2026-09** ⚡ **Carga rápida**: la app ya no descarga todas las fotos al abrir
