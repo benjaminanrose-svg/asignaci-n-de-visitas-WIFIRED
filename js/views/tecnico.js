@@ -152,9 +152,9 @@ function card(v) {
     </div>
     <div class="tec-client">${esc(v.cliente || 'Sin nombre')}</div>
     <div class="tec-type">${esc(v.tipo || '—')}</div>
-    ${v.direccion ? `<div class="tec-meta">📍 ${esc(v.direccion)}</div>` : ''}
+    ${v.direccion ? `<div class="tec-meta">📍 ${/^ *-?[0-9]+([.][0-9]+)? *, *-?[0-9]+([.][0-9]+)? *$/.test(v.direccion) ? 'Ubicación GPS' : esc(v.direccion)}</div>` : ''}
     ${(v.direccion || v.telefono) ? `<div class="tec-quick">
-      ${v.direccion ? `<a class="tec-qbtn" href="${mapsHref(v.direccion)}" target="_blank" rel="noopener">🧭 Cómo llegar</a>` : ''}
+      ${v.direccion ? `<a class="tec-qbtn" href="${mapsHref(v.direccion)}" target="_blank" rel="noopener">🧭 Mapa</a>` : ''}
       ${v.telefono ? `<a class="tec-qbtn" href="${telLink(v.telefono)}">📞 Llamar</a>` : ''}
       ${v.telefono ? `<a class="tec-qbtn wa" href="${waLink(v.telefono, `Hola ${v.cliente || ''}, le contactamos de WIFIRED por su visita técnica.`)}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ''}
     </div>` : ''}

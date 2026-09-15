@@ -3,7 +3,7 @@
 // Precachea toda la app al instalar (funciona sin internet desde
 // la primera apertura) y actualiza en segundo plano cuando hay red.
 // ============================================================
-const CACHE = 'wifired-v78';
+const CACHE = 'wifired-v79';
 
 const ASSETS = [
   '/', '/index.html', '/manifest.webmanifest',

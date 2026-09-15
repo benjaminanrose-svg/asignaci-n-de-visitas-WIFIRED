@@ -782,24 +782,32 @@ details[open] > .perf-head .perf-chev { transform: rotate(180deg); }
 .day-nav { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
 .day-nav h3 { margin: 0 4px; }
 
-/* ---------- Portal técnico: pulido para celular ---------- */
-.tec-tabs { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-top: 6px; }
-.tec-tab { min-height: 42px; }
-.tec-card { padding: 16px; border-radius: 16px; }
-.tec-card-top { margin-bottom: 8px; }
-.tec-ot { font-family: ui-monospace, Menlo, monospace; font-size: 13px; font-weight: 700; color: var(--brand-500); letter-spacing: .02em; }
-.tec-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
-.tec-client { font-size: 18px; line-height: 1.25; }
-.tec-quick { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin-top: 12px; }
-.tec-qbtn { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 14px; font-weight: 700; text-decoration: none; }
-.tec-qbtn:active { transform: scale(.97); }
-.tec-qbtn.wa { color: #128c7e; }
-.tec-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
-.tec-actions .btn { min-height: 46px; font-size: 14px; }
-.tec-main { width: 100%; min-height: 52px !important; font-size: 16px !important; font-weight: 800; }
-.tec-actions-sec { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; }
-.tec-actions-sec:empty { display: none; }
-.tec-fotos { min-height: 42px; }
+/* ---------- Portal técnico: diseño compacto y elegante (celular) ---------- */
+.tec-tabs { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 6px 0 8px; margin-bottom: 10px; }
+.tec-tab { min-height: 36px; font-size: 13px; }
+.tec-list { gap: 10px; }
+.tec-card { padding: 12px 14px; border-radius: 14px; border-left-width: 3px; }
+.tec-card-top { margin-bottom: 6px; }
+.tec-card-top .badge { font-size: 11px; padding: 2px 8px; }
+.tec-ot { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 600; color: var(--text-3); letter-spacing: .03em; }
+.tec-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-bottom: 8px; }
+.tec-chips .prio, .tec-chips .tag, .tec-chips .zona-badge { font-size: 10.5px; padding: 1px 7px; }
+.tec-fecha { font-size: 11.5px; font-weight: 600; color: var(--text-3); }
+.tec-client { font-size: 15.5px; line-height: 1.25; }
+.tec-type { font-size: 12.5px; margin-top: 1px; }
+.tec-meta { font-size: 12px; margin-top: 6px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tec-note { font-size: 12px; padding: 7px 9px; margin-top: 8px; }
+.tec-quick { display: flex; margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.tec-qbtn { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 5px; height: 36px; padding: 0 6px; background: transparent; color: var(--text-2); font-size: 12.5px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.tec-qbtn + .tec-qbtn { border-left: 1px solid var(--border); }
+.tec-qbtn:active { background: var(--surface-2); }
+.tec-qbtn.wa { color: #25a38f; }
+.tec-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.tec-actions .btn { min-width: 0; }
+.tec-main { width: 100%; height: 42px; min-height: 42px; font-size: 14px; font-weight: 700; border-radius: 10px; }
+.tec-actions .tec-actions-sec { display: flex; gap: 6px; }
+.tec-actions .tec-actions-sec:empty { display: none; }
+.tec-actions .tec-actions-sec .btn { flex: 1 1 0; min-width: 0; height: 34px; min-height: 34px; padding: 0 6px; font-size: 12.5px; font-weight: 600; white-space: nowrap; background: transparent; border-color: var(--border); border-radius: 9px; }
+.tec-actions .tec-actions-sec .btn-danger { color: #ef4444; border-color: color-mix(in srgb, #ef4444 35%, var(--border)); background: transparent; }
+.tec-fotos { min-height: 32px; font-size: 12px; }
 .sync-bar.fail { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: color-mix(in srgb, #dc2626 14%, var(--surface)); color: #ef4444; border: 1px solid color-mix(in srgb, #dc2626 40%, var(--border)); }
-.tec-actions-sec .btn { white-space: nowrap; padding: 0 8px; min-width: 0; }
-.tec-actions .tec-actions-sec { display: flex; gap: 8px; } .tec-actions .tec-actions-sec .btn { flex: 1 1 0; min-width: 0; height: 46px; min-height: 46px; padding: 0 6px; font-size: 13.5px; }
