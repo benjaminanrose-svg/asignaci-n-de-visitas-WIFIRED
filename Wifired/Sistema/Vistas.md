@@ -20,6 +20,7 @@ En `js/views/`. Roles: **coordinador** (ve todo) y **técnico** (ve lo suyo).
 - **Servicios** — comunicados (broadcasts) con imagen + opt-in de anuncios.
 - **[[Bodega]]** — inventario de equipos (solo coordinación).
 - **Técnicos** · **Ubicación**.
+- **Portal técnico** (celular) — tarjetas con N° de OT, zona, botones grandes (Cómo llegar / Llamar / WhatsApp), "Completar visita" destacado y aviso de cambios sin confirmar con botón Reintentar.
 - **Configuración** — en **4 pestañas**: Empresa y General · Red y Nodos
   (incluye la **zona** de cada nodo) · Agendamiento · Sistema e Integraciones.
 

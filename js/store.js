@@ -45,16 +45,27 @@ async function rawApi(method, url, body) {
   const tk = getToken();
   if (tk) opt.headers.Authorization = 'Bearer ' + tk;
   if (body) opt.body = JSON.stringify(body);
-  let res;
-  try { res = await fetch('/api' + url, opt); }
-  catch (e) { const err = new Error('Sin conexión'); err.network = true; throw err; }
-  if (res.status === 401) { logout(); const e = new Error('Sesión expirada'); e.auth = true; throw e; }
-  if (!res.ok) {
-    let msg = 'Error de servidor';
-    try { msg = (await res.json()).error || msg; } catch (e) {}
-    const err = new Error(msg); err.status = res.status; throw err;
-  }
-  return res.status === 204 ? null : res.json();
+  // Tiempo máximo: con VPN o señal mala la petición puede quedar colgada.
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const tmo = ctrl ? setTimeout(() => ctrl.abort(), 90000) : null;
+  if (ctrl) opt.signal = ctrl.signal;
+  try {
+    let res;
+    try { res = await fetch('/api' + url, opt); }
+    catch (e) { const err = new Error('Sin conexión'); err.network = true; throw err; }
+    if (res.status === 401) { logout(); const e = new Error('Sesión expirada'); e.auth = true; throw e; }
+    if (!res.ok) {
+      let msg = 'Error de servidor';
+      try { msg = (await res.json()).error || msg; } catch (e) {}
+      const err = new Error(msg); err.status = res.status;
+      // 5xx / 408 / 429 = fallo PASAJERO (VPN, proxy, servidor reiniciando), no un rechazo real.
+      if (res.status >= 500 || res.status === 408 || res.status === 429) err.temporal = true;
+      throw err;
+    }
+    if (res.status === 204) return null;
+    try { return await res.json(); }
+    catch (e) { const err = new Error('Respuesta inválida (¿VPN o red intermedia?)'); err.temporal = true; throw err; }
+  } finally { if (tmo) clearTimeout(tmo); }
 }
 
 // ── Archivos pesados (fotos/firmas) ──────────────────────────────────────────
@@ -121,7 +132,7 @@ export async function reordenarVisitas(uids) {
   });
   emit();
   try { await rawApi('POST', '/visitas/orden', { uids }); }
-  catch (e) { if (e.network) enqueue({ method: 'POST', url: '/visitas/orden', body: { uids } }); else toast(e.message || 'No se pudo guardar el orden', 'info'); }
+  catch (e) { if (e.network || e.temporal) enqueue({ method: 'POST', url: '/visitas/orden', body: { uids } }); else toast(e.message || 'No se pudo guardar el orden', 'info'); }
 }
 export function tecnicosList() { return state.tecnicos; }
 export function tecnicos() { return state.tecnicos.filter((t) => t.activo).map((t) => t.display); }
@@ -140,6 +151,34 @@ function enqueue(op) {
 }
 
 let flushing = false;
+// ── Cola offline con DOBLE VALIDACIÓN ────────────────────────────────────────
+// Un cambio se borra del celular SOLO cuando el servidor confirma que lo tiene.
+// Nunca se descarta nada: lo rechazado queda apartado en "fallidos" para reintentar.
+const QUEUE_FAIL = 'wifired_queue_fallidos';
+let fallidos = load(QUEUE_FAIL, []);
+function saveFallidos() { try { localStorage.setItem(QUEUE_FAIL, JSON.stringify(fallidos)); } catch (e) {} }
+export function fallidosCount() { return fallidos.length; }
+export function reintentarFallidos() {
+  if (!fallidos.length) return;
+  queue = fallidos.map((o) => ({ ...o, intentos: 0 })).concat(queue);
+  fallidos = []; saveFallidos(); saveQueue(); emit(); flushQueue();
+}
+
+// 2ª validación: pregunta al servidor qué quedó guardado y lo compara con lo enviado.
+async function verificarRecepcion(op) {
+  const m = /^\/visitas\/([^/]+)$/.exec(op.url || '');
+  if (op.method !== 'PUT' || !m) return true; // otras operaciones: basta la respuesta OK
+  const b = op.body || {};
+  const srv = await rawApi('GET', '/visitas/' + m[1] + '/verificar');
+  const cuenta = (x) => { try { const a = typeof x === 'string' ? JSON.parse(x) : x; return Array.isArray(a) ? a.length : 0; } catch (e) { return 0; } };
+  if ('historial' in b && srv.historialN < cuenta(b.historial)) return false;
+  if ('evidencias' in b && srv.evidenciasN < cuenta(b.evidencias)) return false;
+  if (b.firma_cliente && !srv.firma_cliente) return false;
+  if (b.firma_tecnico && !srv.firma_tecnico) return false;
+  if (b.estado && !b.reagenda_solicitada && srv.estado !== b.estado) return false;
+  return true;
+}
+
 export async function flushQueue() {
   if (flushing || !navigator.onLine || !queue.length) return;
   flushing = true;
@@ -148,14 +187,30 @@ export async function flushQueue() {
       const op = queue[0];
       try {
         const updated = await rawApi(op.method, op.url, op.body);
+        let ok = false;
+        try { ok = await verificarRecepcion(op); }
+        catch (e) { if (e.network || e.temporal || e.auth) break; ok = false; }
+        if (!ok) {
+          op.intentos = (op.intentos || 0) + 1;
+          if (op.intentos >= 5) {
+            fallidos.push(op); saveFallidos(); queue.shift(); saveQueue();
+            toast('⚠️ Un cambio no se pudo confirmar en el servidor. Quedó guardado en el celular para reintentar.', 'info');
+            continue;
+          }
+          saveQueue(); break; // se reintenta más tarde, sin borrar
+        }
         if (updated && updated._uid) {
+          updated._media = true;
           const i = state.visitas.findIndex((v) => v._uid === updated._uid);
           if (i >= 0) state.visitas[i] = updated;
         }
-        queue.shift(); saveQueue();
+        queue.shift(); saveQueue(); // confirmado por el servidor → recién ahora se borra
       } catch (e) {
-        if (e.network) break;        // sigue sin conexión → reintentar luego
-        queue.shift(); saveQueue();  // rechazo del servidor → descartar
+        if (e.network || e.temporal || e.auth) break; // pasajero → reintentar luego, NUNCA borrar
+        // Rechazo definitivo (4xx): no se borra, se aparta para revisión.
+        fallidos.push({ ...op, error: e.message, status: e.status }); saveFallidos();
+        queue.shift(); saveQueue();
+        toast('⚠️ El servidor rechazó un cambio (' + e.message + '). Quedó guardado aparte en el celular.', 'info');
       }
     }
   } finally { flushing = false; emit(); }
@@ -183,7 +238,7 @@ export async function updateVisita(uid, patch) {
     updated._media = true; // la respuesta del servidor trae todo
     state.visitas[idx] = updated; emit();
   } catch (e) {
-    if (e.network) { enqueue({ method: 'PUT', url: '/visitas/' + uid, body: patch }); } // conservar cambio local
+    if (e.network || e.temporal) { enqueue({ method: 'PUT', url: '/visitas/' + uid, body: patch }); if (e.temporal) toast('📶 Conexión inestable: guardado en el celular, se enviará solo', 'info'); } // conservar cambio local
     else { state.visitas[idx] = prev; emit(); toast(e.message, 'info'); }
   }
 }

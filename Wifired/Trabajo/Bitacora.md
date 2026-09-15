@@ -2,6 +2,10 @@
 
 > Registro corto de lo hecho. Lo nuevo arriba.
 
+- **2026-09** 🛡️ Cola del celular con **doble validación**: no borra un cambio hasta que el
+  servidor confirma que lo guardó; errores de VPN ya no descartan datos. Ver [[Arquitectura]].
+- **2026-09** Portal técnico pulido para celular: N° de OT y zona visibles, botones grandes
+  (Cómo llegar / Llamar / WhatsApp) y "Completar visita" destacado.
 - **2026-09** 🐛 Bot: pedía confirmaciones con el interruptor apagado. Ahora el
   interruptor es maestro: bloquea envío automático, botón manual y la cola. Ver [[Bot WhatsApp]].
 - **2026-09** Se eliminó la sección **Agenda / Asignación** (ya no se usaba).

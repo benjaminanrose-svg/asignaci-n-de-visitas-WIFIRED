@@ -781,3 +781,25 @@ details[open] > .perf-head .perf-chev { transform: rotate(180deg); }
 /* Navegación de día dentro del modal del calendario */
 .day-nav { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
 .day-nav h3 { margin: 0 4px; }
+
+/* ---------- Portal técnico: pulido para celular ---------- */
+.tec-tabs { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-top: 6px; }
+.tec-tab { min-height: 42px; }
+.tec-card { padding: 16px; border-radius: 16px; }
+.tec-card-top { margin-bottom: 8px; }
+.tec-ot { font-family: ui-monospace, Menlo, monospace; font-size: 13px; font-weight: 700; color: var(--brand-500); letter-spacing: .02em; }
+.tec-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.tec-client { font-size: 18px; line-height: 1.25; }
+.tec-quick { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin-top: 12px; }
+.tec-qbtn { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 14px; font-weight: 700; text-decoration: none; }
+.tec-qbtn:active { transform: scale(.97); }
+.tec-qbtn.wa { color: #128c7e; }
+.tec-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.tec-actions .btn { min-height: 46px; font-size: 14px; }
+.tec-main { width: 100%; min-height: 52px !important; font-size: 16px !important; font-weight: 800; }
+.tec-actions-sec { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; }
+.tec-actions-sec:empty { display: none; }
+.tec-fotos { min-height: 42px; }
+.sync-bar.fail { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: color-mix(in srgb, #dc2626 14%, var(--surface)); color: #ef4444; border: 1px solid color-mix(in srgb, #dc2626 40%, var(--border)); }
+.tec-actions-sec .btn { white-space: nowrap; padding: 0 8px; min-width: 0; }
+.tec-actions .tec-actions-sec { display: flex; gap: 8px; } .tec-actions .tec-actions-sec .btn { flex: 1 1 0; min-width: 0; height: 46px; min-height: 46px; padding: 0 6px; font-size: 13.5px; }

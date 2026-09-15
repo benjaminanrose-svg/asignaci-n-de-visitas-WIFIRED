@@ -2,7 +2,7 @@
 // WIFIRED · Portal del Técnico — sus visitas asignadas
 // ============================================================
 import * as store from '../store.js';
-import { esc, fmtDate, fmtDateShort, todayISO, bloqueShort, toast, prioRank, telLink, waLink, bindField, validaEmail, mapsHref } from '../util.js';
+import { esc, fmtDate, fmtDateShort, todayISO, bloqueShort, toast, prioRank, telLink, waLink, bindField, validaEmail, mapsHref, zonaDeVisita } from '../util.js';
 import { statusBadge, priorityTag, openModal, closeModal } from '../components.js';
 import { createPhotoPicker, openPhoto } from '../photos.js';
 import { createSignaturePad } from '../signature.js';
@@ -68,6 +68,8 @@ export function renderTecnico(root) {
   let syncBar = '';
   if (!online) syncBar = `<div class="sync-bar off">📴 Sin conexión — ${pend} cambio(s) se enviarán al reconectar</div>`;
   else if (pend > 0) syncBar = `<div class="sync-bar syncing">⟳ Sincronizando ${pend} cambio(s)…</div>`;
+  const fall = store.fallidosCount ? store.fallidosCount() : 0;
+  if (fall > 0) syncBar += `<div class="sync-bar fail"><span>⚠️ ${fall} cambio(s) guardados en tu celular no se pudieron confirmar. No se perdieron.</span><button class="btn btn-sm" data-reintentar>Reintentar</button></div>`;
 
   const showNotif = online && pushSupported() && notifPermission() !== 'granted';
   const notifBar = showNotif
@@ -102,6 +104,8 @@ export function renderTecnico(root) {
     catch (e) { toast(e.message, 'info'); notifBtn.disabled = false; notifBtn.textContent = 'Activar'; }
   };
   root.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { local.filtro = b.dataset.tab; renderTecnico(root); }));
+  const reBtn = root.querySelector('[data-reintentar]');
+  if (reBtn) reBtn.onclick = () => { store.reintentarFallidos(); renderTecnico(root); };
   root.querySelectorAll('[data-act]').forEach((b) => (b.onclick = async (e) => {
     e.stopPropagation();
     const uid = b.dataset.uid, act = b.dataset.act;
@@ -132,29 +136,38 @@ function card(v) {
   const pedida = !!v.reagenda_solicitada;
   const esFacti = String(v.tipo || '').trim().toLowerCase() === 'factibilidad';
   const nFotos = (v.evidencias || []).length;
-  const tel = (v.telefono || '').split('/')[0].replace(/\s/g, '');
+  const z = zonaDeVisita(v);
+  const uid = esc(v._uid);
   return `
   <div class="tec-card ${cerrada ? 'done' : ''}">
     <div class="tec-card-top">
-      <div class="row" style="gap:8px; flex-wrap:wrap">
-        ${priorityTag(v.prioridad)}
-        <span class="tag tag-block">${esc(bloqueShort(v.bloque))}</span>
-        <span class="tec-fecha">${esc(fmtDateShort(v.fecha))}</span>
-      </div>
+      <span class="tec-ot">${esc(v.id || '')}</span>
       ${statusBadge(v.estado)}
+    </div>
+    <div class="tec-chips">
+      ${priorityTag(v.prioridad)}
+      <span class="tag tag-block">${esc(bloqueShort(v.bloque))}</span>
+      <span class="tec-fecha">📅 ${esc(fmtDateShort(v.fecha))}</span>
+      ${z ? `<span class="zona-badge" style="color:${z.color};border-color:color-mix(in srgb, ${z.color} 45%, var(--border));background:color-mix(in srgb, ${z.color} 15%, transparent)">📍 ${z.label}</span>` : ''}
     </div>
     <div class="tec-client">${esc(v.cliente || 'Sin nombre')}</div>
     <div class="tec-type">${esc(v.tipo || '—')}</div>
-    ${v.direccion ? `<a class="tec-meta tec-map" href="${mapsHref(v.direccion)}" target="_blank" rel="noopener">📍 ${esc(v.direccion)} <span class="tec-map-go">· Cómo llegar ›</span></a>` : ''}
-    ${v.telefono ? `<div class="tec-meta">📞 <a href="${telLink(v.telefono)}">${esc(v.telefono)}</a> · <a href="${waLink(v.telefono, `Hola ${v.cliente || ''}, le contactamos de WIFIRED por su visita técnica.`)}" target="_blank" rel="noopener" style="color:#128c7e">WhatsApp</a></div>` : ''}
+    ${v.direccion ? `<div class="tec-meta">📍 ${esc(v.direccion)}</div>` : ''}
+    ${(v.direccion || v.telefono) ? `<div class="tec-quick">
+      ${v.direccion ? `<a class="tec-qbtn" href="${mapsHref(v.direccion)}" target="_blank" rel="noopener">🧭 Cómo llegar</a>` : ''}
+      ${v.telefono ? `<a class="tec-qbtn" href="${telLink(v.telefono)}">📞 Llamar</a>` : ''}
+      ${v.telefono ? `<a class="tec-qbtn wa" href="${waLink(v.telefono, `Hola ${v.cliente || ''}, le contactamos de WIFIRED por su visita técnica.`)}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ''}
+    </div>` : ''}
     ${v.detalle ? `<div class="tec-note">📝 ${esc(v.detalle)}</div>` : ''}
     ${pedida ? `<div class="tec-req">⏳ Reagenda solicitada — a la espera de nueva fecha por coordinación</div>` : ''}
-    ${nFotos ? `<button class="tec-fotos" data-act="ver-fotos" data-uid="${esc(v._uid)}">📷 ${nFotos} foto${nFotos === 1 ? '' : 's'} de evidencia</button>` : ''}
+    ${nFotos ? `<button class="tec-fotos" data-act="ver-fotos" data-uid="${uid}">📷 ${nFotos} foto${nFotos === 1 ? '' : 's'} de evidencia</button>` : ''}
     <div class="tec-actions">
-      ${cerrada || pedida ? '' : `<button class="btn btn-primary btn-sm" data-act="completar" data-uid="${esc(v._uid)}">✓ Completar</button>`}
-      ${cerrada || pedida || esFacti ? '' : `<button class="btn btn-sm" data-act="solicitar" data-uid="${esc(v._uid)}">↻ Reagenda</button>`}
-      ${cerrada || pedida || esFacti ? '' : `<button class="btn btn-sm btn-danger" data-act="cancelar" data-uid="${esc(v._uid)}">✕ Cancelar</button>`}
-      ${esFacti ? '' : `<button class="btn btn-sm" data-act="nota" data-uid="${esc(v._uid)}">📝 Nota</button>`}
+      ${cerrada || pedida ? '' : `<button class="btn btn-primary tec-main" data-act="completar" data-uid="${uid}">✓ Completar visita</button>`}
+      <div class="tec-actions-sec">
+        ${cerrada || pedida || esFacti ? '' : `<button class="btn" data-act="solicitar" data-uid="${uid}">↻ Reagenda</button>`}
+        ${esFacti ? '' : `<button class="btn" data-act="nota" data-uid="${uid}">📝 Nota</button>`}
+        ${cerrada || pedida || esFacti ? '' : `<button class="btn btn-danger" data-act="cancelar" data-uid="${uid}">✕ Cancelar</button>`}
+      </div>
     </div>
   </div>`;
 }

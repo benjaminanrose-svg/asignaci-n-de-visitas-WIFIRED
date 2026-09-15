@@ -33,3 +33,20 @@ con `GET /visitas/:id/media` (`store.conMedia`).
 > acción que escriba historial hay que llamar a `store.conMedia(v)`.
 
 Relacionado: [[Base de datos]] · [[Vistas]]
+
+## 🛡️ Cola offline con doble validación (celular)
+Si falla la conexión, los cambios del técnico quedan en una **cola en el
+celular** (`localStorage` → `wifired_queue`, en `js/store.js`).
+
+1. Se reenvían solos al volver la señal (`flushQueue`).
+2. **Doble validación:** tras enviar, el celular consulta
+   `GET /visitas/:id/verificar` (lo que el servidor TIENE guardado: estado,
+   cantidad de historial/fotos, firmas) y **solo si coincide borra el cambio**.
+3. Fallos de **VPN/red** (sin conexión, timeout 90 s, 5xx, 408, 429, respuesta
+   que no es JSON) → **se conserva y reintenta**, nunca se borra.
+4. Rechazo real del servidor (4xx) o 5 verificaciones fallidas → se **aparta**
+   en `wifired_queue_fallidos` (no se borra). El técnico ve un aviso rojo con
+   botón **Reintentar**.
+
+> Antes (hasta 2026-09-15) un error 502 o una página de la VPN hacía que el
+> celular **descartara** el cambio → probable causa de la pérdida de datos.

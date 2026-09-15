@@ -516,6 +516,27 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
 }));
 
 // Descargar la orden de trabajo en PDF (la misma que se envía al cliente/soporte)
+// Doble validación de la cola offline del celular: devuelve lo que el servidor
+// TIENE GUARDADO de una visita (contadores, sin fotos) para que el teléfono
+// confirme que sus datos llegaron antes de borrarlos de su cola.
+api.get('/visitas/:id/verificar', auth, wrap(async (req, res) => {
+  const s = await getStore();
+  const v = (await s.listVisitas()).find((x) => x._uid === String(req.params.id));
+  if (!v) return res.status(404).json({ error: 'Visita no encontrada' });
+  if (req.user.rol === 'tecnico') {
+    const display = await techDisplay(req.user);
+    if (v.tecnico !== display) return res.status(403).json({ error: 'No puedes ver esta visita' });
+  }
+  res.json({
+    _uid: v._uid,
+    estado: v.estado || '',
+    historialN: Array.isArray(v.historial) ? v.historial.length : 0,
+    evidenciasN: Array.isArray(v.evidencias) ? v.evidencias.length : 0,
+    firma_cliente: !!v.firma_cliente,
+    firma_tecnico: !!v.firma_tecnico,
+  });
+}));
+
 // Archivos pesados de UNA visita (fotos, firmas e historial completo).
 // Se pide sólo al abrir el detalle, así la carga inicial es liviana.
 api.get('/visitas/:id/media', auth, wrap(async (req, res) => {
