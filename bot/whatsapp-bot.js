@@ -483,7 +483,8 @@ async function onMessage(m) {
     return;
   }
 
-  if (botCfg.activo === false) return; // bot apagado desde la app
+  // Bot apagado desde la app (en "solo comunicados" igual seguimos hasta BAJA/ALTA).
+  if (botCfg.activo === false && !botCfg.solo_comunicados) return;
 
   const info = {
     id,
@@ -544,6 +545,10 @@ async function onMessage(m) {
     }
     api('/api/bot/contacto', { method: 'POST', body: JSON.stringify({ telefono: info.telefono }) }).catch(() => {});
   }
+
+  // Modo "solo comunicados": únicamente BAJA/ALTA y la pregunta de anuncios (arriba).
+  // No se responde menú, tickets, planes ni nada más.
+  if (botCfg.solo_comunicados) return;
 
   // Modo prueba: solo atendemos a quien escriba la palabra clave; el resto se ignora.
   if (modoPruebaActivo()) {

@@ -6,7 +6,7 @@
 // ============================================================
 import * as store from '../store.js';
 import { esc, toast, bindField, validaEmail, zonaDeNodo, ZONAS } from '../util.js';
-import { openModal, closeModal } from '../components.js';
+import { openModal, closeModal, claveTemporalModal } from '../components.js';
 import { broadcastModal, contactosModal } from './servicios.js';
 
 
@@ -163,6 +163,17 @@ export function renderConfig(root) {
         </label>
       </div>
 
+${bot.solo_comunicados !== false ? `
+      <div class="card cfg-card" data-group="sistema">
+        <h3 class="cfg-title">📣 Comunicados masivos por WhatsApp</h3>
+        <p class="muted-sm">El bot está en modo <b>solo comunicados</b>: envía los mensajes masivos (a todos o por nodo) y atiende las respuestas <b>BAJA / ALTA</b>. No responde menú, tickets, planes ni confirmaciones.</p>
+        <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
+          <button class="btn btn-primary" data-solo-broadcast>✉️ Redactar comunicado</button>
+          <button class="btn" data-solo-contactos>👥 Contactos y bajas</button>
+          <div class="grow"></div>
+          <button class="btn btn-sm" data-reactivar-bot>Reactivar todas las funciones del bot</button>
+        </div>
+      </div>` : `
       <div class="card cfg-card" data-group="sistema">
         <h3 class="cfg-title">🤖 Bot de WhatsApp</h3>
         <p class="muted-sm">El asistente que atiende a tus clientes por WhatsApp: menú, tickets, planes, horario y (pronto) avisos automáticos. Tiene su propia sección para no mezclarla con el resto.</p>
@@ -170,19 +181,27 @@ export function renderConfig(root) {
           <span class="tag" style="background:color-mix(in srgb, ${bot.activo !== false ? '#10b981' : '#94a3b8'} 16%, transparent); color:${bot.activo !== false ? '#10b981' : '#94a3b8'}; border-color:color-mix(in srgb, ${bot.activo !== false ? '#10b981' : '#94a3b8'} 40%, var(--border))">${bot.activo !== false ? '🟢 Activo' : '⚪ Inactivo'}</span>
           ${bot.modo_prueba !== false ? '<span class="tag">🧪 En modo prueba</span>' : ''}
           <div class="grow"></div>
+          <button class="btn btn-sm" data-solo-on>📣 Volver a solo comunicados</button>
           <button class="btn btn-primary" data-openbot>⚙️ Abrir configuración del Bot →</button>
         </div>
-      </div>
+      </div>`}
 
       <div class="card cfg-card" data-group="empresa">
         <h3 class="cfg-title">🔐 Seguridad · Mi contraseña</h3>
-        <p class="muted-sm">Cambia la contraseña con la que entras a la app. Hazlo sobre todo si todavía usas la de fábrica. Mínimo 6 caracteres.</p>
+        <p class="muted-sm">Cambia la contraseña con la que entras a la app. Mínimo 8 caracteres, con letras y números. Al cambiarla se cierran tus sesiones en otros dispositivos.</p>
         <div class="form-grid" style="margin-top:8px">
           <div class="field"><label>Contraseña actual</label><input class="input" type="password" data-pw="actual" autocomplete="current-password"></div>
           <div class="field"><label>Nueva contraseña</label><input class="input" type="password" data-pw="nueva" autocomplete="new-password"></div>
           <div class="field"><label>Repetir nueva</label><input class="input" type="password" data-pw="rep" autocomplete="new-password"></div>
         </div>
         <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn btn-primary" data-savepw>Cambiar contraseña</button></div>
+      </div>
+
+      <div class="card cfg-card" data-group="empresa">
+        <h3 class="cfg-title">👥 Cuentas de coordinación</h3>
+        <p class="muted-sm">Cada coordinador entra con su propio usuario: así el historial muestra quién hizo cada cosa. Las claves se guardan cifradas y nadie puede verlas; si alguien la olvida, se restablece.</p>
+        <div data-coords><p class="muted-sm">Cargando…</p></div>
+        <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn btn-primary btn-sm" data-coord-new>＋ Nuevo coordinador</button></div>
       </div>
 
       <div class="card cfg-card" data-group="red">
@@ -300,14 +319,32 @@ export function renderConfig(root) {
   root.querySelector('[data-wipe]').onclick = () => wipeFlow(root);
 
   // Abrir la sección dedicada del Bot de WhatsApp
-  root.querySelector('[data-openbot]').onclick = () => renderBotConfig(root);
+  const obBtn = root.querySelector('[data-openbot]');
+  if (obBtn) obBtn.onclick = () => renderBotConfig(root);
+  // Modo "solo comunicados" del bot
+  const sbBtn = root.querySelector('[data-solo-broadcast]');
+  if (sbBtn) sbBtn.onclick = () => broadcastModal();
+  const scBtn = root.querySelector('[data-solo-contactos]');
+  if (scBtn) scBtn.onclick = () => contactosModal();
+  const setSolo = async (on) => {
+    try { await store.saveConfig({ bot: { solo_comunicados: on } }); toast(on ? 'Bot en modo solo comunicados ✓' : 'Bot reactivado ✓'); renderConfig(root); }
+    catch (e) { toast(e.message || 'No se pudo guardar', 'info'); }
+  };
+  const rbBtn = root.querySelector('[data-reactivar-bot]');
+  if (rbBtn) rbBtn.onclick = () => { if (confirm('¿Reactivar el bot completo? Volverá a responder el menú, tickets y confirmaciones según su configuración.')) setSolo(false); };
+  const soBtn = root.querySelector('[data-solo-on]');
+  if (soBtn) soBtn.onclick = () => setSolo(true);
+  // Cuentas de coordinación
+  pintarCoords(root);
+  const ncBtn = root.querySelector('[data-coord-new]');
+  if (ncBtn) ncBtn.onclick = () => nuevoCoordModal(root);
 
   // Cambiar mi contraseña
   root.querySelector('[data-savepw]').onclick = async (e) => {
     const g = (k) => (root.querySelector(`[data-pw="${k}"]`).value || '');
     const actual = g('actual'), nueva = g('nueva'), rep = g('rep');
     if (!actual) { toast('Escribe tu contraseña actual', 'info'); return; }
-    if (nueva.length < 6) { toast('La nueva contraseña debe tener al menos 6 caracteres', 'info'); return; }
+    if (nueva.length < 8 || !/[a-zA-Z]/.test(nueva) || !/[0-9]/.test(nueva)) { toast('La nueva contraseña debe tener al menos 8 caracteres, con letras y números', 'info'); return; }
     if (nueva !== rep) { toast('Las contraseñas nuevas no coinciden', 'info'); return; }
     const btn = e.currentTarget; btn.disabled = true;
     try {
@@ -544,3 +581,55 @@ function renderBotConfig(root) {
   root.querySelectorAll('[data-savebot]').forEach((b) => (b.onclick = doSaveBot));
 }
 
+// ── Cuentas de coordinación ──────────────────────────────────────────────────
+async function pintarCoords(root) {
+  const el = root.querySelector('[data-coords]');
+  if (!el) return;
+  let list = [];
+  try { list = await store.listUsuarios(); } catch (e) { el.innerHTML = `<p class="muted-sm">No se pudo cargar: ${esc(e.message || '')}</p>`; return; }
+  el.innerHTML = list.length ? `<div class="coord-list">${list.map((u) => `
+    <div class="coord-row ${u.activo ? '' : 'off'}">
+      <div class="coord-main"><b>${esc(u.nombre)}</b>${u.yo ? ' <span class="tag">tú</span>' : ''}${u.activo ? '' : ' <span class="tag">Desactivado</span>'}${u.debe_cambiar ? ' <span class="tag">Debe crear su clave</span>' : ''}<div class="muted-sm">👤 ${esc(u.username)}</div></div>
+      <div class="coord-acts">${u.yo ? '' : `
+        <button class="btn btn-sm" data-cr="${u.id}">🔑 Restablecer clave</button>
+        <button class="btn btn-sm" data-cs="${u.id}">⏏ Cerrar sesiones</button>
+        <button class="btn btn-sm" data-ca="${u.id}" data-on="${u.activo ? 0 : 1}">${u.activo ? '⏸ Desactivar' : '▶ Activar'}</button>
+        <button class="btn btn-sm btn-danger" data-cd="${u.id}" title="Eliminar cuenta">🗑</button>`}</div>
+    </div>`).join('')}</div>` : '<p class="muted-sm">Sin cuentas.</p>';
+  const run = async (fn, okMsg) => {
+    try { const r = await fn(); if (okMsg) toast(okMsg); return r; }
+    catch (e) { toast(e.message || 'No se pudo', 'info'); return null; }
+    finally { pintarCoords(root); }
+  };
+  const find = (id) => list.find((u) => String(u.id) === String(id)) || {};
+  el.querySelectorAll('[data-cr]').forEach((b) => (b.onclick = async () => {
+    const u = find(b.dataset.cr);
+    if (!confirm(`¿Restablecer la clave de ${u.nombre}? Se cerrarán sus sesiones y deberá crear una nueva al entrar.`)) return;
+    const r = await run(() => store.restablecerClaveUsuario(u.id));
+    if (r && r.clave_temporal) claveTemporalModal(u.nombre, r.username, r.clave_temporal);
+  }));
+  el.querySelectorAll('[data-cs]').forEach((b) => (b.onclick = () => { const u = find(b.dataset.cs); if (confirm(`¿Cerrar todas las sesiones abiertas de ${u.nombre}?`)) run(() => store.cerrarSesionesUsuario(u.id), 'Sesiones cerradas ✓'); }));
+  el.querySelectorAll('[data-ca]').forEach((b) => (b.onclick = () => { const u = find(b.dataset.ca); const on = b.dataset.on === '1'; if (on || confirm(`¿Desactivar a ${u.nombre}? No podrá entrar hasta que lo actives.`)) run(() => store.updateUsuario(u.id, { activo: on }), on ? 'Activado ✓' : 'Desactivado ✓'); }));
+  el.querySelectorAll('[data-cd]').forEach((b) => (b.onclick = () => { const u = find(b.dataset.cd); if (confirm(`¿Eliminar la cuenta de ${u.nombre}? No se puede deshacer.`)) run(() => store.deleteUsuario(u.id), 'Cuenta eliminada'); }));
+}
+function nuevoCoordModal(root) {
+  const node = document.createElement('div');
+  node.innerHTML = `
+    <div class="modal-head"><h3>👥 Nuevo coordinador</h3><button class="icon-btn" data-x>✕</button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="field full"><label>Nombre *</label><input class="input" data-n placeholder="Ej: María González" autocomplete="off"></div>
+      <div class="field full"><label>Usuario (opcional)</label><input class="input" data-u placeholder="Se genera solo: maria.gonzalez" autocomplete="off"></div>
+    </div><p class="muted-sm" style="margin-top:8px">Se creará una <b>clave temporal</b> que verás una sola vez. Al entrar, deberá crear su propia clave.</p></div>
+    <div class="modal-foot"><button class="btn" data-x2>Cancelar</button><button class="btn btn-primary" data-ok>Crear cuenta</button></div>`;
+  node.querySelector('[data-x]').onclick = closeModal;
+  node.querySelector('[data-x2]').onclick = closeModal;
+  node.querySelector('[data-ok]').onclick = async (e) => {
+    const nombre = node.querySelector('[data-n]').value.trim();
+    const username = node.querySelector('[data-u]').value.trim().toLowerCase();
+    if (!nombre) { toast('Escribe el nombre', 'info'); return; }
+    const btn = e.currentTarget; btn.disabled = true;
+    try { const r = await store.addUsuario({ nombre, username }); closeModal(); claveTemporalModal(r.nombre, r.username, r.clave_temporal); pintarCoords(root); }
+    catch (err) { toast(err.message || 'No se pudo crear', 'info'); btn.disabled = false; }
+  };
+  openModal(node, 'md', { dismissable: false });
+}

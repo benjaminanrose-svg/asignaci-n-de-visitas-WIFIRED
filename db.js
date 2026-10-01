@@ -75,6 +75,8 @@ function mergeBot(b) {
       };
     })(),
     condiciones: typeof s.condiciones === 'string' ? s.condiciones : '',
+    // Modo "solo comunicados": el bot solo envía masivos y atiende BAJA/ALTA. Encendido por defecto.
+    solo_comunicados: s.solo_comunicados !== false,
     // Nodos que atiende el bot. Vacío = atiende a todos. Con nodos, el bot SOLO
     // responde a los números de los clientes de esos nodos.
     nodos: Array.isArray(s.nodos) ? s.nodos.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim()) : [],
@@ -257,14 +259,14 @@ const TECH_PASS = process.env.TECH_PASS || 'wifired';
 
 /** Genera usuarios semilla: 1 coordinador + 1 por técnico */
 function seedUsers(tecnicos) {
-  const users = [{ id: 1, username: ADMIN_USER, pass: hashPassword(ADMIN_PASS), pass_plain: ADMIN_PASS, rol: 'coordinador', nombre: 'Coordinación', tecnico_id: null }];
+  const users = [{ id: 1, username: ADMIN_USER, pass: hashPassword(ADMIN_PASS), pass_plain: '', rol: 'coordinador', nombre: 'Coordinación', tecnico_id: null, debe_cambiar: true, token_ver: 0, activo: true }];
   const taken = new Set([ADMIN_USER]);
   let seq = 1;
   tecnicos.forEach((t) => {
     let u = slugUser(t.nombre || t.rol); let base = u, i = 2;
     while (taken.has(u)) u = `${base}${i++}`;
     taken.add(u);
-    users.push({ id: ++seq, username: u, pass: hashPassword(TECH_PASS), pass_plain: TECH_PASS, rol: 'tecnico', nombre: displayTecnico(t.rol, t.nombre), tecnico_id: t.id });
+    users.push({ id: ++seq, username: u, pass: hashPassword(TECH_PASS), pass_plain: '', rol: 'tecnico', nombre: displayTecnico(t.rol, t.nombre), tecnico_id: t.id, debe_cambiar: true, token_ver: 0, activo: true });
   });
   return users;
 }
@@ -297,7 +299,8 @@ function memoryStore() {
   let uSeq = users.length;
   const settings = {};
   let pushSubs = []; // { userId, endpoint, sub }
-  const credsOf = (tid) => { const u = users.find((x) => x.tecnico_id == tid); return { username: u ? u.username : '', password: u ? (u.pass_plain || '') : '' }; };
+  // Las contraseñas NUNCA se devuelven (solo se guardan cifradas).
+  const credsOf = (tid) => { const u = users.find((x) => x.tecnico_id == tid); return { username: u ? u.username : '', password: '' }; };
   const outT = (t) => ({ ...t, display: displayTecnico(t.rol, t.nombre), ...credsOf(t.id) });
   const outV = (v) => { const o = { _uid: String(v.id), id: v.ot, ...pick(v) }; o.prioridad = o.prioridad || 'Media'; o.evidencias = parseEv(o.evidencias); o.historial = parseEv(o.historial); return o; };
   const pickTk = (d) => { const o = {}; TICKET_FIELDS.forEach((f) => (o[f] = d[f] || '')); o.historial = evStr(d.historial); o.adjuntos = evStr(d.adjuntos); return o; };
@@ -314,10 +317,27 @@ function memoryStore() {
     async saveConfig(patch) { return saveConfigWith(async (k) => settings[k] ?? null, async (k, v) => { settings[k] = v; }, patch); },
     async getUserByUsername(u) { return users.find((x) => x.username === u) || null; },
     async getUserById(id) { return users.find((x) => x.id == id) || null; },
-    async setPassword(userId, newPlain) {
+    // Cambia la clave (solo cifrada), marca si debe cambiarla y cierra sus sesiones abiertas.
+    async setPassword(userId, newPlain, debeCambiar = false) {
       const u = users.find((x) => x.id == userId); if (!u) return false;
-      u.pass_plain = String(newPlain); u.pass = hashPassword(u.pass_plain); return true;
+      u.pass = hashPassword(String(newPlain)); u.pass_plain = '';
+      u.debe_cambiar = !!debeCambiar; u.token_ver = (u.token_ver || 0) + 1; return true;
     },
+    async listUsuarios() { return users.map(({ pass, pass_plain, ...u }) => ({ ...u, activo: u.activo !== false })); },
+    async addUsuario(d) {
+      const username = uniqUser((d.username || '').trim().toLowerCase() || slugUser(d.nombre || 'coordinador'));
+      const u = { id: ++uSeq, username, pass: hashPassword(String(d.password)), pass_plain: '', rol: d.rol === 'tecnico' ? 'tecnico' : 'coordinador', nombre: (d.nombre || '').trim() || username, tecnico_id: null, debe_cambiar: true, token_ver: 0, activo: true };
+      users.push(u); const { pass, pass_plain, ...out } = u; return out;
+    },
+    async updateUsuario(id, patch) {
+      const u = users.find((x) => x.id == id); if (!u) return null;
+      if ('nombre' in patch && String(patch.nombre || '').trim()) u.nombre = String(patch.nombre).trim();
+      if ('activo' in patch) u.activo = !!patch.activo;
+      if ('debe_cambiar' in patch) u.debe_cambiar = !!patch.debe_cambiar;
+      if (patch.cerrar_sesiones) u.token_ver = (u.token_ver || 0) + 1;
+      const { pass, pass_plain, ...out } = u; return out;
+    },
+    async deleteUsuario(id) { const k = users.findIndex((x) => x.id == id); if (k >= 0) users.splice(k, 1); },
     async getTecnicoById(id) { const t = tecnicos.find((x) => x.id == id); return t ? outT(t) : null; },
     async listTecnicos() { return tecnicos.map(outT); },
     async addTecnico(d) {
@@ -325,7 +345,7 @@ function memoryStore() {
       tecnicos.push(t);
       const username = uniqUser((d.username || '').trim().toLowerCase() || slugUser(t.nombre || t.rol));
       const pass_plain = (d.password || '').trim() || TECH_PASS;
-      users.push({ id: ++uSeq, username, pass: hashPassword(pass_plain), pass_plain, rol: 'tecnico', nombre: displayTecnico(t.rol, t.nombre), tecnico_id: t.id });
+      users.push({ id: ++uSeq, username, pass: hashPassword(pass_plain), pass_plain: '', rol: 'tecnico', nombre: displayTecnico(t.rol, t.nombre), tecnico_id: t.id, debe_cambiar: true, token_ver: 0, activo: true });
       return outT(t);
     },
     async updateTecnico(id, patch) {
@@ -335,11 +355,14 @@ function memoryStore() {
       if (u) {
         u.nombre = displayTecnico(t.rol, t.nombre);
         if (patch.username != null && patch.username.trim()) u.username = uniqUser(patch.username.trim().toLowerCase(), u.id);
-        if (patch.password != null && patch.password.trim()) { u.pass_plain = patch.password.trim(); u.pass = hashPassword(u.pass_plain); }
+        if (patch.password != null && patch.password.trim()) { u.pass = hashPassword(patch.password.trim()); u.pass_plain = ''; u.debe_cambiar = true; u.token_ver = (u.token_ver || 0) + 1; }
       }
       return outT(t);
     },
-    async deleteTecnico(id) { tecnicos = tecnicos.filter((x) => x.id != id); },
+    async deleteTecnico(id) {
+      tecnicos = tecnicos.filter((x) => x.id != id);
+      for (let k = users.length - 1; k >= 0; k--) if (users[k].tecnico_id == id) users.splice(k, 1); // su acceso también se elimina
+    },
     async setTecnicoUbicacion(id, lat, lng) {
       const t = tecnicos.find((x) => x.id == id); if (!t) return null;
       t.ubic_lat = lat; t.ubic_lng = lng; t.ubic_ts = Date.now();
@@ -490,7 +513,7 @@ function pgStore(url) {
     confirmacion: r.confirmacion || '', confirmacion_enviada: r.confirmacion_enviada || '',
     orden: r.orden != null ? Number(r.orden) : 0,
   });
-  const outU = (r) => r ? { id: r.id, username: r.username, pass: r.pass, rol: r.rol, nombre: r.nombre, tecnico_id: r.tecnico_id } : null;
+  const outU = (r) => r ? { id: r.id, username: r.username, pass: r.pass, rol: r.rol, nombre: r.nombre, tecnico_id: r.tecnico_id, debe_cambiar: !!r.debe_cambiar, token_ver: r.token_ver || 0, activo: r.activo !== false } : null;
   const outTk = (r) => ({
     _uid: String(r.id), num: 'T-' + String(r.id).padStart(4, '0'),
     created_at: r.created_at, updated_at: r.updated_at,
@@ -512,8 +535,9 @@ function pgStore(url) {
     historial: parseEv(r.historial), created_at: r.created_at, updated_at: r.updated_at,
   });
   async function credsOf(tid) {
-    const { rows } = await pool.query('SELECT username, pass_plain FROM usuarios WHERE tecnico_id=$1', [tid]);
-    return rows[0] ? { username: rows[0].username, password: rows[0].pass_plain || '' } : { username: '', password: '' };
+    // Las contraseñas NUNCA se devuelven (solo se guardan cifradas).
+    const { rows } = await pool.query('SELECT username FROM usuarios WHERE tecnico_id=$1', [tid]);
+    return { username: rows[0] ? rows[0].username : '', password: '' };
   }
   async function enrich(t) { return { ...outT(t), ...(await credsOf(t.id)) }; }
 
@@ -577,6 +601,11 @@ function pgStore(url) {
           tecnico_id INTEGER
         );`);
       await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pass_plain TEXT DEFAULT '';`);
+      await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar BOOLEAN DEFAULT false;`);
+      await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS token_ver INTEGER DEFAULT 0;`);
+      await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT true;`);
+      // Seguridad: ya NO se guardan contraseñas legibles. Se borran las que hubiera (las cifradas siguen funcionando).
+      await pool.query(`UPDATE usuarios SET pass_plain='' WHERE pass_plain IS NOT NULL AND pass_plain<>'';`);
       await pool.query(`ALTER TABLE tecnicos ADD COLUMN IF NOT EXISTS ubic_lat DOUBLE PRECISION;`);
       await pool.query(`ALTER TABLE tecnicos ADD COLUMN IF NOT EXISTS ubic_lng DOUBLE PRECISION;`);
       await pool.query(`ALTER TABLE tecnicos ADD COLUMN IF NOT EXISTS ubic_ts BIGINT;`);
@@ -688,7 +717,7 @@ function pgStore(url) {
       const uc = await pool.query('SELECT COUNT(*)::int AS n FROM usuarios');
       if (uc.rows[0].n === 0) {
         await pool.query('INSERT INTO usuarios (username, pass, pass_plain, rol, nombre) VALUES ($1,$2,$3,$4,$5)',
-          [ADMIN_USER, hashPassword(ADMIN_PASS), ADMIN_PASS, 'coordinador', 'Coordinación']);
+          [ADMIN_USER, hashPassword(ADMIN_PASS), '', 'coordinador', 'Coordinación']);
         const { rows: techs } = await pool.query('SELECT * FROM tecnicos ORDER BY id ASC');
         const taken = new Set([ADMIN_USER]);
         for (const t of techs) {
@@ -696,7 +725,7 @@ function pgStore(url) {
           while (taken.has(u)) u = `${base}${i++}`;
           taken.add(u);
           await pool.query('INSERT INTO usuarios (username, pass, pass_plain, rol, nombre, tecnico_id) VALUES ($1,$2,$3,$4,$5,$6)',
-            [u, hashPassword(TECH_PASS), TECH_PASS, 'tecnico', displayTecnico(t.rol, t.nombre), t.id]);
+            [u, hashPassword(TECH_PASS), '', 'tecnico', displayTecnico(t.rol, t.nombre), t.id]);
         }
       }
     },
@@ -710,10 +739,36 @@ function pgStore(url) {
     },
     async getUserByUsername(u) { const { rows } = await pool.query('SELECT * FROM usuarios WHERE username=$1', [u]); return outU(rows[0]); },
     async getUserById(id) { const { rows } = await pool.query('SELECT * FROM usuarios WHERE id=$1', [id]); return outU(rows[0]); },
-    async setPassword(userId, newPlain) {
-      const plain = String(newPlain);
-      const r = await pool.query('UPDATE usuarios SET pass=$1, pass_plain=$2 WHERE id=$3', [hashPassword(plain), plain, userId]);
+    // Cambia la clave (solo cifrada), marca si debe cambiarla y cierra sus sesiones abiertas.
+    async setPassword(userId, newPlain, debeCambiar = false) {
+      const r = await pool.query(`UPDATE usuarios SET pass=$1, pass_plain='', debe_cambiar=$2, token_ver=COALESCE(token_ver,0)+1 WHERE id=$3`, [hashPassword(String(newPlain)), !!debeCambiar, userId]);
       return r.rowCount > 0;
+    },
+    async listUsuarios() {
+      const { rows } = await pool.query('SELECT id, username, rol, nombre, tecnico_id, debe_cambiar, token_ver, activo FROM usuarios ORDER BY rol, id');
+      return rows.map((r) => ({ ...r, activo: r.activo !== false, debe_cambiar: !!r.debe_cambiar }));
+    },
+    async addUsuario(d) {
+      let u = (d.username || '').trim().toLowerCase() || slugUser(d.nombre || 'coordinador'), base = u, i = 2;
+      while ((await pool.query('SELECT 1 FROM usuarios WHERE username=$1', [u])).rowCount) u = `${base}${i++}`;
+      const { rows } = await pool.query(`INSERT INTO usuarios (username, pass, pass_plain, rol, nombre, debe_cambiar, token_ver, activo) VALUES ($1,$2,'',$3,$4,true,0,true) RETURNING id, username, rol, nombre, debe_cambiar, activo`,
+        [u, hashPassword(String(d.password)), d.rol === 'tecnico' ? 'tecnico' : 'coordinador', (d.nombre || '').trim() || u]);
+      return rows[0];
+    },
+    async updateUsuario(id, patch) {
+      const cols = [], vals = []; let i = 1;
+      if ('nombre' in patch && String(patch.nombre || '').trim()) { cols.push(`nombre=$${i++}`); vals.push(String(patch.nombre).trim()); }
+      if ('activo' in patch) { cols.push(`activo=$${i++}`); vals.push(!!patch.activo); }
+      if ('debe_cambiar' in patch) { cols.push(`debe_cambiar=$${i++}`); vals.push(!!patch.debe_cambiar); }
+      if (patch.cerrar_sesiones) cols.push('token_ver=COALESCE(token_ver,0)+1');
+      if (!cols.length) return null;
+      vals.push(id);
+      const { rows } = await pool.query(`UPDATE usuarios SET ${cols.join(', ')} WHERE id=$${i} RETURNING id, username, rol, nombre, debe_cambiar, activo`, vals);
+      return rows[0] || null;
+    },
+    async deleteUsuario(id) {
+      await pool.query('DELETE FROM push_subs WHERE user_id=$1', [id]);
+      await pool.query('DELETE FROM usuarios WHERE id=$1', [id]);
     },
     async getTecnicoById(id) { const { rows } = await pool.query('SELECT * FROM tecnicos WHERE id=$1', [id]); return rows[0] ? enrich(rows[0]) : null; },
     async listTecnicos() {
@@ -729,8 +784,8 @@ function pgStore(url) {
       let base = u, i = 2;
       while ((await pool.query('SELECT 1 FROM usuarios WHERE username=$1', [u])).rowCount) u = `${base}${i++}`;
       const plain = (d.password || '').trim() || TECH_PASS;
-      await pool.query('INSERT INTO usuarios (username, pass, pass_plain, rol, nombre, tecnico_id) VALUES ($1,$2,$3,$4,$5,$6)',
-        [u, hashPassword(plain), plain, 'tecnico', displayTecnico(t.rol, t.nombre), t.id]);
+      await pool.query(`INSERT INTO usuarios (username, pass, pass_plain, rol, nombre, tecnico_id, debe_cambiar) VALUES ($1,$2,'',$3,$4,$5,true)`,
+        [u, hashPassword(plain), 'tecnico', displayTecnico(t.rol, t.nombre), t.id]);
       return enrich(t);
     },
     async updateTecnico(id, patch) {
@@ -751,11 +806,16 @@ function pgStore(url) {
       }
       if (patch.password != null && String(patch.password).trim()) {
         const plain = String(patch.password).trim();
-        await pool.query('UPDATE usuarios SET pass=$1, pass_plain=$2 WHERE tecnico_id=$3', [hashPassword(plain), plain, id]);
+        await pool.query(`UPDATE usuarios SET pass=$1, pass_plain='', debe_cambiar=true, token_ver=COALESCE(token_ver,0)+1 WHERE tecnico_id=$2`, [hashPassword(plain), id]);
       }
       return enrich(t);
     },
-    async deleteTecnico(id) { await pool.query('DELETE FROM tecnicos WHERE id=$1', [id]); },
+    async deleteTecnico(id) {
+      // Su acceso también se elimina (antes quedaba un usuario huérfano que podía entrar).
+      await pool.query('DELETE FROM push_subs WHERE user_id IN (SELECT id FROM usuarios WHERE tecnico_id=$1)', [id]);
+      await pool.query('DELETE FROM usuarios WHERE tecnico_id=$1', [id]);
+      await pool.query('DELETE FROM tecnicos WHERE id=$1', [id]);
+    },
     async setTecnicoUbicacion(id, lat, lng) {
       const { rows } = await pool.query('UPDATE tecnicos SET ubic_lat=$2, ubic_lng=$3, ubic_ts=$4 WHERE id=$1 RETURNING *', [id, lat, lng, Date.now()]);
       return rows[0] ? outT(rows[0]) : null;

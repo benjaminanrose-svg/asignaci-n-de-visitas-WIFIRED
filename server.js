@@ -127,6 +127,7 @@ async function correrConfirmaciones() {
     const cfg = await s.getConfig();
     const cv = (cfg.bot && cfg.bot.confirma_visita) || {};
     if (!cv.activo) return;                          // desactivado desde la página
+    if (cfg.bot && cfg.bot.solo_comunicados) return; // bot en modo "solo comunicados"
     const hoy = hoyChile();
     if (ultimaConfirmacion === hoy) return;          // ya se corrió hoy
     const hora = Number.isFinite(cv.hora) ? cv.hora : 18;
@@ -244,7 +245,11 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '100mb' })); // amplio para fotos y videos de evidencia (sin límite práctico de peso)
+// Cuerpo de la petición: amplio (fotos/videos) SOLO para quien trae sesión o clave
+// del bot; sin credenciales (ej. login) se acepta muy poco → evita abusos.
+const jsonGrande = express.json({ limit: '100mb' });
+const jsonChico = express.json({ limit: '64kb' });
+app.use((req, res, next) => ((req.headers.authorization || req.headers['x-bot-key']) ? jsonGrande : jsonChico)(req, res, next));
 // JSON malformado o cuerpo demasiado grande: respuesta clara en vez de error 500.
 app.use((err, req, res, next) => {
   if (err && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Datos enviados inválidos' });
@@ -280,7 +285,16 @@ async function auth(req, res, next) {
     if (!p) return res.status(401).json({ error: 'Sesión no válida' });
     const s = await getStore();
     const user = await s.getUserById(p.uid);
-    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+    if (!user || user.activo === false) return res.status(401).json({ error: 'Usuario no encontrado o desactivado' });
+    // Sesión revocada: cambió su clave, se la restablecieron o le cerraron las sesiones.
+    if ((p.tv || 0) !== (user.token_ver || 0)) return res.status(401).json({ error: 'Tu sesión se cerró. Ingresa de nuevo.' });
+    // Técnico eliminado o desactivado → sin acceso.
+    if (user.rol === 'tecnico') {
+      const t = user.tecnico_id ? await s.getTecnicoById(user.tecnico_id) : null;
+      if (!t || t.activo === false) return res.status(401).json({ error: 'Usuario desactivado' });
+    }
+    // Clave de fábrica o temporal: solo puede cambiarla, nada más.
+    if (user.debe_cambiar && !['/me', '/mi-clave'].includes(req.path)) return res.status(403).json({ error: 'Debes cambiar tu contraseña antes de continuar.', debe_cambiar: true });
     req.user = user;
     next();
   } catch (e) { console.error(e); res.status(500).json({ error: 'Error interno del servidor' }); }
@@ -324,27 +338,50 @@ api.post('/login', wrap(async (req, res) => {
     loginFail(ip);
     return res.status(400).json({ error: 'Ingresa usuario y contraseña' });
   }
+  const uname = username.trim().toLowerCase();
+  // Bloqueo también por USUARIO (no solo por IP): frena a quien prueba claves de una cuenta.
+  if (loginBlocked('u:' + uname)) return res.status(429).json({ error: 'Demasiados intentos fallidos para este usuario. Espera unos minutos.' });
   const s = await getStore();
-  const user = await s.getUserByUsername(username.trim().toLowerCase());
-  if (!user || !verifyPassword(password, user.pass)) {
-    loginFail(ip);
+  const user = await s.getUserByUsername(uname);
+  let ok = !!user && user.activo !== false && verifyPassword(password, user.pass);
+  if (ok && user.rol === 'tecnico') { const t = user.tecnico_id ? await s.getTecnicoById(user.tecnico_id) : null; ok = !!t && t.activo !== false; }
+  if (!ok) {
+    loginFail(ip); loginFail('u:' + uname);
+    console.warn(`[LOGIN] fallido · usuario="${uname.slice(0, 40)}" · ip=${ip}`);
     return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
   }
-  loginReset(ip);
-  const token = signToken({ uid: user.id, rol: user.rol });
+  loginReset(ip); loginReset('u:' + uname);
+  // Entró con la clave de fábrica → debe cambiarla antes de usar la app.
+  let debe = !!user.debe_cambiar;
+  if (!debe && CLAVES_FABRICA.includes(password) && typeof s.updateUsuario === 'function') { await s.updateUsuario(user.id, { debe_cambiar: true }); debe = true; }
+  console.log(`[LOGIN] ok · ${user.username} (${user.rol}) · ip=${ip}`);
+  const token = signToken({ uid: user.id, rol: user.rol, tv: user.token_ver || 0 });
   const display = await techDisplay(user);
-  res.json({ token, user: { id: user.id, nombre: user.nombre, rol: user.rol, tecnico: display, username: user.username } });
+  res.json({ token, user: { id: user.id, nombre: user.nombre, rol: user.rol, tecnico: display, username: user.username, debe_cambiar: debe } });
 }));
 
 api.get('/me', auth, wrap(async (req, res) => {
-  res.json({ id: req.user.id, nombre: req.user.nombre, rol: req.user.rol, tecnico: await techDisplay(req.user), username: req.user.username });
+  res.json({ id: req.user.id, nombre: req.user.nombre, rol: req.user.rol, tecnico: await techDisplay(req.user), username: req.user.username, debe_cambiar: !!req.user.debe_cambiar });
 }));
 
 // Valida una contraseña nueva. Devuelve un mensaje de error o null si está ok.
-function claveProblema(pw) {
-  if (typeof pw !== 'string' || pw.length < 6) return 'La contraseña debe tener al menos 6 caracteres';
+// Claves de fábrica: quien entre con ellas debe cambiarlas, y nadie puede volver a usarlas.
+const CLAVES_FABRICA = [process.env.ADMIN_PASS || 'wifired2026', process.env.TECH_PASS || 'wifired'];
+function claveProblema(pw, username) {
+  if (typeof pw !== 'string' || pw.length < 8) return 'La contraseña debe tener al menos 8 caracteres';
   if (pw.length > 200) return 'La contraseña es demasiado larga';
+  if (!/[a-zA-Z]/.test(pw) || !/\d/.test(pw)) return 'La contraseña debe tener letras y números';
+  if (username && pw.toLowerCase().includes(String(username).toLowerCase())) return 'La contraseña no puede contener el nombre de usuario';
+  if (CLAVES_FABRICA.includes(pw)) return 'No puedes usar la contraseña de fábrica';
   return null;
+}
+// Clave temporal segura (se muestra UNA vez a coordinación; el usuario debe cambiarla).
+function genClave() {
+  const ABC = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const b = require('crypto').randomBytes(10);
+  let c = '';
+  for (let i = 0; i < 10; i++) c += ABC[b[i] % ABC.length];
+  return /\d/.test(c) && /[a-zA-Z]/.test(c) ? c : c.slice(0, 8) + 'k7';
 }
 
 // El usuario cambia su PROPIA contraseña (coordinación o técnico).
@@ -353,12 +390,15 @@ api.post('/mi-clave', auth, wrap(async (req, res) => {
   const actual = String((req.body && req.body.actual) || '');
   const nueva = String((req.body && req.body.nueva) || '');
   if (!verifyPassword(actual, req.user.pass)) return res.status(403).json({ error: 'La contraseña actual no es correcta' });
-  const prob = claveProblema(nueva);
+  const prob = claveProblema(nueva, req.user.username);
   if (prob) return res.status(400).json({ error: prob });
   if (actual === nueva) return res.status(400).json({ error: 'La nueva contraseña debe ser distinta a la actual' });
   if (typeof s.setPassword !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
-  await s.setPassword(req.user.id, nueva);
-  res.json({ ok: true });
+  await s.setPassword(req.user.id, nueva, false); // cierra sus otras sesiones
+  const u2 = await s.getUserById(req.user.id);
+  console.log(`[CLAVE] ${req.user.username} cambió su contraseña`);
+  // Sesión nueva para este dispositivo (las demás quedan cerradas).
+  res.json({ ok: true, token: signToken({ uid: u2.id, rol: u2.rol, tv: u2.token_ver || 0 }) });
 }));
 
 // --- Bootstrap (filtra por rol) ---
@@ -409,7 +449,7 @@ api.get('/rev', auth, wrap(async (req, res) => {
 
 // --- Visitas ---
 // El técnico completa/cancela, deja notas, SOLICITA reagenda, adjunta evidencias y firmas
-const CAMPOS_TECNICO = ['detalle', 'reagenda_solicitada', 'reagenda_motivo', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'historial'];
+const CAMPOS_TECNICO = ['detalle', 'reagenda_solicitada', 'reagenda_motivo', 'evidencias', 'email', 'firma_cliente', 'firma_tecnico', 'historial', 'gps'];
 
 /** Genera un PIN aleatorio de 6 dígitos */
 function nuevoPin() { return String(Math.floor(100000 + Math.random() * 900000)); }
@@ -516,6 +556,26 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
 }));
 
 // Descargar la orden de trabajo en PDF (la misma que se envía al cliente/soporte)
+// Resuelve links cortos de Google Maps para sacar coordenadas. Solo dominios de
+// Google Maps (el servidor no visita otros sitios).
+api.post('/resolver-ubicacion', auth, wrap(async (req, res) => {
+  let url = String((req.body && req.body.url) || '').trim();
+  const permitido = (u) => /^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|consent\.google\.[a-z.]+)/i.test(u);
+  if (!permitido(url)) return res.status(400).json({ error: 'Solo se aceptan links de Google Maps' });
+  const urls = [url];
+  try {
+    for (let i = 0; i < 6; i++) {
+      const r = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const loc = r.headers.get('location');
+      if (!loc) break;
+      url = new URL(loc, url).toString();
+      if (!permitido(url)) break;
+      urls.push(url);
+    }
+  } catch (e) { /* sin salida a internet o link roto */ }
+  res.json({ urls });
+}));
+
 // Doble validación de la cola offline del celular: devuelve lo que el servidor
 // TIENE GUARDADO de una visita (contadores, sin fotos) para que el teléfono
 // confirme que sus datos llegaron antes de borrarlos de su cola.
@@ -923,6 +983,8 @@ api.post('/tickets/:id/enviar-planes', auth, soloCoordinador, wrap(async (req, r
   const c = await s.getConfig();
   const texto = (req.body && req.body.texto) || (c.bot && c.bot.planes) || '';
   if (!texto.trim()) return res.status(400).json({ error: 'No hay texto de planes configurado' });
+  const cfgSC = await s.getConfig();
+  if (cfgSC.bot && cfgSC.bot.solo_comunicados) return res.status(400).json({ error: 'El bot está en modo "solo comunicados" (Configuración → Sistema).' });
   await s.addOutbox(t.telefono, texto);
   const upd = await s.updateTicket(req.params.id, { factibilidad: 'planes_enviados', estado: 'En proceso' });
   console.log(`[BOT] planes encolados para ${t.telefono} (ticket ${t.num})`);
@@ -934,7 +996,9 @@ api.post('/tickets/:id/enviar-planes', auth, soloCoordinador, wrap(async (req, r
 function requireBotKey(req, res, next) {
   const key = process.env.BOT_API_KEY;
   if (!key) return res.status(503).json({ error: 'Bot no configurado (falta BOT_API_KEY)' });
-  if ((req.headers['x-bot-key'] || '') !== key) return res.status(401).json({ error: 'Clave de bot inválida' });
+  // Comparación en tiempo constante (no revela cuántos caracteres coinciden).
+  const a = Buffer.from(String(req.headers['x-bot-key'] || '')), b = Buffer.from(key);
+  if (a.length !== b.length || !require('crypto').timingSafeEqual(a, b)) return res.status(401).json({ error: 'Clave de bot inválida' });
   next();
 }
 api.post('/bot/ticket', requireBotKey, wrap(async (req, res) => {
@@ -1054,7 +1118,7 @@ api.post('/visitas/:id/confirmar-ahora', auth, soloCoordinador, wrap(async (req,
   if (!v.telefono) return res.status(400).json({ error: 'La visita no tiene teléfono del cliente' });
   const cfg = await s.getConfig();
   const cv = (cfg.bot && cfg.bot.confirma_visita) || {};
-  if (!cv.activo) return res.status(400).json({ error: 'La confirmación automática de visitas está desactivada (Configuración → Bot).' });
+  if (!cv.activo || (cfg.bot && cfg.bot.solo_comunicados)) return res.status(400).json({ error: 'La confirmación de visitas por WhatsApp está desactivada.' });
   await s.addOutbox(v.telefono, plantillaConfirma(cv.mensaje, v), 'confirmacion');
   await s.updateVisita(req.params.id, { confirmacion_enviada: v.fecha || hoyChile(), confirmacion: '' });
   console.log(`[CONFIRMACION] solicitud manual encolada · visita ${v.id}`);
@@ -1089,6 +1153,8 @@ api.get('/bot/outbox', requireBotKey, wrap(async (req, res) => {
   const cfgO = await s.getConfig();
   const cvO = (cfgO.bot && cfgO.bot.confirma_visita) || {};
   if (!cvO.activo) lista = lista.filter((m) => m.tipo !== 'confirmacion');
+  // Modo "solo comunicados": el bot SOLO entrega masivos; lo demás queda en espera (no se borra).
+  if (cfgO.bot && cfgO.bot.solo_comunicados) lista = lista.filter((m) => String(m.tipo || '').startsWith('broadcast'));
   res.json(lista);
 }));
 api.post('/bot/outbox/:id/sent', requireBotKey, wrap(async (req, res) => {
@@ -1162,8 +1228,96 @@ api.get('/tecnicos/ubicaciones', auth, soloCoordinador, wrap(async (req, res) =>
 api.post('/tecnicos', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
   if (!req.body || (!req.body.nombre && !req.body.rol)) return res.status(400).json({ error: 'Nombre o rol requerido' });
+  // Sin clave → se genera una temporal segura (se muestra una vez). Siempre debe cambiarla al entrar.
+  let temp = '';
   if (req.body.password && req.body.password.trim()) { const p = claveProblema(req.body.password.trim()); if (p) return res.status(400).json({ error: p }); }
-  res.status(201).json(await s.addTecnico(req.body));
+  else { temp = genClave(); req.body.password = temp; }
+  const t = await s.addTecnico(req.body);
+  res.status(201).json(temp ? { ...t, clave_temporal: temp } : t);
+}));
+// Restablecer la clave de un técnico: temporal, se muestra una vez, cierra sus sesiones.
+api.post('/tecnicos/:id/restablecer-clave', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.listUsuarios !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  const u = (await s.listUsuarios()).find((x) => String(x.tecnico_id) === String(req.params.id));
+  if (!u) return res.status(404).json({ error: 'El técnico no tiene usuario' });
+  const temp = genClave();
+  await s.setPassword(u.id, temp, true);
+  console.log(`[CLAVE] ${req.user.username} restableció la clave de ${u.username}`);
+  res.json({ ok: true, username: u.username, clave_temporal: temp });
+}));
+
+// ── Cuentas de coordinación (cada coordinador con su propio usuario) ──────────
+async function coordObjetivo(s, id) {
+  const u = (await s.listUsuarios()).find((x) => String(x.id) === String(id));
+  return u && u.rol === 'coordinador' ? u : null;
+}
+async function quedanOtrosCoord(s, exceptoId) {
+  return (await s.listUsuarios()).some((x) => x.rol === 'coordinador' && x.activo !== false && String(x.id) !== String(exceptoId));
+}
+api.get('/usuarios', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.listUsuarios !== 'function') return res.json([]);
+  res.json((await s.listUsuarios()).filter((u) => u.rol === 'coordinador').map(({ token_ver, ...u }) => ({ ...u, yo: String(u.id) === String(req.user.id) })));
+}));
+api.post('/usuarios', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  if (typeof s.addUsuario !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });
+  const nombre = String((req.body && req.body.nombre) || '').trim();
+  const username = String((req.body && req.body.username) || '').trim().toLowerCase();
+  if (!nombre || nombre.length > 80) return res.status(400).json({ error: 'Escribe el nombre del coordinador' });
+  if (username && !/^[a-z0-9._-]{3,40}$/.test(username)) return res.status(400).json({ error: 'Usuario inválido: 3 a 40 letras minúsculas, números, punto o guion' });
+  if (username && (await s.getUserByUsername(username))) return res.status(400).json({ error: 'Ese usuario ya existe' });
+  const temp = genClave();
+  const u = await s.addUsuario({ nombre, username, password: temp, rol: 'coordinador' });
+  console.log(`[USUARIOS] ${req.user.username} creó al coordinador ${u.username}`);
+  res.status(201).json({ ...u, clave_temporal: temp });
+}));
+api.put('/usuarios/:id', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const u = await coordObjetivo(s, req.params.id);
+  if (!u) return res.status(404).json({ error: 'Coordinador no encontrado' });
+  const patch = {};
+  if (req.body && 'nombre' in req.body) patch.nombre = String(req.body.nombre || '').trim().slice(0, 80);
+  if (req.body && 'activo' in req.body) {
+    patch.activo = !!req.body.activo;
+    if (!patch.activo) {
+      if (String(u.id) === String(req.user.id)) return res.status(400).json({ error: 'No puedes desactivarte a ti mismo' });
+      if (!(await quedanOtrosCoord(s, u.id))) return res.status(400).json({ error: 'Debe quedar al menos un coordinador activo' });
+      patch.cerrar_sesiones = true; // desactivar = sacarlo de inmediato
+    }
+  }
+  const r = await s.updateUsuario(u.id, patch);
+  console.log(`[USUARIOS] ${req.user.username} modificó a ${u.username} ${JSON.stringify(patch)}`);
+  res.json(r);
+}));
+api.post('/usuarios/:id/restablecer-clave', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const u = await coordObjetivo(s, req.params.id);
+  if (!u) return res.status(404).json({ error: 'Coordinador no encontrado' });
+  if (String(u.id) === String(req.user.id)) return res.status(400).json({ error: 'Para tu propia clave usa "Mi contraseña"' });
+  const temp = genClave();
+  await s.setPassword(u.id, temp, true);
+  console.log(`[CLAVE] ${req.user.username} restableció la clave de ${u.username}`);
+  res.json({ ok: true, username: u.username, clave_temporal: temp });
+}));
+api.post('/usuarios/:id/cerrar-sesiones', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const u = (await s.listUsuarios()).find((x) => String(x.id) === String(req.params.id));
+  if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
+  await s.updateUsuario(u.id, { cerrar_sesiones: true });
+  console.log(`[USUARIOS] ${req.user.username} cerró las sesiones de ${u.username}`);
+  res.json({ ok: true });
+}));
+api.delete('/usuarios/:id', auth, soloCoordinador, wrap(async (req, res) => {
+  const s = await getStore();
+  const u = await coordObjetivo(s, req.params.id);
+  if (!u) return res.status(404).json({ error: 'Coordinador no encontrado' });
+  if (String(u.id) === String(req.user.id)) return res.status(400).json({ error: 'No puedes eliminarte a ti mismo' });
+  if (!(await quedanOtrosCoord(s, u.id))) return res.status(400).json({ error: 'Debe quedar al menos un coordinador activo' });
+  await s.deleteUsuario(u.id);
+  console.log(`[USUARIOS] ${req.user.username} eliminó al coordinador ${u.username}`);
+  res.json({ ok: true });
 }));
 api.put('/tecnicos/:id', auth, soloCoordinador, wrap(async (req, res) => {
   if (req.body && req.body.password && req.body.password.trim()) { const p = claveProblema(req.body.password.trim()); if (p) return res.status(400).json({ error: p }); }
@@ -1186,7 +1340,18 @@ api.get('/health', (req, res) => res.json({ ok: true }));
 app.use('/api', api);
 
 // --- Estáticos (SPA) ---
-app.use(express.static(__dirname, { etag: true, lastModified: true, setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
+// SOLO se publican los archivos de la app. Nunca el código del servidor, datos
+// (data/), notas (Wifired/), bot/, docs, instructivos ni configuración.
+const PUBLICOS = ['/', '/index.html', '/manifest.webmanifest', '/sw.js'];
+const CARPETAS_PUBLICAS = ['/css/', '/js/', '/icons/'];
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const p = req.path;
+  if (PUBLICOS.includes(p) || CARPETAS_PUBLICAS.some((c) => p.startsWith(c))) return next();
+  if (/\.[a-z0-9]{1,8}$/i.test(p) || p.includes('..')) return res.status(404).end(); // cualquier otro archivo: no existe
+  next(); // rutas de la app → index.html
+});
+app.use(express.static(__dirname, { etag: true, lastModified: true, dotfiles: 'deny', setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 getStore()

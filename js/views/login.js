@@ -1,7 +1,28 @@
 // ============================================================
 // WIFIRED · Pantalla de login
 // ============================================================
-import { login } from '../auth.js';
+import { login, cambiarClaveInicial } from '../auth.js';
+
+// Clave de fábrica o temporal: antes de entrar debe crear su propia clave.
+function pedirCambio(form, actual, onSuccess) {
+  form.innerHTML = `
+    <p class="login-aviso">🔐 Por seguridad crea tu <b>propia contraseña</b> antes de continuar.<br><span class="muted-sm">Mínimo 8 caracteres, con letras y números.</span></p>
+    <div class="field"><label>Nueva contraseña</label><input class="input" name="nueva" type="password" autocomplete="new-password" required autofocus /></div>
+    <div class="field"><label>Repite la nueva contraseña</label><input class="input" name="rep" type="password" autocomplete="new-password" required /></div>
+    <div class="login-error" id="login-error"></div>
+    <button class="btn btn-primary btn-block" type="submit" id="login-btn">Guardar y entrar</button>`;
+  const err = form.querySelector('#login-error'), btn = form.querySelector('#login-btn');
+  form.onsubmit = async (e) => {
+    e.preventDefault(); err.textContent = '';
+    const fd = new FormData(form);
+    const nueva = String(fd.get('nueva') || ''), rep = String(fd.get('rep') || '');
+    if (nueva !== rep) { err.textContent = 'Las contraseñas no coinciden'; return; }
+    if (nueva.length < 8 || !/[a-zA-Z]/.test(nueva) || !/[0-9]/.test(nueva)) { err.textContent = 'Mínimo 8 caracteres, con letras y números'; return; }
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    try { onSuccess(await cambiarClaveInicial(actual, nueva)); }
+    catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = 'Guardar y entrar'; }
+  };
+}
 
 export function renderLogin(onSuccess) {
   document.body.setAttribute('data-screen', 'login');
@@ -22,7 +43,7 @@ export function renderLogin(onSuccess) {
       <form id="login-form">
         <div class="field">
           <label>Usuario</label>
-          <input class="input" name="username" autocomplete="username" placeholder="coordinacion" required autofocus />
+          <input class="input" name="username" autocomplete="username" placeholder="tu usuario" required autofocus />
         </div>
         <div class="field">
           <label>Contraseña</label>
@@ -44,6 +65,7 @@ export function renderLogin(onSuccess) {
     const fd = new FormData(form);
     try {
       const user = await login(fd.get('username'), fd.get('password'));
+      if (user && user.debe_cambiar) { pedirCambio(form, String(fd.get('password') || ''), onSuccess); return; }
       onSuccess(user);
     } catch (ex) {
       err.textContent = ex.message;

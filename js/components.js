@@ -66,6 +66,7 @@ const HIST_META = {
   completada: { ico: '✓', label: 'Completada' },
   validacion_pendiente: { ico: '⏳', label: 'Enviada a coordinación para autorizar' },
   autorizada: { ico: '🔓', label: 'Autorizada por coordinación' },
+  ubicacion: { ico: '📍', label: 'Ubicación del domicilio' },
 };
 function histFecha(ts) { try { return new Date(ts).toLocaleString('es-CL'); } catch (e) { return ''; } }
 
@@ -216,7 +217,7 @@ function confirmacionBlock(v, readOnly) {
   else if (v.confirmacion_enviada) estado = '<span style="color:#f59e0b;font-weight:600">⏳ Esperando respuesta del cliente</span>';
   // Solo si el interruptor de confirmaciones del bot está encendido (Configuración → Bot).
   const cfgBot = (store.configFull && store.configFull() && store.configFull().bot) || {};
-  const confirmaOn = !!(cfgBot.confirma_visita && cfgBot.confirma_visita.activo);
+  const confirmaOn = cfgBot.solo_comunicados === false && !!(cfgBot.confirma_visita && cfgBot.confirma_visita.activo);
   const puedePedir = confirmaOn && !readOnly && store.isCoordinador() && v.telefono && activa && v.confirmacion !== 'si';
   if (!estado && !puedePedir) return '';
   return `<div class="detail-list" style="margin-top:10px">
@@ -594,4 +595,24 @@ export async function workOrderModal(v, company) {
     send.disabled = false; send.textContent = '✉️ Enviar al cliente';
   };
   openModal(node, 'lg');
+}
+
+/** Muestra UNA sola vez una clave temporal para entregarla (con botón copiar). */
+export function claveTemporalModal(nombre, usuario, clave) {
+  const node = document.createElement('div');
+  node.innerHTML = `
+    <div class="modal-head"><h3>🔑 Clave temporal</h3><button class="icon-btn" data-x>✕</button></div>
+    <div class="modal-body">
+      <p>Entrégale estos datos a <b>${esc(nombre || usuario)}</b>. <b>Solo se muestran ahora</b>: al entrar deberá crear su propia clave.</p>
+      <div class="clave-box"><div>👤 Usuario: <b>${esc(usuario)}</b></div><div>🔑 Clave: <b class="clave-tmp">${esc(clave)}</b></div></div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-copy>⧉ Copiar</button><button class="btn btn-primary" data-x2>Listo</button></div>`;
+  node.querySelector('[data-x]').onclick = closeModal;
+  node.querySelector('[data-x2]').onclick = closeModal;
+  node.querySelector('[data-copy]').onclick = () => {
+    const t = `Usuario: ${usuario}\nClave temporal: ${clave}`;
+    if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => toast('Copiado ✓')).catch(() => toast('No se pudo copiar', 'info'));
+    else toast('No se pudo copiar', 'info');
+  };
+  openModal(node, 'sm', { dismissable: false });
 }

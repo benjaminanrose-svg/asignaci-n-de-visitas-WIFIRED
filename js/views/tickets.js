@@ -439,6 +439,9 @@ function wire(node, uid) {
   node.querySelectorAll('[data-fact]').forEach((b) => (b.onclick = () => applyPatch(node, uid, { factibilidad: b.dataset.fact })));
   node.querySelectorAll('[data-setestado]').forEach((b) => (b.onclick = () => applyPatch(node, uid, { estado: b.dataset.setestado })));
 
+  // Bot en modo "solo comunicados": no se envían planes por WhatsApp desde aquí.
+  const cfgBotT = (store.configFull && store.configFull() && store.configFull().bot) || {};
+  if (cfgBotT.solo_comunicados !== false) { const pb = node.querySelector('[data-planes]'); if (pb) { const nota = document.createElement('span'); nota.className = 'muted-sm'; nota.textContent = 'Envío de planes por bot desactivado (solo comunicados)'; pb.replaceWith(nota); } }
   const planes = node.querySelector('[data-planes]');
   if (planes) planes.onclick = async () => {
     if (!confirm('¿Enviar los planes al cliente por WhatsApp?\n(Se usa el texto configurado en el Bot de WhatsApp.)')) return;

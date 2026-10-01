@@ -30,3 +30,11 @@ Al escribir el nombre del cliente **autocompleta** desde los clientes existentes
 🟢 *Cliente registrado* / 🔵 *Nuevo cliente*.
 
 Relacionado: [[Arquitectura]] · [[Bot WhatsApp]] · [[Zonas]]
+
+## 📍 Ubicación GPS del cliente (sin IP pública)
+- **Técnico**: en su tarjeta, "📍 Estoy en el domicilio — guardar ubicación" (GPS del celular).
+- **Coordinación**: en Nueva/Editar visita, campo "Ubicación GPS": se pega el link de
+  Google Maps (incluso `maps.app.goo.gl`, lo resuelve el servidor) o coordenadas.
+  Botón "Pedir ubicación al cliente por WhatsApp" abre el WhatsApp propio.
+- Se guarda en `visita.gps` ("lat, lng"); el botón Mapa del técnico lo usa primero.
+  Al autocompletar un cliente se trae su GPS de visitas anteriores.

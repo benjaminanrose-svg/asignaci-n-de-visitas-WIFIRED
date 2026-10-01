@@ -28,8 +28,8 @@ export function renderTecnicos(root) {
       </div>
       <div class="tech-creds">
         <div class="tc-row"><span class="tc-k">👤 Usuario</span><span class="tc-v">${esc(tec.username || '—')}</span></div>
-        <div class="tc-row"><span class="tc-k">🔑 Clave</span><span class="tc-v">${esc(tec.password || '—')}</span></div>
-        <button class="tc-copy" data-copy="Usuario: ${esc(tec.username || '')}  Clave: ${esc(tec.password || '')}" title="Copiar acceso">⧉ Copiar</button>
+        <div class="tc-row"><span class="tc-k">🔑 Clave</span><span class="tc-v">🔒 protegida</span></div>
+        <button class="tc-copy" data-reset="${tec.id}" title="Genera una clave temporal">🔑 Restablecer clave</button>
       </div>
       <div class="tstats">
         <div class="tstat"><strong>${mine.length}</strong><span>ASIGNADAS</span></div>
@@ -60,11 +60,16 @@ export function renderTecnicos(root) {
     <div class="grid tech-grid">${cards}${sinCard}</div>`;
 
   root.querySelector('[data-new]').onclick = () => techFormModal();
-  root.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = (e) => {
+  // Las claves ya no se pueden ver (se guardan cifradas): se restablecen.
+  root.querySelectorAll('[data-reset]').forEach((b) => (b.onclick = async (e) => {
     e.stopPropagation();
-    const txt = b.dataset.copy;
-    if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast('Acceso copiado')).catch(() => toast('No se pudo copiar', 'info'));
-    else toast('No se pudo copiar', 'info');
+    const tec = list.find((t) => t.id == b.dataset.reset) || {};
+    if (!confirm(`¿Restablecer la clave de ${tec.nombre || 'este técnico'}? Se cerrará su sesión y deberá crear una nueva al entrar.`)) return;
+    try {
+      const r = await store.restablecerClaveTecnico(tec.id);
+      const { claveTemporalModal } = await import('../components.js');
+      claveTemporalModal(tec.nombre, r.username, r.clave_temporal);
+    } catch (err) { toast(err.message || 'No se pudo restablecer', 'info'); }
   }));
   root.querySelectorAll('[data-edit]').forEach((el) => {
     el.onclick = () => {

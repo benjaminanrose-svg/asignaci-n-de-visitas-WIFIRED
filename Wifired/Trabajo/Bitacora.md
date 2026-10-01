@@ -2,6 +2,7 @@
 
 > Registro corto de lo hecho. Lo nuevo arriba.
 
+- **2026-10** Bot en modo **solo comunicados** + **ubicación GPS** del cliente (técnico 1 toque / pegar link de Maps).
 - **2026-09** 🛡️ Cola del celular con **doble validación**: no borra un cambio hasta que el
   servidor confirma que lo guardó; errores de VPN ya no descartan datos. Ver [[Arquitectura]].
 - **2026-09** Portal técnico pulido para celular: N° de OT y zona visibles, diseño compacto y sobrio

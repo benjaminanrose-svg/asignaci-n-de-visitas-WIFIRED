@@ -287,3 +287,23 @@ export function toast(msg, type = 'ok') {
   setTimeout(() => { el.style.transition = 'opacity .3s, transform .3s'; el.style.opacity = '0'; el.style.transform = 'translateY(8px)'; }, 2400);
   setTimeout(() => el.remove(), 2750);
 }
+
+// ── Ubicación GPS: saca coordenadas de un link de Google Maps, de WhatsApp o "lat, lng".
+export function extraerCoords(texto) {
+  let s = String(texto || '');
+  try { s = decodeURIComponent(s); } catch (e) {}
+  s = s.replace(/\+/g, ' ');
+  const pats = [
+    /[?&](?:q|query|ll|daddr|destination|center)=(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/i,
+    /@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/,
+    /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/,
+    /(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})/,
+  ];
+  for (const re of pats) {
+    const m = s.match(re);
+    if (m) { const lat = +m[1], lng = +m[2]; if (lat >= -56 && lat <= -17 && lng >= -110 && lng <= -66) return { lat, lng }; }
+  }
+  return null;
+}
+export const fmtCoords = (c) => `${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}`;
+export const esLinkCortoMaps = (t) => /(maps\.app\.goo\.gl|goo\.gl\/maps)\//i.test(String(t || ''));

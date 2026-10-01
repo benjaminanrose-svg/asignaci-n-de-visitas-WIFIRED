@@ -121,6 +121,7 @@ export function renderTecnico(root) {
     else if (act === 'cancelar') cancelarModal(uid);
     else if (act === 'solicitar') solicitarModal(uid);
     else if (act === 'nota') notaModal(uid);
+    else if (act === 'gps') guardarGpsTecnico(uid, b);
     else if (act === 'ver-fotos') { const v = store.byUid(uid); if (v && v.evidencias[0]) openPhoto(v.evidencias[0].url); }
   }));
 }
@@ -153,11 +154,13 @@ function card(v) {
     <div class="tec-client">${esc(v.cliente || 'Sin nombre')}</div>
     <div class="tec-type">${esc(v.tipo || '—')}</div>
     ${v.direccion ? `<div class="tec-meta">📍 ${/^ *-?[0-9]+([.][0-9]+)? *, *-?[0-9]+([.][0-9]+)? *$/.test(v.direccion) ? 'Ubicación GPS' : esc(v.direccion)}</div>` : ''}
-    ${(v.direccion || v.telefono) ? `<div class="tec-quick">
-      ${v.direccion ? `<a class="tec-qbtn" href="${mapsHref(v.direccion)}" target="_blank" rel="noopener">🧭 Mapa</a>` : ''}
+    ${v.gps ? `<div class="tec-meta tec-gps-ok">✓ Ubicación GPS guardada</div>` : ''}
+    ${(v.gps || v.direccion || v.telefono) ? `<div class="tec-quick">
+      ${(v.gps || v.direccion) ? `<a class="tec-qbtn" href="${mapsHref(v.gps || v.direccion)}" target="_blank" rel="noopener">🧭 Mapa</a>` : ''}
       ${v.telefono ? `<a class="tec-qbtn" href="${telLink(v.telefono)}">📞 Llamar</a>` : ''}
       ${v.telefono ? `<a class="tec-qbtn wa" href="${waLink(v.telefono, `Hola ${v.cliente || ''}, le contactamos de WIFIRED por su visita técnica.`)}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ''}
     </div>` : ''}
+    <button class="tec-gpsbtn" data-act="gps" data-uid="${uid}">${v.gps ? '📍 Actualizar ubicación del domicilio' : '📍 Estoy en el domicilio — guardar ubicación'}</button>
     ${v.detalle ? `<div class="tec-note">📝 ${esc(v.detalle)}</div>` : ''}
     ${pedida ? `<div class="tec-req">⏳ Reagenda solicitada — a la espera de nueva fecha por coordinación</div>` : ''}
     ${nFotos ? `<button class="tec-fotos" data-act="ver-fotos" data-uid="${uid}">📷 ${nFotos} foto${nFotos === 1 ? '' : 's'} de evidencia</button>` : ''}
@@ -400,4 +403,26 @@ function notaModal(uid) {
     toast('Nota guardada'); closeModal();
   };
   openModal(node, 'md', { dismissable: false });
+}
+
+// Guarda la ubicación del domicilio con el GPS del celular del técnico (1 toque).
+function guardarGpsTecnico(uid, btn) {
+  const v = store.byUid(uid);
+  if (!v) return;
+  if (!navigator.geolocation) { toast('Este celular no permite obtener la ubicación', 'info'); return; }
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '⏳ Obteniendo ubicación…';
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    btn.disabled = false; btn.textContent = orig;
+    const acc = Math.round(pos.coords.accuracy || 0);
+    const gps = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+    const aviso = acc > 100 ? `\n\n⚠ Precisión baja (±${acc} m). Si puedes, sal a un lugar abierto y reintenta.` : '';
+    if (!confirm(`¿Guardar esta ubicación como el domicilio de ${v.cliente || 'el cliente'}?\n\n📍 ${gps} (±${acc} m)${aviso}`)) return;
+    try {
+      await store.updateVisita(uid, { gps, historial: histJSON(v, { tipo: 'ubicacion', detalle: `Domicilio guardado por el técnico (GPS ±${acc} m): ${gps}` }) });
+      toast('📍 Ubicación guardada ✓');
+    } catch (e) { /* el store ya avisó */ }
+  }, (err) => {
+    btn.disabled = false; btn.textContent = orig;
+    toast(err && err.code === 1 ? 'Debes permitir el acceso a la ubicación del celular' : 'No se pudo obtener la ubicación. Activa el GPS e intenta de nuevo.', 'info');
+  }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
 }

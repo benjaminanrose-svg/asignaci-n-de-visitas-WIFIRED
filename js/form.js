@@ -1,7 +1,7 @@
 // ============================================================
 // WIFIRED · Formulario de visita (crear / editar / asignar)
 // ============================================================
-import { esc, todayISO, toast, bindField, validaRut, formatRut, validaFono, formatFono, validaEmail, zonaDeVisita, zonaDeNodo, normName, clientKey } from './util.js';
+import { esc, todayISO, toast, bindField, validaRut, formatRut, validaFono, formatFono, validaEmail, zonaDeVisita, zonaDeNodo, normName, clientKey, waLink, mapsHref, extraerCoords, fmtCoords, esLinkCortoMaps } from './util.js';
 import { openModal, closeModal } from './components.js';
 import * as store from './store.js';
 
@@ -18,7 +18,8 @@ function buildClientesIndex(servicios) {
     const nombre = src.cliente || src.nombre || '';
     const key = clientKey({ rut: src.rut, telefono: src.telefono, nombre });
     if (!key) return;
-    const cur = map.get(key) || { key, nombre: '', rut: '', telefono: '', email: '', direccion: '', servicio: null };
+    const cur = map.get(key) || { key, nombre: '', rut: '', telefono: '', email: '', direccion: '', gps: '', servicio: null };
+    cur.gps = cur.gps || src.gps || '';
     cur.nombre = cur.nombre || nombre;
     cur.rut = cur.rut || src.rut || '';
     cur.telefono = cur.telefono || src.telefono || '';
@@ -70,6 +71,7 @@ function setupClienteAutocomplete(node) {
     if (field('telefono')) field('telefono').value = c.telefono || '';
     if (field('email')) field('email').value = c.email || '';
     if (field('direccion')) field('direccion').value = c.direccion || '';
+    if (field('gps') && c.gps) { field('gps').value = c.gps; field('gps').dispatchEvent(new Event('input')); }
     matched = c;
     acEl.hidden = true; acEl.innerHTML = '';
     setStatus();
@@ -144,6 +146,11 @@ export function visitFormModal(existing = null, prefill = {}) {
             <input class="input" name="direccion" value="${esc(v.direccion || prefill.direccion || '')}" placeholder="Sector, parcela, referencia…" />
           </div>
           <div class="field full">
+            <label>📍 Ubicación GPS <span class="muted-sm">(pega el link de Google Maps o las coordenadas)</span></label>
+            <input class="input" name="gps" value="${esc(v.gps || prefill.gps || '')}" placeholder="Ej: https://maps.app.goo.gl/… o -33.8462, -70.9614" autocomplete="off" />
+            <div class="gps-help" data-gps-help></div>
+          </div>
+          <div class="field full">
             <label>Tipo de visita *</label>
             <select class="select" name="tipo" required>${opt(tipos, v.tipo, 'Seleccionar tipo…')}</select>
           </div>
@@ -216,11 +223,48 @@ export function visitFormModal(existing = null, prefill = {}) {
   // Autocompletado de clientes (solo en el campo de nombre; útil sobre todo al crear).
   const clienteAC = setupClienteAutocomplete(node);
 
+  // Ubicación GPS: se pega un link de Google Maps o coordenadas y se extraen solas.
+  const gpsIn = node.querySelector('[name=gps]');
+  const gpsHelp = node.querySelector('[data-gps-help]');
+  let gpsResuelto = null;
+  const pedirHTML = '<button type="button" class="btn btn-sm" data-pedir-gps>💬 Pedir ubicación al cliente por WhatsApp</button>';
+  const pintarGps = async () => {
+    const t = (gpsIn.value || '').trim();
+    gpsResuelto = null;
+    if (!t) { gpsHelp.innerHTML = pedirHTML; return; }
+    let c = extraerCoords(t);
+    if (!c && esLinkCortoMaps(t)) {
+      gpsHelp.innerHTML = '<span class="muted-sm">⏳ Leyendo el link de Google Maps…</span>';
+      try { const r = await store.resolverUbicacion(t); c = extraerCoords((r.urls || []).join(' ')); } catch (e) {}
+      if ((gpsIn.value || '').trim() !== t) return;
+    }
+    if (c) { gpsResuelto = c; gpsHelp.innerHTML = `<span class="gps-ok">✓ ${fmtCoords(c)}</span> · <a href="${mapsHref(fmtCoords(c))}" target="_blank" rel="noopener">ver en mapa</a>`; }
+    else gpsHelp.innerHTML = '<span class="gps-err">⚠ No reconocí una ubicación. Pega el link de Google Maps o las coordenadas.</span>';
+  };
+  let gpsT = null;
+  gpsIn.addEventListener('input', () => { clearTimeout(gpsT); gpsT = setTimeout(pintarGps, 350); });
+  gpsHelp.onclick = (e) => {
+    if (!e.target.closest('[data-pedir-gps]')) return;
+    const tel = ((node.querySelector('[name=telefono]') || {}).value || '').trim();
+    if (!tel) { toast('Primero escribe el teléfono del cliente', 'info'); return; }
+    const nom = ((node.querySelector('[name=cliente]') || {}).value || '').trim().split(/\s+/)[0] || '';
+    window.open(waLink(tel, `Hola ${nom} 👋 Somos WIFIRED. Para que nuestro técnico llegue exacto a tu domicilio, ¿nos envías tu ubicación? Toca 📎 (clip) → *Ubicación* → *Enviar tu ubicación actual* (estando en tu casa). ¡Gracias! 🙌`), '_blank');
+  };
+  pintarGps();
+
   node.querySelector('[data-save]').onclick = async () => {
     const form = node.querySelector('#visit-form');
     if (!form.reportValidity()) return;
     const fd = new FormData(form);
     const data = Object.fromEntries(fd.entries());
+    // Ubicación GPS: se guarda siempre como "lat, lng".
+    const gpsTxt = (data.gps || '').trim();
+    if (gpsTxt) {
+      let c = gpsResuelto || extraerCoords(gpsTxt);
+      if (!c && esLinkCortoMaps(gpsTxt)) { try { const r = await store.resolverUbicacion(gpsTxt); c = extraerCoords((r.urls || []).join(' ')); } catch (e) {} }
+      if (!c) { toast('No reconocí la ubicación GPS. Revisa el link o déjalo vacío.', 'info'); return; }
+      data.gps = fmtCoords(c);
+    } else data.gps = '';
     try {
       if (isNew) {
         if (!data.estado) data.estado = data.tecnico ? 'Programada' : 'Pendiente';

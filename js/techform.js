@@ -50,7 +50,7 @@ export function techFormModal(existing = null) {
           </div>
           <div class="field">
             <label>Contraseña</label>
-            <input class="input" name="password" value="${esc(t.password || '')}" placeholder="${isNew ? 'wifired (por defecto)' : ''}" autocomplete="off" spellcheck="false" />
+            <input class="input" name="password" value="${esc(t.password || '')}" placeholder="${isNew ? 'Vacío = se genera una clave temporal' : 'Vacío = no cambiar'}" autocomplete="off" spellcheck="false" />
           </div>
           <div class="field full">
             <span class="muted-sm">Comparte estos datos con el técnico. En blanco: el usuario se genera del nombre y la clave por defecto es <b>wifired</b>.</span>
@@ -81,7 +81,10 @@ export function techFormModal(existing = null) {
       password: (fd.get('password') || '').trim(),
     };
     try {
-      if (isNew) { await store.addTecnico(data); toast('Técnico creado'); }
+      if (isNew) {
+        const r = await store.addTecnico(data); toast('Técnico creado');
+        if (r && r.clave_temporal) { const { claveTemporalModal } = await import('./components.js'); setTimeout(() => claveTemporalModal(r.nombre, r.username, r.clave_temporal), 60); }
+      }
       else { await store.updateTecnico(t.id, data); toast('Cambios guardados'); }
       closeModal();
     } catch (e) { /* toast ya mostrado en el store */ }

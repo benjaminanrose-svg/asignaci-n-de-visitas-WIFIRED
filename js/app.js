@@ -195,7 +195,9 @@ async function startApp() {
   try {
     await initStore();
   } catch (e) {
-    viewEl.innerHTML = `<div class="empty-state"><div class="es-ico">⚠</div><p>No se pudo conectar.</p><p class="muted-sm">${e.message}</p></div>`;
+    // Debe crear su propia clave → vuelve al login (que se la pide).
+    if (e.status === 403) { logout(); return; }
+    viewEl.innerHTML = `<div class="empty-state"><div class="es-ico">⚠</div><p>No se pudo conectar.</p><p class="muted-sm">${esc(e.message || '')}</p></div>`;
     return;
   }
 

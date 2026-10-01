@@ -3,7 +3,7 @@
 // Permite completar tareas sin conexión y sincroniza al volver.
 // ============================================================
 import { toast, setNodoZonas } from './util.js';
-import { getToken, logout } from './auth.js';
+import { getToken, logout, setToken } from './auth.js';
 
 const COMPANY = {
   nombre: 'TELECOMUNICACIONES WIFIRED LTDA',
@@ -256,6 +256,8 @@ export async function enviarOrden(uid) {
 }
 
 /** Pide al cliente (por WhatsApp, vía bot) que confirme su visita — ahora mismo */
+/** Resuelve un link corto de Google Maps (maps.app.goo.gl) en el servidor. */
+export async function resolverUbicacion(url) { return rawApi('POST', '/resolver-ubicacion', { url }); }
 export async function pedirConfirmacionVisita(uid) {
   return rawApi('POST', '/visitas/' + uid + '/confirmar-ahora');
 }
@@ -392,7 +394,19 @@ export async function marcarAnuncios(telefono, quiere) { return rawApi('POST', '
 export async function broadcastPendientes() { return rawApi('GET', '/servicios/broadcast/pendientes'); }
 export async function broadcastCancelar() { return rawApi('POST', '/servicios/broadcast/cancelar'); }
 export async function routerEstado() { return rawApi('GET', '/router/estado'); }
-export async function cambiarClave(actual, nueva) { return rawApi('POST', '/mi-clave', { actual, nueva }); }
+export async function cambiarClave(actual, nueva) {
+  const r = await rawApi('POST', '/mi-clave', { actual, nueva });
+  if (r && r.token) setToken(r.token); // las otras sesiones quedan cerradas; esta sigue
+  return r;
+}
+// Cuentas de coordinación y restablecer claves (la clave temporal se muestra una vez).
+export async function listUsuarios() { return rawApi('GET', '/usuarios'); }
+export async function addUsuario(d) { return rawApi('POST', '/usuarios', d); }
+export async function updateUsuario(id, patch) { return rawApi('PUT', '/usuarios/' + id, patch); }
+export async function deleteUsuario(id) { return rawApi('DELETE', '/usuarios/' + id); }
+export async function restablecerClaveUsuario(id) { return rawApi('POST', '/usuarios/' + id + '/restablecer-clave'); }
+export async function cerrarSesionesUsuario(id) { return rawApi('POST', '/usuarios/' + id + '/cerrar-sesiones'); }
+export async function restablecerClaveTecnico(id) { return rawApi('POST', '/tecnicos/' + id + '/restablecer-clave'); }
 
 // ---------- Configuración ----------
 export async function saveConfig(patch) {

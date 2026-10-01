@@ -45,3 +45,10 @@ Ese interruptor es el **interruptor maestro** (`bot.confirma_visita.activo`):
 
 Para revisar qué pasó: en los logs del servidor buscar `[CONFIRMACION]`
 (`solicitudes encoladas` = automático · `solicitud manual encolada` = botón).
+
+## 📣 Modo "solo comunicados" (activo desde 2026-10)
+`bot.solo_comunicados` (por defecto **encendido**): el bot SOLO envía masivos y
+atiende **BAJA / ALTA** y la pregunta de anuncios. No responde menú, tickets,
+planes ni confirmaciones; la cola solo entrega `broadcast*` (lo demás espera,
+no se borra). En Configuración → Sistema la tarjeta muestra solo
+"Comunicados masivos" + botón para reactivar todo.
