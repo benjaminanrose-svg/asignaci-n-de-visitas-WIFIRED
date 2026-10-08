@@ -220,6 +220,11 @@ function fechaCierre(v) {
   const d = new Date(e.ts); if (isNaN(d)) return null;
   d.setHours(0, 0, 0, 0); return d;
 }
+// Quién causó la cancelación ('cliente' | 'tecnico' | ''), según el último evento "cancelada"
+function causaCancel(v) {
+  const e = (v.historial || []).filter((h) => h.tipo === 'cancelada').pop();
+  return (e && e.causa) || '';
+}
 function fmtDias(n) { return n == null ? '—' : (n < 1 ? 'mismo día' : `${n.toFixed(1).replace('.0', '')} día${n === 1 ? '' : 's'}`); }
 
 function rendimientoTecnicos(vs) {
@@ -227,11 +232,12 @@ function rendimientoTecnicos(vs) {
   const map = {};
   vs.forEach((v) => {
     if (!v.tecnico) return;
-    const g = map[v.tecnico] || (map[v.tecnico] = { total: 0, comp: 0, activas: 0, canc: 0, tipos: {}, nodos: {}, zonas: {}, diasComp: new Set(), cierres: [], aTiempo: 0, ultima: null, list: [] });
+    const g = map[v.tecnico] || (map[v.tecnico] = { total: 0, comp: 0, activas: 0, canc: 0, cancCli: 0, tipos: {}, nodos: {}, zonas: {}, diasComp: new Set(), cierres: [], aTiempo: 0, ultima: null, list: [] });
     g.total++; g.list.push(v);
     if (v.tipo) g.tipos[v.tipo] = (g.tipos[v.tipo] || 0) + 1;
     if (v.nodo) g.nodos[v.nodo] = (g.nodos[v.nodo] || 0) + 1;
     const z = zonaDeVisita(v); if (z) g.zonas[z.abbr] = (g.zonas[z.abbr] || 0) + 1;
+    if (v.estado === 'Cancelada' && causaCancel(v) === 'cliente') g.cancCli++; // no cuenta contra el técnico
     if (v.estado === 'Cancelada') g.canc++;
     // las vencidas cuentan en el total (bajan el %) pero no como "activas"
     if (ACTIVOS.includes(v.estado) && !(v.fecha && v.fecha < today)) g.activas++;
@@ -245,7 +251,7 @@ function rendimientoTecnicos(vs) {
   });
   tecLists.clear();
   const rows = Object.entries(map)
-    .map(([k, g]) => ({ k, ...g, name: parseTecnico(k).short, rate: g.total ? Math.round((g.comp / g.total) * 100) : 0 }))
+    .map(([k, g]) => ({ k, ...g, name: parseTecnico(k).short, base: g.total - g.cancCli, rate: (g.total - g.cancCli) > 0 ? Math.round((g.comp / (g.total - g.cancCli)) * 100) : 0 }))
     .sort((a, b) => b.comp - a.comp || b.total - a.total);
   rows.forEach((r) => tecLists.set(r.k, { title: `Visitas de ${r.name} (${periodoLabel()})`, list: r.list }));
   const stat = (val, label, cls = '') => `<div class="pst ${cls}"><b>${val}</b><span>${esc(label)}</span></div>`;
@@ -261,6 +267,26 @@ function rendimientoTecnicos(vs) {
   };
 
   const totComp = rows.reduce((s, r) => s + r.comp, 0);
+  // Índice de trabajo: completadas del técnico vs. promedio del equipo (100 = promedio)
+  const prom = rows.length ? totComp / rows.length : 0;
+  rows.forEach((r) => {
+    r.indice = prom ? Math.round((r.comp / prom) * 100) : 0;
+    r.aporte = totComp ? Math.round((r.comp / totComp) * 100) : 0;
+    r.nivel = r.indice >= 110 ? 'Participación alta' : r.indice >= 90 ? 'Participación media' : 'Participación baja';
+  });
+  const maxComp = Math.max(1, ...rows.map((r) => r.comp));
+  const ranking = rows.length > 1 ? `
+    <div class="rank-box">
+      <div class="rank-head"><b>📊 Distribución del trabajo</b><span class="muted-sm">Visitas completadas en “${esc(periodoLabel())}” y la parte del total del equipo que aportó cada uno</span></div>
+      ${rows.map((r) => `
+        <div class="rank-row" title="Índice ${r.indice} (100 = promedio del equipo)">
+          <span class="rank-pos">${techAvatar(r.k)}</span>
+          <span class="rank-name truncate">${esc(r.name)}</span>
+          <span class="rank-track"><span class="rank-fill" style="width:${(r.comp / maxComp) * 100}%"></span></span>
+          <span class="rank-val"><b>${r.comp}</b> visita${r.comp === 1 ? '' : 's'} · ${r.aporte}%</span>
+          <span class="rank-tag">${r.nivel}</span>
+        </div>`).join('')}
+    </div>` : '';
 
   const items = rows.length ? rows.map((r) => {
     const isOpen = pstate.openTecs.has(r.k);
@@ -272,7 +298,7 @@ function rendimientoTecnicos(vs) {
         <span class="perf-ava">${techAvatar(r.k)}</span>
         <span class="perf-id">
           <span class="cell-strong truncate">${esc(r.name)}</span>
-          <span class="cell-sub">${r.comp} de ${r.total} completada${r.total === 1 ? '' : 's'}</span>
+          <span class="cell-sub">${r.comp} de ${r.base} completada${r.base === 1 ? '' : 's'}${r.cancCli ? ` · ${r.cancCli} cancelada${r.cancCli === 1 ? '' : 's'} por cliente` : ''}</span>
         </span>
         <span class="perf-meter" title="${r.rate}% completadas">
           <span class="perf-meter-track"><span class="perf-meter-fill" style="width:${r.rate}%"></span></span>
@@ -282,10 +308,12 @@ function rendimientoTecnicos(vs) {
       </summary>
       <div class="perf-body">
         <div class="perf-stats">
+          ${stat(r.aporte + '%', 'Del trabajo del equipo')}
+          ${stat(r.indice, 'Índice (100 = promedio)')}
           ${stat(r.total, 'Asignadas')}
           ${stat(r.comp, `Completadas (${r.rate}%)`, 'ok')}
           ${stat(r.activas, 'Activas')}
-          ${stat(r.canc, 'Canceladas')}
+          ${stat(r.canc, r.canc ? `Canceladas · ${r.cancCli} por cliente` : 'Canceladas')}
           ${stat(porDia ? porDia.toFixed(1).replace('.0', '') : '—', 'Cierres por día trabajado')}
           ${stat(r.diasComp.size, 'Días trabajados')}
           ${stat(r.cierres.length ? Math.round((r.aTiempo / r.cierres.length) * 100) + '%' : '—', 'Cerradas el día agendado')}
@@ -312,6 +340,7 @@ function rendimientoTecnicos(vs) {
         </span>
       </summary>
       <div class="card-pad perf-list">
+        ${ranking}
         ${items}
       </div>
     </details>`;

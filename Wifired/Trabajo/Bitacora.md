@@ -2,6 +2,14 @@
 
 > Registro corto de lo hecho. Lo nuevo arriba.
 
+- **2026-10** 🐛 Nodo se cambiaba solo al editar (técnico lo pisaba / select perdía valores fuera de
+  lista). Corregido. Buscador de clientes tolerante a errores. Formulario con secciones.
+
+- **2026-10** 📊 Panel: "Distribución del trabajo" por técnico (participación alta/media/baja, tono sutil).
+
+- **2026-10** Cancelar vencida pide **quién canceló** (cliente/técnico). Las del cliente no bajan el
+  rendimiento del técnico.
+
 - **2026-10** Seguimiento: coordinación cierra vencidas (✓ Completada / ✕ Cancelada). El % por
   técnico cuenta sus vencidas. 🛡️ db.js: `historial`/`evidencias` de visitas siempre se guardan como
   JSON en texto (si llegaba un arreglo, el historial se perdía).

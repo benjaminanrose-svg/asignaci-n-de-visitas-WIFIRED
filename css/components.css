@@ -851,3 +851,33 @@ details[open] > .perf-head .perf-chev { transform: rotate(180deg); }
 .venc-main { display: flex; flex-direction: column; min-width: 0; }
 .venc-side { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
 .venc-dias { font-size: 12px; font-weight: 700; color: #dc2626; }
+
+.causa-opts { display: grid; gap: 8px; margin: 0 0 12px; }
+.causa-opt { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border-2); border-radius: 10px; cursor: pointer; }
+.causa-opt:has(input:checked) { border-color: var(--primary, #2563eb); background: var(--surface-2); }
+.causa-opt input { margin-top: 3px; }
+.causa-opt span { display: flex; flex-direction: column; gap: 2px; }
+.causa-opt small { color: var(--text-3); font-size: 12px; }
+
+/* ---- Panel: ranking de trabajo por técnico ---- */
+.rank-box { border: 1px solid var(--border-2); border-radius: 12px; padding: 12px; margin-bottom: 12px; background: var(--surface-2); }
+.rank-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.rank-row { display: grid; grid-template-columns: 30px minmax(80px, 140px) 1fr auto auto; align-items: center; gap: 10px; padding: 6px 0; }
+.rank-pos { display: flex; justify-content: center; }
+.rank-name { font-weight: 600; }
+.rank-track { height: 6px; border-radius: 999px; background: var(--border-2); overflow: hidden; }
+.rank-fill { display: block; height: 100%; min-width: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--brand-600), var(--accent)); opacity: .85; }
+.rank-val { font-size: 12.5px; white-space: nowrap; color: var(--text-2, inherit); }
+.rank-tag { font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; border: 1px solid var(--border-2); color: var(--text-3); }
+@media (max-width: 640px) {
+  .rank-row { grid-template-columns: 30px 1fr auto; }
+  .rank-track { grid-column: 2 / -1; grid-row: 2; }
+  .rank-val { grid-column: 2; grid-row: 3; }
+  .rank-tag { grid-column: 3; grid-row: 1; }
+}
+
+/* ---- Nueva visita: secciones y buscador de clientes ---- */
+.form-sec { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); padding-bottom: 6px; border-bottom: 1px solid var(--border-2); margin-top: 4px; }
+.cli-ac-opt.is-act, .cli-ac-opt:hover { background: var(--surface-2); }
+.cli-sug { margin-left: 6px; padding: 3px 10px; border-radius: 999px; border: 1px dashed var(--border); background: transparent; color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+.cli-sug:hover { background: var(--surface-2); }

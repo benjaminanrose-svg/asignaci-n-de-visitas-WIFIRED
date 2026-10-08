@@ -7,7 +7,61 @@ import * as store from './store.js';
 
 function opt(list, sel, placeholder) {
   const ph = placeholder ? `<option value="">${esc(placeholder)}</option>` : '';
-  return ph + list.map((x) => `<option value="${esc(x)}" ${x === sel ? 'selected' : ''}>${esc(x)}</option>`).join('');
+  // PROTECCIÓN: si el valor guardado ya no está en la lista (ej. nodo o técnico renombrado),
+  // se conserva como opción; si no, el select quedaría vacío y al guardar se borraría.
+  const extra = sel && !list.includes(sel) ? `<option value="${esc(sel)}" selected>${esc(sel)}</option>` : '';
+  return ph + extra + list.map((x) => `<option value="${esc(x)}" ${x === sel ? 'selected' : ''}>${esc(x)}</option>`).join('');
+}
+
+// ---- Búsqueda tolerante de clientes: sin tildes, en cualquier orden, con 1 letra de error ----
+const normTxt = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9@. ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const soloNum = (s) => String(s || '').replace(/[^0-9kK]/g, '').toLowerCase();
+// ¿a y b difieren en como máximo una letra (cambiada, sobrante o faltante)?
+function casiIgual(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, e = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++e > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return e + (a.length - i) + (b.length - j) <= 1;
+}
+function puntajeCliente(c, tokens) {
+  const nom = normTxt(c.nombre);
+  const words = `${nom} ${normTxt(c.direccion)} ${normTxt(c.email)}`.split(' ').filter(Boolean);
+  let score = 0;
+  for (const t of tokens) {
+    let best = 0;
+    for (const w of words) {
+      if (w === t) { best = 4; break; }
+      if (w.startsWith(t)) best = Math.max(best, 3);
+      else if (t.length >= 3 && w.includes(t)) best = Math.max(best, 2);
+      else if (t.length >= 4 && (casiIgual(w, t) || (w.length > t.length && casiIgual(w.slice(0, t.length), t)))) best = Math.max(best, 1);
+    }
+    if (!best) return 0; // cada palabra escrita debe aparecer (aunque sea con 1 error)
+    score += best;
+  }
+  if (nom.startsWith(tokens.join(' '))) score += 3;
+  return score;
+}
+// Un mismo cliente puede venir de varias visitas (una con RUT, otra sin): se muestra una sola vez
+function sinRepetidos(lista) {
+  const m = new Map();
+  lista.forEach((c) => {
+    const k = normTxt(c.nombre); const p = m.get(k);
+    if (!p) m.set(k, c);
+    else if ((!p.rut && c.rut) || (!p.servicio && c.servicio)) m.set(k, { ...p, ...Object.fromEntries(Object.entries(c).filter(([, val]) => val)) });
+  });
+  return [...m.values()];
+}
+function buscarClientes(index, raw) {
+  const num = soloNum(raw);
+  const esNum = num.length >= 3 && !/[a-jl-z]/i.test(String(raw || ''));
+  if (esNum) return sinRepetidos(index.filter((c) => soloNum(c.rut).includes(num) || soloNum(c.telefono).includes(num)));
+  const tokens = normTxt(raw).split(' ').filter(Boolean);
+  if (!tokens.length) return [];
+  return sinRepetidos(index.map((c) => ({ c, s: puntajeCliente(c, tokens) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).map((x) => x.c));
 }
 
 // Índice de clientes (visitas + servicios) para autocompletar en "Nueva visita".
@@ -18,8 +72,9 @@ function buildClientesIndex(servicios) {
     const nombre = src.cliente || src.nombre || '';
     const key = clientKey({ rut: src.rut, telefono: src.telefono, nombre });
     if (!key) return;
-    const cur = map.get(key) || { key, nombre: '', rut: '', telefono: '', email: '', direccion: '', gps: '', servicio: null };
+    const cur = map.get(key) || { key, nombre: '', rut: '', telefono: '', email: '', direccion: '', gps: '', nodo: '', servicio: null };
     cur.gps = cur.gps || src.gps || '';
+    if (servicio && src.nodo) cur.nodo = src.nodo; else cur.nodo = cur.nodo || src.nodo || '';
     cur.nombre = cur.nombre || nombre;
     cur.rut = cur.rut || src.rut || '';
     cur.telefono = cur.telefono || src.telefono || '';
@@ -48,21 +103,36 @@ function setupClienteAutocomplete(node) {
     if (!nombre) { statusEl.innerHTML = ''; matched = null; return; }
     const keyRut = clientKey({ rut: field('rut') ? field('rut').value : '' });
     const m = (keyRut ? index.find((c) => clientKey({ rut: c.rut }) === keyRut) : null)
-      || index.find((c) => normName(c.nombre) === normName(nombre)) || null;
+      || index.find((c) => normTxt(c.nombre) === normTxt(nombre)) || null;
     matched = m;
-    statusEl.innerHTML = m
-      ? '<span class="cli-badge ok">🟢 Cliente registrado</span>'
-      : '<span class="cli-badge new">🔵 Nuevo cliente</span>';
+    if (m) { statusEl.innerHTML = '<span class="cli-badge ok">🟢 Cliente registrado</span>'; return; }
+    // No hay coincidencia exacta: sugerir el más parecido (ej. escrito sin tilde o con 1 error)
+    const sug = nombre.length >= 4 ? buscarClientes(index, nombre)[0] : null;
+    statusEl.innerHTML = '<span class="cli-badge new">🔵 Nuevo cliente</span>' +
+      (sug ? ` <button type="button" class="cli-sug" data-sug="${esc(sug.key)}">¿Es <b>${esc(sug.nombre)}</b>? Usar sus datos</button>` : '');
+    const sb = statusEl.querySelector('[data-sug]');
+    if (sb) sb.onclick = () => elegir(sug);
   };
 
+  let opciones = [];
+  let activo = -1;
+  const marcar = () => acEl.querySelectorAll('.cli-ac-opt').forEach((b, i) => b.classList.toggle('is-act', i === activo));
   const pintarAC = () => {
-    const term = (inp.value || '').toLowerCase().trim();
-    const arr = term ? index.filter((c) => `${c.nombre} ${c.rut} ${c.direccion} ${c.telefono}`.toLowerCase().includes(term)).slice(0, 8) : [];
-    if (!arr.length) { acEl.hidden = true; acEl.innerHTML = ''; return; }
+    opciones = buscarClientes(index, inp.value).slice(0, 8);
+    activo = -1;
+    if (!opciones.length) { acEl.hidden = true; acEl.innerHTML = ''; return; }
     acEl.hidden = false;
-    acEl.innerHTML = arr.map((c) => `<button type="button" class="cli-ac-opt" data-k="${esc(c.key)}"><span class="cell-strong">${esc(c.nombre)}</span><span class="cell-sub">${[c.rut ? formatRut(c.rut) : '', c.direccion].filter(Boolean).map(esc).join(' · ') || '—'}</span></button>`).join('');
-    acEl.querySelectorAll('[data-k]').forEach((b) => (b.onclick = () => elegir(index.find((c) => c.key === b.dataset.k))));
+    acEl.innerHTML = opciones.map((c) => `<button type="button" class="cli-ac-opt" data-k="${esc(c.key)}"><span class="cell-strong">${esc(c.nombre)}</span><span class="cell-sub">${[c.rut ? formatRut(c.rut) : '', c.telefono, c.direccion, c.nodo ? '📡 ' + c.nodo : ''].filter(Boolean).map(esc).join(' · ') || '—'}</span></button>`).join('');
+    acEl.querySelectorAll('[data-k]').forEach((b) => (b.onmousedown = (e) => { e.preventDefault(); elegir(opciones.find((c) => c.key === b.dataset.k)); }));
   };
+  // Flechas ↑ ↓ para moverse, Enter para elegir, Esc para cerrar
+  inp.addEventListener('keydown', (e) => {
+    if (acEl.hidden || !opciones.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); activo = (activo + 1) % opciones.length; marcar(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); activo = (activo - 1 + opciones.length) % opciones.length; marcar(); }
+    else if (e.key === 'Enter' && activo >= 0) { e.preventDefault(); elegir(opciones[activo]); }
+    else if (e.key === 'Escape') { acEl.hidden = true; }
+  });
 
   const elegir = (c) => {
     if (!c) return;
@@ -72,6 +142,12 @@ function setupClienteAutocomplete(node) {
     if (field('email')) field('email').value = c.email || '';
     if (field('direccion')) field('direccion').value = c.direccion || '';
     if (field('gps') && c.gps) { field('gps').value = c.gps; field('gps').dispatchEvent(new Event('input')); }
+    // Nodo del cliente: solo si todavía no se eligió uno (nunca reemplaza lo que pusiste)
+    const nodoSel = field('nodo');
+    if (nodoSel && c.nodo && !nodoSel.value) {
+      if (![...nodoSel.options].some((o) => o.value === c.nodo)) nodoSel.add(new Option(c.nodo, c.nodo));
+      nodoSel.value = c.nodo;
+    }
     matched = c;
     acEl.hidden = true; acEl.innerHTML = '';
     setStatus();
@@ -123,8 +199,9 @@ export function visitFormModal(existing = null, prefill = {}) {
             <label>N° de Orden de Trabajo (OT)</label>
             <input class="input" name="ot" value="${esc(v.id || '')}" placeholder="OT-MEL-2026-001" autocomplete="off" />
           </div>`}
+          <div class="form-sec full">👤 Datos del cliente</div>
           <div class="field full" style="position:relative">
-            <label>Nombre del cliente *</label>
+            <label>Nombre del cliente * <span class="muted-sm">(busca por nombre, RUT o teléfono)</span></label>
             <input class="input" name="cliente" required value="${esc(v.cliente || prefill.cliente || '')}" placeholder="Nombre y apellidos" autocomplete="off" />
             <div class="cli-ac" data-ac hidden></div>
             <div class="cli-status" data-cli-status></div>
@@ -137,7 +214,7 @@ export function visitFormModal(existing = null, prefill = {}) {
             <label>Teléfono</label>
             <input class="input" name="telefono" value="${esc(v.telefono || prefill.telefono || '')}" placeholder="9 1234 5678" inputmode="tel" autocomplete="off" />
           </div>
-          <div class="field" data-facti-hide>
+          <div class="field full" data-facti-hide>
             <label>Correo del cliente</label>
             <input class="input" type="email" name="email" value="${esc(v.email || prefill.email || '')}" placeholder="cliente@correo.com" autocomplete="off" />
           </div>
@@ -150,6 +227,7 @@ export function visitFormModal(existing = null, prefill = {}) {
             <input class="input" name="gps" value="${esc(v.gps || prefill.gps || '')}" placeholder="Ej: https://maps.app.goo.gl/… o -33.8462, -70.9614" autocomplete="off" />
             <div class="gps-help" data-gps-help></div>
           </div>
+          <div class="form-sec full">🛠 Trabajo y agenda</div>
           <div class="field full">
             <label>Tipo de visita *</label>
             <select class="select" name="tipo" required>${opt(tipos, v.tipo, 'Seleccionar tipo…')}</select>
@@ -166,6 +244,10 @@ export function visitFormModal(existing = null, prefill = {}) {
             <label>Técnico asignado</label>
             <select class="select" name="tecnico">${opt(store.tecnicos(), v.tecnico || prefill.tecnico, 'Sin asignar')}</select>
           </div>
+          <div class="field">
+            <label>Nodo</label>
+            <select class="select" name="nodo">${opt(store.nodos(), v.nodo, 'Sin nodo')}</select>
+          </div>
           <div class="field" data-facti-hide>
             <label>Estado</label>
             <select class="select" name="estado">${opt(store.estados(), v.estado || 'Pendiente')}</select>
@@ -173,10 +255,6 @@ export function visitFormModal(existing = null, prefill = {}) {
           <div class="field" data-facti-hide>
             <label>Prioridad</label>
             <select class="select" name="prioridad">${opt(store.prioridades(), v.prioridad || 'Media')}</select>
-          </div>
-          <div class="field">
-            <label>Nodo</label>
-            <select class="select" name="nodo">${opt(store.nodos(), v.nodo, 'Sin nodo')}</select>
           </div>
           <div class="field full">
             <label>Detalle / nota</label>
@@ -208,7 +286,7 @@ export function visitFormModal(existing = null, prefill = {}) {
   const nodoSel = node.querySelector('[name=nodo]');
   if (tecSel && nodoSel) tecSel.addEventListener('change', () => {
     const z = zonaDeVisita({ tecnico: tecSel.value });
-    if (!z) return;
+    if (!z || nodoSel.value) return; // solo sugiere si NO hay nodo elegido: nunca cambia uno ya puesto
     // Elige un nodo cuya zona configurada coincida con la del técnico.
     const opt = [...nodoSel.options].find((o) => o.value && (zonaDeNodo(o.value) || {}).key === z.key);
     if (opt) nodoSel.value = opt.value;

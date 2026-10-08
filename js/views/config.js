@@ -716,13 +716,20 @@ function cerrarVencidaModal(uid, estado) {
       <p><b>${esc(v.cliente || 'Sin nombre')}</b><br><span class="muted-sm">${esc([v.ot, v.tecnico ? parseTecnico(v.tecnico).short : '', fmtDateShort(v.fecha)].filter(Boolean).join(' · '))}</span></p>
       <p class="muted-sm" style="margin:10px 0">${comp
         ? 'Úsalo si confirmaste que el técnico <b>sí hizo</b> el trabajo.' + (v.email && !v.orden_enviada ? ' Se enviará la orden al correo del cliente.' : '')
-        : 'Úsalo si el técnico <b>no hizo</b> la visita.'}</p>
+        : '<b>¿Quién canceló?</b> Si fue el cliente, no afecta el rendimiento del técnico.'}</p>
+      ${comp ? '' : `<div class="causa-opts">
+        <label class="causa-opt"><input type="radio" name="causa" value="cliente"><span><b>👤 El cliente</b><small>No estaba, no quiso o pidió cancelar · no afecta su rendimiento</small></span></label>
+        <label class="causa-opt"><input type="radio" name="causa" value="tecnico"><span><b>🔧 El técnico</b><small>No fue o no hizo el trabajo · sí afecta su rendimiento</small></span></label>
+      </div>`}
       <textarea class="textarea" data-nota rows="2" placeholder="Nota (opcional): ej. confirmado con el cliente por teléfono"></textarea>
     </div>
     <div class="modal-foot"><div class="grow"></div><button class="btn" data-close>Volver</button><button class="btn ${comp ? 'btn-primary' : 'btn-danger'}" data-ok>Confirmar</button></div>`;
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
   const ok = node.querySelector('[data-ok]');
   ok.onclick = async () => {
+    const sel = node.querySelector('input[name="causa"]:checked');
+    const causa = sel ? sel.value : '';
+    if (!comp && !causa) { toast('Elige quién canceló la visita', 'info'); return; }
     ok.disabled = true;
     try {
       await store.conMedia(v); // historial completo antes de agregar el evento (no se pierde nada)
@@ -730,7 +737,8 @@ function cerrarVencidaModal(uid, estado) {
       const u = store.currentUser();
       const hist = (Array.isArray(v.historial) ? v.historial : []).concat([{
         ts: Date.now(), autor: (u && u.nombre) || 'Coordinación', tipo: comp ? 'completada' : 'cancelada', estado,
-        motivo: 'Visita vencida verificada por coordinación' + (nota ? ': ' + nota : ''),
+        ...(causa ? { causa } : {}),
+        motivo: (comp ? 'Visita vencida verificada por coordinación' : `Cancelada por ${causa === 'cliente' ? 'el cliente' : 'el técnico'} (verificada por coordinación)`) + (nota ? ': ' + nota : ''),
       }]);
       await store.updateVisita(uid, { estado, historial: JSON.stringify(hist) });
       closeModal();

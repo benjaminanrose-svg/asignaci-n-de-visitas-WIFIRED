@@ -6,6 +6,9 @@ En `js/views/`. Roles: **coordinador** (ve todo) y **técnico** (ve lo suyo).
   canceladas, cierres por día, días trabajados, % cerradas el día
   agendado, demora promedio, último cierre, zonas, tipos y nodos; botón "Ver sus visitas").
   La demora usa el evento `completada` del historial.
+  **📊 Distribución del trabajo** (tono sutil, sin rojo ni posiciones): completadas del período, % del
+  equipo y etiqueta neutra Participación alta/media/baja (índice = completadas ÷ promedio × 100;
+  ≥110 alta, 90–109 media, <90 baja). Regla: no exponer al técnico de forma agresiva.
   ⚠ El panel **excluye** las activas con fecha de ayer o antes (van a Configuración → Seguimiento),
   **salvo el % de cada técnico**, que sí las cuenta (bajan su %; no figuran como activas).
 - **Calendario** — mensual con colores por [[Zonas]] (barra + `📍 MEL/PAI`) y
@@ -31,9 +34,16 @@ En `js/views/`. Roles: **coordinador** (ve todo) y **técnico** (ve lo suyo).
   **⏰ Seguimiento** = visitas activas vencidas (fecha pasada: desde ayer / ≥7 / 15 / 30 días y aún
   Pendiente/Programada/Reprogramada), agrupadas por técnico; contador rojo en la pestaña. Botones **✓ Completada** (técnico sí la hizo)
   y **✕ Cancelada** (no la hizo) con nota opcional → queda en el historial "verificada por coordinación".
+  Al cancelar se elige **quién canceló** (cliente / técnico) → `causa` en el evento `cancelada` del
+  historial (sin columna nueva). Canceladas **por cliente** no cuentan en el % del técnico.
   Cuentas de coordinación en Empresa y General.
 
 ## Nueva visita (formulario)
+- Secciones "Datos del cliente" / "Trabajo y agenda". Buscador tolerante (`buscarClientes` en form.js):
+  sin tildes, palabras en cualquier orden, 1 letra de error, por RUT/teléfono, sin repetidos,
+  teclas ↑↓ Enter; si no hay match exacto sugiere "¿Es X?".
+- 🛡️ Nodo: el técnico solo sugiere nodo si está vacío; `opt()` conserva valores que ya no están en
+  la lista (antes el select quedaba vacío y al guardar se borraba). Al elegir cliente, nodo solo si vacío.
 Al escribir el nombre del cliente **autocompleta** desde los clientes existentes
 (rellena RUT, teléfono, correo y dirección) y muestra un badge
 🟢 *Cliente registrado* / 🔵 *Nuevo cliente*.
