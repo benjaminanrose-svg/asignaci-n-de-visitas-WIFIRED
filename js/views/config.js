@@ -5,8 +5,9 @@
 // la orden de trabajo.
 // ============================================================
 import * as store from '../store.js';
-import { esc, toast, bindField, validaEmail, zonaDeNodo, ZONAS } from '../util.js';
-import { openModal, closeModal, claveTemporalModal } from '../components.js';
+import { esc, toast, bindField, validaEmail, zonaDeNodo, ZONAS, parseTecnico, fmtDateShort, todayISO, parseDate } from '../util.js';
+import { openModal, closeModal, claveTemporalModal, visitDetailModal, workOrderModal, statusBadge } from '../components.js';
+import { visitFormModal } from '../form.js';
 import { broadcastModal, contactosModal } from './servicios.js';
 
 
@@ -141,6 +142,7 @@ export function renderConfig(root) {
       <button class="cfg-tab" data-tab="red">📡 Red y Nodos</button>
       <button class="cfg-tab" data-tab="agenda">📅 Agendamiento</button>
       <button class="cfg-tab" data-tab="sistema">🤖 Sistema e Integraciones</button>
+      <button class="cfg-tab" data-tab="seguimiento">⏰ Seguimiento <span class="tab-badge" data-venc-badge hidden></span></button>
     </div>
     <div class="cfg-wrap">
       <div class="card cfg-card" data-group="empresa">
@@ -202,6 +204,15 @@ ${bot.solo_comunicados !== false ? `
         <p class="muted-sm">Cada coordinador entra con su propio usuario: así el historial muestra quién hizo cada cosa. Las claves se guardan cifradas y nadie puede verlas; si alguien la olvida, se restablece.</p>
         <div data-coords><p class="muted-sm">Cargando…</p></div>
         <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn btn-primary btn-sm" data-coord-new>＋ Nuevo coordinador</button></div>
+      </div>
+
+      <div class="card cfg-card" data-group="seguimiento" hidden>
+        <h3 class="cfg-title">⏰ Visitas activas vencidas</h3>
+        <p class="muted-sm">Visitas que siguen <b>Pendientes, Programadas o Reprogramadas</b> aunque su fecha ya pasó. Casi siempre es porque el técnico olvidó marcarlas como completadas. Ábrelas para revisarlas, completarlas o reagendarlas.</p>
+        <div class="row" style="gap:8px;margin:10px 0 4px;flex-wrap:wrap"><span class="muted-sm">Antigüedad mínima:</span>
+          <div class="seg">${[7, 15, 30].map((d) => `<button class="seg-btn${d === vencDias ? ' active' : ''}" data-venc-dias="${d}">${d} días</button>`).join('')}</div>
+        </div>
+        <div data-vencidas></div>
       </div>
 
       <div class="card cfg-card" data-group="red">
@@ -336,6 +347,18 @@ ${bot.solo_comunicados !== false ? `
   if (soBtn) soBtn.onclick = () => setSolo(true);
   // Cuentas de coordinación
   pintarCoords(root);
+  pintarVencidas(root);
+  root.querySelectorAll('[data-venc-dias]').forEach((b) => (b.onclick = () => {
+    vencDias = Number(b.dataset.vencDias);
+    root.querySelectorAll('[data-venc-dias]').forEach((x) => x.classList.toggle('active', x === b));
+    pintarVencidas(root);
+  }));
+  // Se actualiza sola si una visita cambia (ej. la completas desde el detalle)
+  if (unsubVenc) unsubVenc();
+  unsubVenc = store.subscribe(() => {
+    if (!root.querySelector('[data-vencidas]')) { if (unsubVenc) unsubVenc(); unsubVenc = null; return; }
+    pintarVencidas(root);
+  });
   const ncBtn = root.querySelector('[data-coord-new]');
   if (ncBtn) ncBtn.onclick = () => nuevoCoordModal(root);
 
@@ -632,4 +655,44 @@ function nuevoCoordModal(root) {
     catch (err) { toast(err.message || 'No se pudo crear', 'info'); btn.disabled = false; }
   };
   openModal(node, 'md', { dismissable: false });
+}
+
+
+// ---------- Seguimiento: visitas activas vencidas ----------
+let vencDias = 7;
+let unsubVenc = null;
+function visitasVencidas(dias) {
+  const hoy = parseDate(todayISO());
+  return store.visitas()
+    .filter((v) => ['Pendiente', 'Programada', 'Reprogramada'].includes(v.estado) && v.fecha)
+    .map((v) => { const d = parseDate(v.fecha); return { v, dias: d ? Math.floor((hoy - d) / 86400000) : -1 }; })
+    .filter((x) => x.dias >= dias)
+    .sort((a, b) => b.dias - a.dias);
+}
+function pintarVencidas(root) {
+  const box = root.querySelector('[data-vencidas]');
+  if (!box) return;
+  const lista = visitasVencidas(vencDias);
+  const badge = root.querySelector('[data-venc-badge]');
+  const totalBadge = visitasVencidas(7).length;
+  if (badge) { badge.hidden = !totalBadge; badge.textContent = totalBadge; }
+  if (!lista.length) { box.innerHTML = `<p class="muted" style="padding:14px 0">✅ No hay visitas activas con más de ${vencDias} días de antigüedad.</p>`; return; }
+  const grupos = {};
+  lista.forEach((x) => { const k = x.v.tecnico || ''; (grupos[k] = grupos[k] || []).push(x); });
+  const orden = Object.keys(grupos).sort((a, b) => grupos[b].length - grupos[a].length);
+  box.innerHTML = `<p class="muted-sm" style="margin:6px 0 10px"><b>${lista.length}</b> visita${lista.length === 1 ? '' : 's'} vencida${lista.length === 1 ? '' : 's'} · toca una para abrirla</p>` +
+    orden.map((k) => `
+      <div class="venc-grupo">
+        <div class="venc-tec"><b>${esc(k ? parseTecnico(k).short : 'Sin técnico asignado')}</b><span class="tab-badge">${grupos[k].length}</span></div>
+        ${grupos[k].map(({ v, dias }) => `
+          <button class="venc-row" data-venc-open="${esc(v._uid)}">
+            <span class="venc-main"><span class="cell-strong truncate">${esc(v.cliente || 'Sin nombre')}</span>
+              <span class="cell-sub truncate">${esc([v.ot, v.tipo, v.nodo].filter(Boolean).join(' · ') || '—')}</span></span>
+            <span class="venc-side"><span class="venc-dias">hace ${dias} días</span><span class="muted-sm">${esc(fmtDateShort(v.fecha))}</span>${statusBadge(v.estado)}</span>
+          </button>`).join('')}
+      </div>`).join('');
+  box.querySelectorAll('[data-venc-open]').forEach((el) => (el.onclick = () => {
+    const v = store.byUid(el.dataset.vencOpen);
+    if (v) visitDetailModal(v, { onEdit: (x) => visitFormModal(x), onOrder: (x) => workOrderModal(x, store.company) });
+  }));
 }
