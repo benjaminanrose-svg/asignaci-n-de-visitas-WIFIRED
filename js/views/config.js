@@ -210,7 +210,7 @@ ${bot.solo_comunicados !== false ? `
         <h3 class="cfg-title">⏰ Visitas activas vencidas</h3>
         <p class="muted-sm">Visitas que siguen <b>Pendientes, Programadas o Reprogramadas</b> aunque su fecha ya pasó. Casi siempre es porque el técnico olvidó marcarlas como completadas. Ábrelas para revisarlas, completarlas o reagendarlas.</p>
         <div class="row" style="gap:8px;margin:10px 0 4px;flex-wrap:wrap"><span class="muted-sm">Antigüedad mínima:</span>
-          <div class="seg">${[7, 15, 30].map((d) => `<button class="seg-btn${d === vencDias ? ' active' : ''}" data-venc-dias="${d}">${d} días</button>`).join('')}</div>
+          <div class="seg">${[1, 7, 15, 30].map((d) => `<button class="seg-btn${d === vencDias ? ' active' : ''}" data-venc-dias="${d}">${d === 1 ? 'Desde ayer' : d + ' días'}</button>`).join('')}</div>
         </div>
         <div data-vencidas></div>
       </div>
@@ -659,7 +659,7 @@ function nuevoCoordModal(root) {
 
 
 // ---------- Seguimiento: visitas activas vencidas ----------
-let vencDias = 7;
+let vencDias = 1;
 let unsubVenc = null;
 function visitasVencidas(dias) {
   const hoy = parseDate(todayISO());
@@ -674,9 +674,9 @@ function pintarVencidas(root) {
   if (!box) return;
   const lista = visitasVencidas(vencDias);
   const badge = root.querySelector('[data-venc-badge]');
-  const totalBadge = visitasVencidas(7).length;
+  const totalBadge = visitasVencidas(1).length;
   if (badge) { badge.hidden = !totalBadge; badge.textContent = totalBadge; }
-  if (!lista.length) { box.innerHTML = `<p class="muted" style="padding:14px 0">✅ No hay visitas activas con más de ${vencDias} días de antigüedad.</p>`; return; }
+  if (!lista.length) { box.innerHTML = `<p class="muted" style="padding:14px 0">✅ No hay visitas activas ${vencDias === 1 ? 'con fecha pasada' : `con más de ${vencDias} días de antigüedad`}.</p>`; return; }
   const grupos = {};
   lista.forEach((x) => { const k = x.v.tecnico || ''; (grupos[k] = grupos[k] || []).push(x); });
   const orden = Object.keys(grupos).sort((a, b) => grupos[b].length - grupos[a].length);
@@ -685,14 +685,60 @@ function pintarVencidas(root) {
       <div class="venc-grupo">
         <div class="venc-tec"><b>${esc(k ? parseTecnico(k).short : 'Sin técnico asignado')}</b><span class="tab-badge">${grupos[k].length}</span></div>
         ${grupos[k].map(({ v, dias }) => `
-          <button class="venc-row" data-venc-open="${esc(v._uid)}">
-            <span class="venc-main"><span class="cell-strong truncate">${esc(v.cliente || 'Sin nombre')}</span>
-              <span class="cell-sub truncate">${esc([v.ot, v.tipo, v.nodo].filter(Boolean).join(' · ') || '—')}</span></span>
-            <span class="venc-side"><span class="venc-dias">hace ${dias} días</span><span class="muted-sm">${esc(fmtDateShort(v.fecha))}</span>${statusBadge(v.estado)}</span>
-          </button>`).join('')}
+          <div class="venc-row">
+            <button class="venc-open" data-venc-open="${esc(v._uid)}" title="Ver detalle">
+              <span class="venc-main"><span class="cell-strong truncate">${esc(v.cliente || 'Sin nombre')}</span>
+                <span class="cell-sub truncate">${esc([v.ot, v.tipo, v.nodo].filter(Boolean).join(' · ') || '—')}</span></span>
+              <span class="venc-side"><span class="venc-dias">hace ${dias} día${dias === 1 ? '' : 's'}</span><span class="muted-sm">${esc(fmtDateShort(v.fecha))}</span>${statusBadge(v.estado)}</span>
+            </button>
+            <div class="venc-acts">
+              <button class="btn btn-sm venc-ok" data-venc-set="Completada" data-uid="${esc(v._uid)}">✓ Completada</button>
+              <button class="btn btn-sm btn-danger" data-venc-set="Cancelada" data-uid="${esc(v._uid)}">✕ Cancelada</button>
+            </div>
+          </div>`).join('')}
       </div>`).join('');
+  box.querySelectorAll('[data-venc-set]').forEach((b) => (b.onclick = () => cerrarVencidaModal(b.dataset.uid, b.dataset.vencSet)));
   box.querySelectorAll('[data-venc-open]').forEach((el) => (el.onclick = () => {
     const v = store.byUid(el.dataset.vencOpen);
     if (v) visitDetailModal(v, { onEdit: (x) => visitFormModal(x), onOrder: (x) => workOrderModal(x, store.company) });
   }));
+}
+
+// Coordinación verifica una visita vencida: Completada (el técnico sí la hizo) o Cancelada (no la hizo)
+function cerrarVencidaModal(uid, estado) {
+  const v = store.byUid(uid);
+  if (!v) return;
+  const comp = estado === 'Completada';
+  const node = document.createElement('div');
+  node.innerHTML = `
+    <div class="modal-head"><h3>${comp ? '✓ Marcar como completada' : '✕ Marcar como cancelada'}</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-body">
+      <p><b>${esc(v.cliente || 'Sin nombre')}</b><br><span class="muted-sm">${esc([v.ot, v.tecnico ? parseTecnico(v.tecnico).short : '', fmtDateShort(v.fecha)].filter(Boolean).join(' · '))}</span></p>
+      <p class="muted-sm" style="margin:10px 0">${comp
+        ? 'Úsalo si confirmaste que el técnico <b>sí hizo</b> el trabajo.' + (v.email && !v.orden_enviada ? ' Se enviará la orden al correo del cliente.' : '')
+        : 'Úsalo si el técnico <b>no hizo</b> la visita.'}</p>
+      <textarea class="textarea" data-nota rows="2" placeholder="Nota (opcional): ej. confirmado con el cliente por teléfono"></textarea>
+    </div>
+    <div class="modal-foot"><div class="grow"></div><button class="btn" data-close>Volver</button><button class="btn ${comp ? 'btn-primary' : 'btn-danger'}" data-ok>Confirmar</button></div>`;
+  node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+  const ok = node.querySelector('[data-ok]');
+  ok.onclick = async () => {
+    ok.disabled = true;
+    try {
+      await store.conMedia(v); // historial completo antes de agregar el evento (no se pierde nada)
+      const nota = node.querySelector('[data-nota]').value.trim();
+      const u = store.currentUser();
+      const hist = (Array.isArray(v.historial) ? v.historial : []).concat([{
+        ts: Date.now(), autor: (u && u.nombre) || 'Coordinación', tipo: comp ? 'completada' : 'cancelada', estado,
+        motivo: 'Visita vencida verificada por coordinación' + (nota ? ': ' + nota : ''),
+      }]);
+      await store.updateVisita(uid, { estado, historial: JSON.stringify(hist) });
+      closeModal();
+      toast(comp ? 'Visita marcada como completada ✓' : 'Visita marcada como cancelada');
+    } catch (e) {
+      ok.disabled = false;
+      if (e && e.message !== 'media-no-cargada') toast('No se pudo guardar: ' + (e.message || e), 'error');
+    }
+  };
+  openModal(node, 'sm');
 }

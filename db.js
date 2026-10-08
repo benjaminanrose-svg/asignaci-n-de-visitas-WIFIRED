@@ -384,7 +384,8 @@ function memoryStore() {
     },
     async updateVisita(id, patch) {
       const v = visitas.find((x) => x.id == id); if (!v) return null;
-      VISIT_FIELDS.forEach((k) => { if (k in patch) v[k] = patch[k]; });
+      // historial/evidencias siempre como JSON en texto (si llega un arreglo no se pierde)
+      VISIT_FIELDS.forEach((k) => { if (k in patch) v[k] = (k === 'historial' || k === 'evidencias') ? evStr(patch[k]) : patch[k]; });
       if ('ot' in patch && String(patch.ot || '').trim()) v.ot = String(patch.ot).trim();
       // Al reagendar, la OT pasa al siguiente número de su zona (sigue el orden).
       if (patch.renovar_ot) {
@@ -911,7 +912,7 @@ function pgStore(url) {
         otNueva = nextOt(exOt.map((r) => r.ot), tipo, nodo, cfgV.nodosZona, cfgV.otInicio);
       }
       const cols = [], vals = []; let i = 1;
-      VISIT_FIELDS.forEach((k) => { if (k in patch) { cols.push(`${k}=$${i++}`); vals.push(patch[k]); } });
+      VISIT_FIELDS.forEach((k) => { if (k in patch) { cols.push(`${k}=$${i++}`); vals.push((k === 'historial' || k === 'evidencias') ? evStr(patch[k]) : patch[k]); } });
       if ('ot' in patch && String(patch.ot || '').trim()) { cols.push(`ot=$${i++}`); vals.push(String(patch.ot).trim()); }
       if (otNueva) { cols.push(`ot=$${i++}`); vals.push(otNueva); }
       if (!cols.length) return null;

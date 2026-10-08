@@ -3,9 +3,11 @@
 En `js/views/`. Roles: **coordinador** (ve todo) y **técnico** (ve lo suyo).
 
 - **Panel** — resumen + **Rendimiento por técnico** detallado (asignadas, completadas, activas,
-  atrasadas, reprogramadas, canceladas, cierres por día, días trabajados, % cerradas el día
+  canceladas, cierres por día, días trabajados, % cerradas el día
   agendado, demora promedio, último cierre, zonas, tipos y nodos; botón "Ver sus visitas").
   La demora usa el evento `completada` del historial.
+  ⚠ El panel **excluye** las activas con fecha de ayer o antes (van a Configuración → Seguimiento),
+  **salvo el % de cada técnico**, que sí las cuenta (bajan su %; no figuran como activas).
 - **Calendario** — mensual con colores por [[Zonas]] (barra + `📍 MEL/PAI`) y
   filtro por zona. **Cada día es un botón**: tocar cualquier parte (incluida una
   píldora) abre la **lista de asignaciones del día**, nunca una visita suelta.
@@ -26,8 +28,9 @@ En `js/views/`. Roles: **coordinador** (ve todo) y **técnico** (ve lo suyo).
 - **Portal técnico** (celular) — diseño compacto: N° de OT y zona, barra Mapa / Llamar / WhatsApp, coordenadas GPS se muestran como "Ubicación GPS", "Completar visita" destacado y aviso de cambios sin confirmar con botón Reintentar.
 - **Configuración** — en **4 pestañas**: Empresa y General · Red y Nodos
   (incluye la **zona** de cada nodo) · Agendamiento · Sistema e Integraciones ·
-  **⏰ Seguimiento** = visitas activas vencidas (fecha pasada hace ≥7/15/30 días y aún
-  Pendiente/Programada/Reprogramada), agrupadas por técnico; contador rojo en la pestaña.
+  **⏰ Seguimiento** = visitas activas vencidas (fecha pasada: desde ayer / ≥7 / 15 / 30 días y aún
+  Pendiente/Programada/Reprogramada), agrupadas por técnico; contador rojo en la pestaña. Botones **✓ Completada** (técnico sí la hizo)
+  y **✕ Cancelada** (no la hizo) con nota opcional → queda en el historial "verificada por coordinación".
   Cuentas de coordinación en Empresa y General.
 
 ## Nueva visita (formulario)

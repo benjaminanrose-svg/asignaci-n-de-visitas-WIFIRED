@@ -843,8 +843,11 @@ details[open] > .perf-head .perf-chev { transform: rotate(180deg); }
 .tab-badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: #dc2626; color: #fff; font-size: 11px; font-weight: 700; margin-left: 4px; }
 .venc-grupo { border: 1px solid var(--border-2); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
 .venc-tec { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--surface-2); }
-.venc-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 10px 12px; border: 0; border-top: 1px solid var(--border-2); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.venc-row:hover { background: var(--surface-2); }
+.venc-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 10px 12px; border-top: 1px solid var(--border-2); }
+.venc-open { flex: 1 1 260px; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.venc-open:hover .cell-strong { text-decoration: underline; }
+.venc-acts { display: flex; gap: 6px; margin-left: auto; }
+.venc-ok { color: #16a34a; border-color: color-mix(in srgb, #16a34a 40%, var(--border)); }
 .venc-main { display: flex; flex-direction: column; min-width: 0; }
 .venc-side { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
 .venc-dias { font-size: 12px; font-weight: 700; color: #dc2626; }

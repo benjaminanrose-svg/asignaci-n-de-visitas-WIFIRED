@@ -41,7 +41,8 @@ const periodoLabel = () => (PERIODOS.find((p) => p[0] === pstate.periodo) || [, 
 
 export function renderPanel(root) {
   const today = todayISO();
-  const all = store.visitas();
+  // Activas con fecha de ayer o antes NO van en el panel: se revisan en Configuración → Seguimiento
+  const all = store.visitas().filter((v) => !(ACTIVOS.includes(v.estado) && v.fecha && v.fecha < today));
   const vs = all.filter((v) => inPeriodo(v.fecha, pstate.periodo, today)); // set del período
 
   const total = vs.length;
@@ -85,8 +86,8 @@ export function renderPanel(root) {
     .sort((a, b) => prioRank(a.prioridad) - prioRank(b.prioridad) || (a.fecha < b.fecha ? -1 : 1))
     .slice(0, 6);
 
-  const solicitudes = all.filter((v) => v.reagenda_solicitada);
-  const pendVal = all.filter((v) => v.validada === 'pendiente');
+  const solicitudes = store.visitas().filter((v) => v.reagenda_solicitada);
+  const pendVal = store.visitas().filter((v) => v.validada === 'pendiente');
 
   root.innerHTML = `
     ${solicitudes.length ? `<a href="#/visitas" class="req-alert">⏳ <strong>${solicitudes.length}</strong> solicitud(es) de reagenda de técnicos — revisa y asigna nueva fecha →</a>` : ''}
@@ -143,7 +144,7 @@ export function renderPanel(root) {
       </div>
     </div>
 
-    ${rendimientoTecnicos(vs)}
+    ${rendimientoTecnicos(store.visitas().filter((v) => inPeriodo(v.fecha, pstate.periodo, today)))}
     ${estadisticasNodos(vs)}
 
     <div class="grid two-col section">
@@ -226,14 +227,14 @@ function rendimientoTecnicos(vs) {
   const map = {};
   vs.forEach((v) => {
     if (!v.tecnico) return;
-    const g = map[v.tecnico] || (map[v.tecnico] = { total: 0, comp: 0, activas: 0, atrasadas: 0, repr: 0, canc: 0, tipos: {}, nodos: {}, zonas: {}, diasComp: new Set(), cierres: [], aTiempo: 0, ultima: null, list: [] });
+    const g = map[v.tecnico] || (map[v.tecnico] = { total: 0, comp: 0, activas: 0, canc: 0, tipos: {}, nodos: {}, zonas: {}, diasComp: new Set(), cierres: [], aTiempo: 0, ultima: null, list: [] });
     g.total++; g.list.push(v);
     if (v.tipo) g.tipos[v.tipo] = (g.tipos[v.tipo] || 0) + 1;
     if (v.nodo) g.nodos[v.nodo] = (g.nodos[v.nodo] || 0) + 1;
     const z = zonaDeVisita(v); if (z) g.zonas[z.abbr] = (g.zonas[z.abbr] || 0) + 1;
-    if (v.estado === 'Reprogramada') g.repr++;
     if (v.estado === 'Cancelada') g.canc++;
-    if (ACTIVOS.includes(v.estado)) { g.activas++; if (v.fecha && v.fecha < today) g.atrasadas++; }
+    // las vencidas cuentan en el total (bajan el %) pero no como "activas"
+    if (ACTIVOS.includes(v.estado) && !(v.fecha && v.fecha < today)) g.activas++;
     if (v.estado === 'Completada') {
       g.comp++;
       const dc = fechaCierre(v); const df = parseDate(v.fecha);
@@ -271,7 +272,7 @@ function rendimientoTecnicos(vs) {
         <span class="perf-ava">${techAvatar(r.k)}</span>
         <span class="perf-id">
           <span class="cell-strong truncate">${esc(r.name)}</span>
-          <span class="cell-sub">${r.comp} de ${r.total} completada${r.total === 1 ? '' : 's'}${r.atrasadas ? ` · <span class="perf-alert">⚠ ${r.atrasadas} atrasada${r.atrasadas === 1 ? '' : 's'}</span>` : ''}</span>
+          <span class="cell-sub">${r.comp} de ${r.total} completada${r.total === 1 ? '' : 's'}</span>
         </span>
         <span class="perf-meter" title="${r.rate}% completadas">
           <span class="perf-meter-track"><span class="perf-meter-fill" style="width:${r.rate}%"></span></span>
@@ -284,8 +285,6 @@ function rendimientoTecnicos(vs) {
           ${stat(r.total, 'Asignadas')}
           ${stat(r.comp, `Completadas (${r.rate}%)`, 'ok')}
           ${stat(r.activas, 'Activas')}
-          ${stat(r.atrasadas, 'Atrasadas', r.atrasadas ? 'bad' : '')}
-          ${stat(r.repr, 'Reprogramadas', r.repr ? 'warn' : '')}
           ${stat(r.canc, 'Canceladas')}
           ${stat(porDia ? porDia.toFixed(1).replace('.0', '') : '—', 'Cierres por día trabajado')}
           ${stat(r.diasComp.size, 'Días trabajados')}

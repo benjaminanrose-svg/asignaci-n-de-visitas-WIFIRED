@@ -2,8 +2,13 @@
 
 > Registro corto de lo hecho. Lo nuevo arriba.
 
+- **2026-10** Seguimiento: coordinación cierra vencidas (✓ Completada / ✕ Cancelada). El % por
+  técnico cuenta sus vencidas. 🛡️ db.js: `historial`/`evidencias` de visitas siempre se guardan como
+  JSON en texto (si llegaba un arreglo, el historial se perdía).
+
 - **2026-10** 📊 Panel: rendimiento **detallado por técnico**. ⏰ Nueva pestaña **Seguimiento**
-  en Configuración con las visitas activas vencidas (técnico olvidó completar). Ver [[Vistas]].
+  en Configuración con las visitas activas vencidas (técnico olvidó completar). Las activas
+  de ayer hacia atrás ya no cuentan en el panel principal. Ver [[Vistas]].
 - **2026-10** 🔐 Seguridad reforzada y **probada** (todas las pruebas OK). Cuentas por
   coordinador, cambio obligatorio de clave, cierre de sesiones. Ver [[Seguridad]].
 
