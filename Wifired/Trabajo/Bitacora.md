@@ -5,8 +5,8 @@
 - **2026-10** 📥 Informe Excel para gerencia (Panel): tabla por técnico + gráfico de barras y torta
   nativos de Excel + hoja de detalle. Verificado abriéndolo en Excel.
 
-- **2026-10** Archivado +12 días: QUITADO. ⚠ Botón TEMPORAL en Seguimiento para eliminar (una vez) las
-  activas con más de 7 días. **Pendiente: quitarlo en la próxima actualización.**
+- **2026-10** Limpieza única: botón temporal para eliminar activas con +7 días → usado y **QUITADO**.
+  Desde aquí se parte de 0 (Seguimiento muestra vencidas; nada se borra solo).
 
 - **2026-10** 🐛 Nodo se cambiaba solo al editar (técnico lo pisaba / select perdía valores fuera de
   lista). Corregido. Buscador de clientes tolerante a errores. Formulario con secciones.

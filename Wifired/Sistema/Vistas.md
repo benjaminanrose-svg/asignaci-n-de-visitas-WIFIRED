@@ -37,9 +37,7 @@ En `js/views/`. Roles: **coordinador** (ve todo) y **técnico** (ve lo suyo).
   y **✕ Cancelada** (no la hizo) con nota opcional → queda en el historial "verificada por coordinación".
   Al cancelar se elige **quién canceló** (cliente / técnico) → `causa` en el evento `cancelada` del
   historial (sin columna nueva). Canceladas **por cliente** no cuentan en el % del técnico.
-  ⚠ **BOTÓN TEMPORAL** "🗑 Eliminar N" (activas con más de 7 días): pide escribir ELIMINAR y
-  descarga respaldo antes. Código: `data-limpiar`, `eliminarViejasModal`, `.limp-box` en config.js/CSS.
-  **Quitar en la próxima actualización** (pedido del usuario).
+  (Botón temporal "Eliminar activas +7 días": usado una vez y QUITADO, 2026-10.)
   Cuentas de coordinación en Empresa y General.
 
 ## Nueva visita (formulario)
