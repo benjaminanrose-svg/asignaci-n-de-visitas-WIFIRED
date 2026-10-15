@@ -881,3 +881,10 @@ details[open] > .perf-head .perf-chev { transform: rotate(180deg); }
 .cli-ac-opt.is-act, .cli-ac-opt:hover { background: var(--surface-2); }
 .cli-sug { margin-left: 6px; padding: 3px 10px; border-radius: 999px; border: 1px dashed var(--border); background: transparent; color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
 .cli-sug:hover { background: var(--surface-2); }
+
+.tab-badge[hidden] { display: none; }
+
+.period-bar .xlsx-btn { margin-left: auto; }
+
+.limp-box { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; margin: 10px 0 12px; border: 1px dashed color-mix(in srgb, #dc2626 45%, var(--border)); border-radius: 12px; background: var(--surface-2); }
+.limp-box p { margin: 4px 0 0; }

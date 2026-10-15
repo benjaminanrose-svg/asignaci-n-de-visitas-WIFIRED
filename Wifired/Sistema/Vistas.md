@@ -2,7 +2,8 @@
 
 En `js/views/`. Roles: **coordinador** (ve todo) y **técnico** (ve lo suyo).
 
-- **Panel** — resumen + **Rendimiento por técnico** detallado (asignadas, completadas, activas,
+- **Panel** — botón **📥 Informe Excel** (período elegido; datos de `ultimoInforme` en panel.js → js/xlsx.js).
+  Resumen + **Rendimiento por técnico** detallado (asignadas, completadas, activas,
   canceladas, cierres por día, días trabajados, % cerradas el día
   agendado, demora promedio, último cierre, zonas, tipos y nodos; botón "Ver sus visitas").
   La demora usa el evento `completada` del historial.
@@ -36,6 +37,9 @@ En `js/views/`. Roles: **coordinador** (ve todo) y **técnico** (ve lo suyo).
   y **✕ Cancelada** (no la hizo) con nota opcional → queda en el historial "verificada por coordinación".
   Al cancelar se elige **quién canceló** (cliente / técnico) → `causa` en el evento `cancelada` del
   historial (sin columna nueva). Canceladas **por cliente** no cuentan en el % del técnico.
+  ⚠ **BOTÓN TEMPORAL** "🗑 Eliminar N" (activas con más de 7 días): pide escribir ELIMINAR y
+  descarga respaldo antes. Código: `data-limpiar`, `eliminarViejasModal`, `.limp-box` en config.js/CSS.
+  **Quitar en la próxima actualización** (pedido del usuario).
   Cuentas de coordinación en Empresa y General.
 
 ## Nueva visita (formulario)

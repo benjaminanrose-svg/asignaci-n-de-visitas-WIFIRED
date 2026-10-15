@@ -31,7 +31,7 @@
 | Helpers | `js/util.js` | Fechas, `esc`, `toast`, RUT, teléfono, `mapsHref`, `bindField`, **`clientKey`/`normName`** (cliente), **`zonaDeVisita`/`zonaDeNodo`/`ZONAS`/`setNodoZonas`** (zona: config nodo → respaldo por nombre → técnico). Config persiste en `config.nodosZona` (db.js `loadConfig`); store la inyecta vía `setNodoZonas` en `applyCompany` |
 | Componentes | `js/components.js` | Modales, detalle de visita, orden de trabajo. **`visitCard`** (tarjeta rica: OT·prioridad·bloque·cliente·estado·**zona**). `clientCardModal` → "📦 Equipos instalados" (`cargarEquiposCliente`) |
 | Formularios | `js/form.js`, `js/techform.js` | Crear/editar visita · form del técnico. **`js/form.js` = autocompletado de clientes** (`setupClienteAutocomplete`: dropdown por nombre/RUT/dirección, badge 🟢 registrado/🔵 nuevo, `syncCliente` actualiza el servicio si cambió; la visita crea/refleja al cliente en Clientes) |
-| Otros | `js/signature.js` `js/photos.js` `js/zip.js` `js/push.js` | Firma · **evidencia (`createPhotoPicker`: sin límite de peso; video ≤30s; grabación en-app con auto-stop 30s `grabarVideoEnApp`)** · ZIP · push |
+| Otros | `js/signature.js` `js/photos.js` `js/zip.js` `js/xlsx.js` `js/push.js` | Firma · **evidencia (`createPhotoPicker`: sin límite de peso; video ≤30s; grabación en-app con auto-stop 30s `grabarVideoEnApp`)** · ZIP · informe Excel (`descargarInformeXlsx`) · push |
 | PWA | `sw.js` | Service worker + caché versionada (**subir `vXX` al tocar CSS/JS**) |
 | Estilos | `css/base.css` `css/layout.css` `css/components.css` | Bodega: buscar `.bod-acc`, `.bod-tbl`, `.bod-scan` |
 

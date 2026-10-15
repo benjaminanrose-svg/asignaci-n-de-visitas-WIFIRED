@@ -210,8 +210,9 @@ ${bot.solo_comunicados !== false ? `
         <h3 class="cfg-title">⏰ Visitas activas vencidas</h3>
         <p class="muted-sm">Visitas que siguen <b>Pendientes, Programadas o Reprogramadas</b> aunque su fecha ya pasó. Casi siempre es porque el técnico olvidó marcarlas como completadas. Ábrelas para revisarlas, completarlas o reagendarlas.</p>
         <div class="row" style="gap:8px;margin:10px 0 4px;flex-wrap:wrap"><span class="muted-sm">Antigüedad mínima:</span>
-          <div class="seg">${[1, 7, 15, 30].map((d) => `<button class="seg-btn${d === vencDias ? ' active' : ''}" data-venc-dias="${d}">${d === 1 ? 'Desde ayer' : d + ' días'}</button>`).join('')}</div>
+          <div class="seg">${[1, 3, 7].map((d) => `<button class="seg-btn${d === vencDias ? ' active' : ''}" data-venc-dias="${d}">${d === 1 ? 'Desde ayer' : d + ' días'}</button>`).join('')}</div>
         </div>
+        <div data-limpiar></div>
         <div data-vencidas></div>
       </div>
 
@@ -672,6 +673,18 @@ function visitasVencidas(dias) {
 function pintarVencidas(root) {
   const box = root.querySelector('[data-vencidas]');
   if (!box) return;
+  const limp = root.querySelector('[data-limpiar]');
+  if (limp && !limpiando) {
+    const viejas = visitasVencidas(8); // más de 7 días
+    limp.innerHTML = viejas.length ? `
+      <div class="limp-box">
+        <div><b>🗑 ${viejas.length} visita${viejas.length === 1 ? '' : 's'} activa${viejas.length === 1 ? '' : 's'} con más de 7 días de atraso</b>
+          <p class="muted-sm">Elimínalas para partir de 0. Antes de borrar se descarga un respaldo completo a este computador.</p></div>
+        <button class="btn btn-sm btn-danger" data-limpiar-btn>Eliminar ${viejas.length}</button>
+      </div>` : '';
+    const b = limp.querySelector('[data-limpiar-btn]');
+    if (b) b.onclick = () => eliminarViejasModal(root, viejas.map((x) => x.v._uid));
+  }
   const lista = visitasVencidas(vencDias);
   const badge = root.querySelector('[data-venc-badge]');
   const totalBadge = visitasVencidas(1).length;
@@ -747,6 +760,53 @@ function cerrarVencidaModal(uid, estado) {
       ok.disabled = false;
       if (e && e.message !== 'media-no-cargada') toast('No se pudo guardar: ' + (e.message || e), 'error');
     }
+  };
+  openModal(node, 'sm');
+}
+
+// LIMPIEZA TEMPORAL (pedido de coordinación, 2026-10, para partir de 0): elimina las visitas
+// activas con más de 7 días de atraso. Siempre con confirmación escrita y respaldo previo.
+let limpiando = false;
+function eliminarViejasModal(root, uids) {
+  const node = document.createElement('div');
+  node.innerHTML = `
+    <div class="modal-head"><h3>🗑 Eliminar ${uids.length} visita${uids.length === 1 ? '' : 's'}</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-body">
+      <p>Se eliminarán <b>definitivamente</b> las visitas Pendientes, Programadas o Reprogramadas con más de 7 días de atraso.</p>
+      <p class="muted-sm" style="margin:8px 0">Primero se descarga un <b>respaldo completo</b> (archivo JSON) a este computador; si el respaldo falla, no se borra nada.</p>
+      <label class="muted-sm" style="display:block;margin-top:10px">Para confirmar escribe <b>ELIMINAR</b>:</label>
+      <input class="input" data-conf autocomplete="off" placeholder="ELIMINAR" />
+      <p class="muted-sm" data-limp-prog style="margin-top:10px"></p>
+    </div>
+    <div class="modal-foot"><div class="grow"></div><button class="btn" data-close>Volver</button><button class="btn btn-danger" data-ok disabled>Eliminar</button></div>`;
+  node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+  const ok = node.querySelector('[data-ok]');
+  const conf = node.querySelector('[data-conf]');
+  const prog = node.querySelector('[data-limp-prog]');
+  conf.oninput = () => { ok.disabled = conf.value.trim().toUpperCase() !== 'ELIMINAR'; };
+  ok.onclick = async () => {
+    ok.disabled = true; conf.disabled = true; limpiando = true;
+    node.querySelectorAll('[data-close]').forEach((b) => (b.disabled = true));
+    try {
+      prog.textContent = 'Descargando respaldo…';
+      await downloadBackup();
+    } catch (e) {
+      limpiando = false; closeModal();
+      toast('No se pudo descargar el respaldo. No se borró nada.', 'error');
+      return;
+    }
+    let hechas = 0;
+    for (const uid of uids) {
+      const v = store.byUid(uid);
+      if (!v || !['Pendiente', 'Programada', 'Reprogramada'].includes(v.estado)) continue; // ya cambió: no se toca
+      await store.deleteVisita(uid);
+      if (!store.byUid(uid)) hechas++;
+      prog.textContent = `Eliminando… ${hechas} de ${uids.length}`;
+    }
+    limpiando = false;
+    closeModal();
+    toast(hechas === uids.length ? `✓ ${hechas} visita${hechas === 1 ? '' : 's'} eliminada${hechas === 1 ? '' : 's'}` : `Eliminadas ${hechas} de ${uids.length}. Reintenta las que faltan.`, hechas === uids.length ? undefined : 'error');
+    pintarVencidas(root);
   };
   openModal(node, 'sm');
 }

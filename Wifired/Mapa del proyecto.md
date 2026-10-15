@@ -36,6 +36,7 @@ Si tocas **CSS o JS del front**, sube la versión del caché en `sw.js`
 - `js/signature.js` — firma con el dedo.
 - `js/photos.js` — subir/comprimir fotos (evidencia).
 - `js/zip.js` — armar el ZIP de evidencia.
+- `js/xlsx.js` — informe Excel (.xlsx real, sin librerías, usa zip.js): hoja Rendimiento + 2 gráficos nativos + hoja Detalle.
 - `js/push.js` — registrar service worker + notificaciones push (front).
 
 ### Vistas (carpeta `js/views/`) — cada pantalla

@@ -3,7 +3,7 @@
 // por técnico y por nodo.
 // ============================================================
 import * as store from '../store.js';
-import { esc, parseTecnico, fmtDateShort, todayISO, parseDate, prioRank, zonaDeVisita } from '../util.js';
+import { esc, parseTecnico, fmtDateShort, todayISO, parseDate, prioRank, zonaDeVisita, toast } from '../util.js';
 import { statusBadge, techAvatar, visitDetailModal, workOrderModal, openModal, closeModal } from '../components.js';
 import { visitFormModal } from '../form.js';
 
@@ -99,6 +99,7 @@ export function renderPanel(root) {
         ${PERIODOS.map(([k, l]) => `<button class="seg-btn ${pstate.periodo === k ? 'active' : ''}" data-per="${k}">${esc(l)}</button>`).join('')}
       </div>
       <span class="muted-sm">${total} visita${total === 1 ? '' : 's'} en “${esc(periodoLabel())}”</span>
+      <button class="btn btn-sm xlsx-btn" data-xlsx title="Descarga un Excel con el rendimiento por técnico y gráficos">📥 Informe Excel</button>
     </div>
 
     <div class="grid kpi-grid">
@@ -195,6 +196,9 @@ export function renderPanel(root) {
     const k = d.getAttribute('data-tec');
     if (d.open) pstate.openTecs.add(k); else pstate.openTecs.delete(k);
   }));
+  // Informe Excel para gerencia (usa el período elegido)
+  const bx = root.querySelector('[data-xlsx]');
+  if (bx) bx.onclick = () => descargarInforme(bx);
   // "Ver sus visitas" dentro del detalle de cada técnico
   root.querySelectorAll('[data-tec-list]').forEach((b) => (b.onclick = () => {
     const t = tecLists.get(b.dataset.tecList);
@@ -211,6 +215,7 @@ export function renderPanel(root) {
 
 // ---------- Rendimiento por técnico (colapsable, con avance por técnico) ----------
 const tecLists = new Map(); // técnico → { title, list } para "Ver sus visitas"
+let ultimoInforme = null;   // datos del rendimiento ya calculados, para el informe Excel
 const ACTIVOS = ['Pendiente', 'Programada', 'Reprogramada'];
 const DIA = 86400000;
 // Fecha local (sin hora) del momento en que se marcó completada, según el historial
@@ -274,6 +279,7 @@ function rendimientoTecnicos(vs) {
     r.aporte = totComp ? Math.round((r.comp / totComp) * 100) : 0;
     r.nivel = r.indice >= 110 ? 'Participación alta' : r.indice >= 90 ? 'Participación media' : 'Participación baja';
   });
+  ultimoInforme = { rows, vs, totComp };
   const maxComp = Math.max(1, ...rows.map((r) => r.comp));
   const ranking = rows.length > 1 ? `
     <div class="rank-box">
@@ -424,4 +430,43 @@ function proxRow(v) {
       <div style="margin-top:4px">${statusBadge(v.estado)}</div>
     </div>
   </div>`;
+}
+
+// ---------- Informe Excel ----------
+const fmtFecha = (d) => (d ? `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}` : '');
+function periodoDetalle() {
+  const hoy = parseDate(todayISO());
+  if (pstate.periodo === 'hoy') return `Hoy (${fmtFecha(hoy)})`;
+  if (pstate.periodo === 'semana') { const { monday, sunday } = weekBounds(todayISO()); return `Semana del ${fmtFecha(monday)} al ${fmtFecha(sunday)}`; }
+  if (pstate.periodo === 'mes') return 'Mes de ' + hoy.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+  if (pstate.periodo === 'anio') return `Año ${hoy.getFullYear()}`;
+  return 'Todas las fechas';
+}
+async function descargarInforme(btn) {
+  const inf = ultimoInforme;
+  if (!inf || !inf.rows.length) { toast('No hay visitas asignadas en este período para el informe', 'info'); return; }
+  btn.disabled = true;
+  try {
+    const { descargarInformeXlsx } = await import('../xlsx.js');
+    const prom1 = (arr) => (arr.length ? Math.round((arr.reduce((s, n) => s + n, 0) / arr.length) * 10) / 10 : null);
+    const tecnicos = inf.rows.map((r) => ({
+      nombre: parseTecnico(r.k).name || r.name,
+      asignadas: r.total, completadas: r.comp, cumplimiento: r.base > 0 ? r.comp / r.base : 0,
+      activas: r.activas, canceladas: r.canc, cancCliente: r.cancCli,
+      aporte: inf.totComp ? r.comp / inf.totComp : 0,
+      participacion: r.nivel.replace('Participación ', '').replace(/^./, (c) => c.toUpperCase()),
+      diasTrab: r.diasComp.size, porDia: r.diasComp.size ? Math.round((r.comp / r.diasComp.size) * 10) / 10 : null,
+      demora: prom1(r.cierres), ultimo: fmtFecha(r.ultima),
+    }));
+    const visitas = inf.vs.slice().sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || ''))).map((v) => ({
+      ot: v.id || '', fecha: v.fecha ? fmtFecha(parseDate(v.fecha)) : '', tecnico: v.tecnico ? parseTecnico(v.tecnico).name : 'Sin asignar',
+      cliente: v.cliente || '', tipo: v.tipo || '', nodo: v.nodo || '', zona: (zonaDeVisita(v) || {}).label || '', estado: v.estado || '',
+    }));
+    descargarInformeXlsx(`Informe_tecnicos_${pstate.periodo}_${todayISO()}.xlsx`, {
+      empresa: 'WIFIRED', periodo: periodoDetalle(), generado: new Date().toLocaleString('es-CL'), tecnicos, visitas,
+    });
+    toast('Informe descargado 📥');
+  } catch (e) {
+    toast('No se pudo generar el informe: ' + (e.message || e), 'error');
+  } finally { btn.disabled = false; }
 }
