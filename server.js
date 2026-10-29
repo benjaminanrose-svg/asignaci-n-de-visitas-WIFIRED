@@ -216,9 +216,12 @@ app.disable('x-powered-by');       // no revelar que corre Express
 app.set('trust proxy', 1);         // detrás del proxy de Coolify (para req.ip y HTTPS)
 
 // --- Cabeceras de seguridad (para exposición a IP pública) ---
+// Sistema ISP que puede incrustar el calendario (ej. http://192.168.11.236:3000).
+const ISP_ORIGIN = (process.env.ISP_ORIGIN || '').trim().replace(/\/+$/, '');
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // Con ISP_ORIGIN la protección la da CSP frame-ancestors (X-Frame-Options no admite otro origen).
+  if (!ISP_ORIGIN) res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(), microphone=(), payment=()');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
@@ -232,7 +235,7 @@ app.use((req, res, next) => {
     "default-src 'self'",
     "base-uri 'self'",
     "object-src 'none'",
-    "frame-ancestors 'self'",
+    "frame-ancestors 'self'" + (ISP_ORIGIN ? ' ' + ISP_ORIGIN : ''),
     "form-action 'self'",
     "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com",
     "style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com",
@@ -1001,6 +1004,66 @@ function requireBotKey(req, res, next) {
   if (a.length !== b.length || !require('crypto').timingSafeEqual(a, b)) return res.status(401).json({ error: 'Clave de bot inválida' });
   next();
 }
+
+// ---------- API para el sistema ISP (clave propia ISP_API_KEY, header x-isp-key) ----------
+function requireIspKey(req, res, next) {
+  const key = process.env.ISP_API_KEY;
+  if (!key) return res.status(503).json({ error: 'ISP no configurado (falta ISP_API_KEY)' });
+  const a = Buffer.from(String(req.headers['x-isp-key'] || '')), b = Buffer.from(key);
+  if (a.length !== b.length || !require('crypto').timingSafeEqual(a, b)) return res.status(401).json({ error: 'Clave ISP inválida' });
+  next();
+}
+// Cuenta de coordinación que "usa" el ISP (ISP_USUARIO). Todo lo que haga queda a su nombre.
+async function ispUser() {
+  const s = await getStore();
+  const u = await s.getUserByUsername(String(process.env.ISP_USUARIO || 'isp').toLowerCase());
+  return u && u.activo !== false && u.rol === 'coordinador' ? u : null;
+}
+// Pase temporal (8 h) para abrir el calendario incrustado: <app>/#embed=<token>
+api.post('/isp/sesion', requireIspKey, wrap(async (req, res) => {
+  const u = await ispUser();
+  if (!u) return res.status(503).json({ error: 'Falta la cuenta de coordinación del ISP (ISP_USUARIO)' });
+  if (u.debe_cambiar) return res.status(503).json({ error: 'La cuenta del ISP debe cambiar su clave primero' });
+  const token = signToken({ uid: u.id, rol: u.rol, tv: u.token_ver || 0 }, 8 * 60 * 60 * 1000);
+  res.json({ token, path: '/#embed=' + token, expira_en_seg: 8 * 3600 });
+}));
+// Visitas (OT). Filtros opcionales: desde, hasta (YYYY-MM-DD), cliente (texto), rut.
+api.get('/isp/visitas', requireIspKey, wrap(async (req, res) => {
+  const s = await getStore();
+  const { desde, hasta } = req.query;
+  const cli = String(req.query.cliente || '').toLowerCase();
+  const rut = String(req.query.rut || '').replace(/[^0-9kK]/g, '').toLowerCase();
+  const list = (await s.listVisitas()).filter((v) =>
+    (!desde || (v.fecha && v.fecha >= desde)) && (!hasta || (v.fecha && v.fecha <= hasta)) &&
+    (!cli || String(v.cliente || '').toLowerCase().includes(cli)) &&
+    (!rut || String(v.rut || '').replace(/[^0-9kK]/g, '').toLowerCase() === rut));
+  res.json(list.map(aligerarVisita));
+}));
+api.get('/isp/visitas/:id', requireIspKey, wrap(async (req, res) => {
+  const s = await getStore();
+  const v = (await s.listVisitas()).find((x) => x._uid === String(req.params.id));
+  if (!v) return res.status(404).json({ error: 'OT no encontrada' });
+  res.json(aligerarVisita(v));
+}));
+// Listas para armar formularios en el ISP (técnicos, tipos, bloques, estados, nodos).
+api.get('/isp/catalogos', requireIspKey, wrap(async (req, res) => {
+  const s = await getStore();
+  const [tecnicos, config] = await Promise.all([s.listTecnicos(), s.getConfig()]);
+  res.json({ tecnicos: tecnicos.filter((t) => t.activo !== false).map((t) => ({ id: t.id, nombre: t.nombre })), config });
+}));
+// Agendar una OT desde el ISP.
+api.post('/isp/visitas', requireIspKey, wrap(async (req, res) => {
+  const s = await getStore();
+  if (!req.body || !req.body.cliente) return res.status(400).json({ error: 'El nombre del cliente es obligatorio' });
+  const data = { ...req.body };
+  delete data._uid; delete data.id;
+  if (data.tecnico) data.asignado_por = 'Sistema ISP';
+  const nueva = await s.addVisita(data);
+  if (nueva.tecnico) notifyAssign(nueva, 'asignar');
+  avisarClienteAgendada(nueva);
+  res.status(201).json(nueva);
+}));
+
 api.post('/bot/ticket', requireBotKey, wrap(async (req, res) => {
   const s = await getStore();
   if (typeof s.addTicket !== 'function') return res.status(400).json({ error: 'No disponible en este modo' });

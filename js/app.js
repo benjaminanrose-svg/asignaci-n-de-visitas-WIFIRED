@@ -5,7 +5,7 @@ import { initStore, subscribe, currentUser, isPersistent, refresh } from './stor
 import * as store from './store.js';
 import { visitFormModal } from './form.js';
 import { visitDetailModal, workOrderModal, openModal, closeModal, downloadHistorialZip } from './components.js';
-import { renderPanel } from './views/panel.js';
+import { renderPanel } from './views/panel.js';
 import { renderCalendario } from './views/calendario.js';
 import { renderVisitas } from './views/visitas.js';
 import { renderClientes } from './views/clientes.js';
@@ -17,12 +17,12 @@ import { renderBodega } from './views/bodega.js';
 import { renderConfig } from './views/config.js';
 import { renderTecnico } from './views/tecnico.js';
 import { renderLogin, clearLogin } from './views/login.js';
-import { isAuth, logout } from './auth.js';
+import { isAuth, logout, setToken } from './auth.js';
 import { registerSW } from './push.js';
 import { debounce, initials, esc, parseTecnico, toast } from './util.js';
 
 const ROUTES = {
-  panel:      { title: 'Panel de control',    render: renderPanel },
+  panel:      { title: 'Panel de control',    render: renderPanel },
   calendario: { title: 'Calendario',          render: renderCalendario },
   visitas:    { title: 'Historial de visitas', render: renderVisitas },
   clientes:   { title: 'Clientes',            render: renderClientes },
@@ -41,7 +41,12 @@ let current = 'panel';
 let esTecnico = false;
 export const ctx = { search: '' };
 
+// Modo incrustado (dentro del sistema ISP): solo calendario, sin menú lateral.
+let EMBED = false;
+try { EMBED = window.self !== window.top && sessionStorage.getItem('wifired_embed') === '1'; } catch (e) { EMBED = false; }
+
 function currentRoute() {
+  if (EMBED) return 'calendario';
   const hash = location.hash.replace(/^#\//, '');
   return ROUTES[hash] ? hash : 'panel';
 }
@@ -271,6 +276,15 @@ async function startApp() {
 }
 
 function boot() {
+  // Pase del ISP: /#embed=<token> → entra directo al calendario incrustado.
+  const m = location.hash.match(/^#embed=([\w.-]+)$/);
+  if (m && window.self !== window.top) {
+    setToken(m[1]);
+    try { sessionStorage.setItem('wifired_embed', '1'); } catch (e) { /* sin storage */ }
+    EMBED = true;
+    history.replaceState(null, '', location.pathname + '#/calendario');
+  }
+  if (EMBED) document.documentElement.classList.add('embed');
   registerSW();
   if (!isAuth()) {
     document.getElementById('app').style.display = 'none';

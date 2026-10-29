@@ -22,6 +22,8 @@ Probado en servidor local (2026-10): todas las pruebas OK.
 - **Anti fuerza bruta**: bloqueo por IP y **por usuario** tras varios intentos (429) + rate limiter global.
 - **Tamaño de envíos**: 64 KB sin sesión (413), grande solo con sesión.
 - **Clave del bot**: comparación en tiempo constante (`timingSafeEqual`).
+- **Sistema ISP**: clave propia `ISP_API_KEY` (header `x-isp-key`). El calendario solo se deja
+  incrustar en `ISP_ORIGIN`; el pase dura 8 h y actúa como la cuenta coordinadora `ISP_USUARIO`.
 - **Cabeceras / CSP** contra inyecciones; listas blancas de campos; registro `[LOGIN] ok/fallido`.
 - **Sin IP pública**: solo por VPN (ver [[Despliegue]]).
 

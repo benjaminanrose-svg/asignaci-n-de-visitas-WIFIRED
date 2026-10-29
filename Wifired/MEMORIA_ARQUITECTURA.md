@@ -50,6 +50,7 @@
 | **Bodega** | *(Modo Despacho — sin endpoint nuevo)* | `js/views/bodega.js` | `registrarDespacho()` usa `POST /inventario` (crear) + `/mover` acción `entregar`. Panel sesión: `addSesion`/`pintarSesion`/`finalizarEntrega` |
 | Tickets | `GET/POST/PUT/DELETE /tickets[/:id]`, `…/enviar-planes` | `server.js` | Tickets + envío de planes |
 | Bot | `POST /bot/*`, `GET /bot/*` (requireBotKey) | `server.js` | Puente con el bot de WhatsApp (outbox) |
+| **ISP** | `POST /isp/sesion`, `GET /isp/visitas[?desde&hasta&cliente&rut]`, `GET /isp/visitas/:id`, `GET /isp/catalogos`, `POST /isp/visitas` (requireIspKey, header `x-isp-key`) | `server.js` | Sistema ISP (`192.168.11.236:3000`): pase 8 h para calendario incrustado (`/#embed=<token>`, cuenta `ISP_USUARIO`) + leer/agendar OT. Env: `ISP_API_KEY`, `ISP_ORIGIN`, `ISP_USUARIO` |
 | Técnicos | `GET/POST/PUT/DELETE /tecnicos[/:id]`, `/ubicacion(es)` | `server.js` | CRUD técnicos + GPS |
 | Push | `GET /push/config`, `POST /push/subscribe` | `server.js` (+`push.js`) | Notificaciones push (VAPID) |
 

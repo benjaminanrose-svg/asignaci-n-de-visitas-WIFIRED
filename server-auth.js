@@ -29,8 +29,8 @@ function verifyPassword(pw, stored) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-function signToken(payload) {
-  const body = Buffer.from(JSON.stringify({ ...payload, exp: Date.now() + TOKEN_TTL_MS })).toString('base64url');
+function signToken(payload, ttlMs = TOKEN_TTL_MS) {
+  const body = Buffer.from(JSON.stringify({ ...payload, exp: Date.now() + ttlMs })).toString('base64url');
   const sig = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
   return `${body}.${sig}`;
 }

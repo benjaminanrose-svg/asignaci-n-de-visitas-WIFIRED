@@ -2,6 +2,12 @@
 
 > Registro corto de lo hecho. Lo nuevo arriba.
 
+- **2026-10-29** 🔗 Integración con sistema ISP (`192.168.11.236:3000`): API `/api/isp/*` con
+  `ISP_API_KEY` + calendario **incrustado** (iframe `/#embed=<token>`, solo calendario, sin menú).
+  Permitido solo para `ISP_ORIGIN` (CSP frame-ancestors). Ver [[MEMORIA_ARQUITECTURA]].
+- **2026-10-29** Coolify 4.5.3: terminal web no conecta (realtime ya no es contenedor aparte).
+  No es necesaria: Claude entra por SSH con llave.
+
 - **2026-10** 📥 Informe Excel para gerencia (Panel): tabla por técnico + gráfico de barras y torta
   nativos de Excel + hoja de detalle. Verificado abriéndolo en Excel.
 

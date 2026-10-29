@@ -109,3 +109,9 @@
   .two-col { grid-template-columns: 1fr; }
   .search-box { width: 180px; }
 }
+
+/* Modo incrustado (sistema ISP): solo el calendario, sin menú ni barra superior */
+.embed .sidebar, .embed .topbar, .embed .no-db-bar { display: none !important; }
+.embed .app-shell { display: block; }
+.embed .main { margin-left: 0 !important; width: 100%; }
+
