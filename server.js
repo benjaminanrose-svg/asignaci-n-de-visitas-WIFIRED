@@ -252,7 +252,14 @@ app.use((req, res, next) => {
 // del bot; sin credenciales (ej. login) se acepta muy poco → evita abusos.
 const jsonGrande = express.json({ limit: '100mb' });
 const jsonChico = express.json({ limit: '64kb' });
-app.use((req, res, next) => ((req.headers.authorization || req.headers['x-bot-key']) ? jsonGrande : jsonChico)(req, res, next));
+// Solo un token VÁLIDO (firma correcta) o la clave del bot habilitan el cuerpo grande:
+// un header falso no basta (evita que desde internet manden 100 MB para tumbar el servidor).
+const conCredencial = (req) => {
+  if (req.headers['x-bot-key'] && process.env.BOT_API_KEY && req.headers['x-bot-key'] === process.env.BOT_API_KEY) return true;
+  const h = String(req.headers.authorization || '');
+  return !!(h && verifyToken(h.replace(/^Bearer\s+/i, '')));
+};
+app.use((req, res, next) => (conCredencial(req) ? jsonGrande : jsonChico)(req, res, next));
 // JSON malformado o cuerpo demasiado grande: respuesta clara en vez de error 500.
 app.use((err, req, res, next) => {
   if (err && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Datos enviados inválidos' });
@@ -457,6 +464,9 @@ const CAMPOS_TECNICO = ['detalle', 'reagenda_solicitada', 'reagenda_motivo', 'ev
 /** Genera un PIN aleatorio de 6 dígitos */
 function nuevoPin() { return String(Math.floor(100000 + Math.random() * 900000)); }
 const PIN_VIGENCIA_MS = 30 * 60 * 1000; // 30 minutos
+// Intentos fallidos de PIN por visita: al 5º el código se anula (hay que reenviarlo).
+const pinFallos = new Map(); // _uid -> n
+const PIN_MAX_FALLOS = 5;
 
 api.post('/visitas', auth, soloCoordinador, wrap(async (req, res) => {
   const s = await getStore();
@@ -506,10 +516,19 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
       const tsMs = stored && stored.ts ? new Date(stored.ts).getTime() : 0;
       const vigente = tsMs && (Date.now() - tsMs) < PIN_VIGENCIA_MS;
       if (!stored || !stored.pin || ingresado !== stored.pin || !vigente) {
+        const n = (pinFallos.get(req.params.id) || 0) + 1;
+        pinFallos.set(req.params.id, n);
+        if (n >= PIN_MAX_FALLOS && stored && stored.pin && s.setPin) {
+          await s.setPin(req.params.id, '').catch(() => {});
+          pinFallos.delete(req.params.id);
+          console.warn(`[PIN] anulado por ${n} intentos fallidos · visita ${req.params.id} · ${req.user.username}`);
+          return res.status(403).json({ error: 'Demasiados intentos con el código. Se anuló: reenvía un código nuevo al cliente.' });
+        }
         return res.status(403).json({ error: 'Código de validación incorrecto o vencido. Reenvía el código al cliente e inténtalo de nuevo.' });
       }
       patch.estado = 'Completada';
       patch.validada = 'pin';
+      pinFallos.delete(req.params.id);
     }
     // Fallback: el cliente no puede entregar el código → queda pendiente de autorización por coordinación
     if (body.validada === 'pendiente') patch.validada = 'pendiente';
@@ -648,6 +667,7 @@ api.post('/visitas/:id/enviar-pin', auth, wrap(async (req, res) => {
   const pin = nuevoPin();
   if (!s.setPin) return res.status(400).json({ error: 'Validación por código no disponible en este modo' });
   await s.setPin(req.params.id, pin);
+  pinFallos.delete(req.params.id); // código nuevo → intentos desde cero
   // guardar el correo del cliente si vino nuevo
   if (req.body && req.body.email && req.body.email !== v.email) await s.updateVisita(req.params.id, { email });
   const r = await sendPin(v, email, pin);
@@ -1004,6 +1024,11 @@ function requireBotKey(req, res, next) {
   if (a.length !== b.length || !require('crypto').timingSafeEqual(a, b)) return res.status(401).json({ error: 'Clave de bot inválida' });
   next();
 }
+
+// Bot e ISP viven en la red local: sus rutas NO se atienden desde internet,
+// aunque alguien conozca la clave. (req.ip = IP real; Traefik la entrega.)
+const IP_LOCAL = /^(::ffff:)?(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)|^::1$/;
+api.use(['/bot', '/isp'], (req, res, next) => (IP_LOCAL.test(req.ip || '') ? next() : res.status(404).json({ error: 'No encontrado' })));
 
 // ---------- API para el sistema ISP (clave propia ISP_API_KEY, header x-isp-key) ----------
 function requireIspKey(req, res, next) {

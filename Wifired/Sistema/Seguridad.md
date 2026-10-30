@@ -22,6 +22,12 @@ Probado en servidor local (2026-10): todas las pruebas OK.
 - **Anti fuerza bruta**: bloqueo por IP y **por usuario** tras varios intentos (429) + rate limiter global.
 - **Tamaño de envíos**: 64 KB sin sesión (413), grande solo con sesión.
 - **Clave del bot**: comparación en tiempo constante (`timingSafeEqual`).
+- **Bot e ISP solo desde red local** (2026-10-30): `/api/bot/*` y `/api/isp/*` responden 404 si `req.ip`
+  no es privada (127/10/172.16-31/192.168), aunque se tenga la clave.
+- **Cuerpo grande (100 MB)** solo con token de firma válida o `x-bot-key` correcta (antes bastaba un header falso).
+- **PIN**: 5 intentos fallidos → el código se anula (`pinFallos` en server.js).
+- **Links en href**: `mapsHref` (util.js) codifica comillas/espacios de links pegados (antes se podía inyectar atributos; CSP lo frenaba).
+- **Revisión 2026-10-30 antes de publicar**: 3 técnicos con clave de fábrica (benjamin.rojas, cristian, benito) → restablecer.
 - **Sistema ISP**: clave propia `ISP_API_KEY` (header `x-isp-key`). El calendario solo se deja
   incrustar en `ISP_ORIGIN`; el pase dura 8 h y actúa como la cuenta coordinadora `ISP_USUARIO`.
 - **Cabeceras / CSP** contra inyecciones; listas blancas de campos; registro `[LOGIN] ok/fallido`.

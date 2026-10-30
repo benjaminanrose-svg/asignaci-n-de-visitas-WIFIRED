@@ -107,7 +107,8 @@ export function waLink(phone, msg) {
 export function mapsHref(dir) {
   const s = String(dir || '').trim();
   if (!s) return '';
-  if (/^https?:\/\//i.test(s)) return s;
+  // Link pegado tal cual: se codifican comillas/espacios/<> para que no rompa el atributo href.
+  if (/^https?:\/\//i.test(s)) return s.replace(/["'<>\s`]/g, (ch) => encodeURIComponent(ch));
   const c = s.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
   if (c) return `https://www.google.com/maps?q=${c[1]},${c[2]}`;
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s + ', Melipilla, Chile')}`;

@@ -2,6 +2,10 @@
 
 > Registro corto de lo hecho. Lo nuevo arriba.
 
+- **2026-10-30** 🔒 Revisión de seguridad antes de publicar por IP pública: bot/ISP solo red local,
+  cuerpo grande solo con token válido, límite de intentos de PIN, href seguro. Ver [[Seguridad]].
+  Certificado Sectigo `*.wifired.cl` del jefe VENCIDO (18-04-2026); plan: Let's Encrypt por IP.
+
 - **2026-10-29** 🔗 Integración con sistema ISP (`192.168.11.236:3000`): API `/api/isp/*` con
   `ISP_API_KEY` + calendario **incrustado** (iframe `/#embed=<token>`, solo calendario, sin menú).
   Permitido solo para `ISP_ORIGIN` (CSP frame-ancestors). Ver [[MEMORIA_ARQUITECTURA]].
