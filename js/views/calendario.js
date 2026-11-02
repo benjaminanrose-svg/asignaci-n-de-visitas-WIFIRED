@@ -2,7 +2,7 @@
 // WIFIRED · Vista Calendario mensual
 // ============================================================
 import * as store from '../store.js';
-import { esc, parseDate, toISO, todayISO, addDays, parseTecnico, bloqueShort, zonaDeVisita, ZONAS, toast } from '../util.js';
+import { esc, parseDate, toISO, todayISO, addDays, parseTecnico, bloqueShort, zonaDeVisita, ZONAS, toast, esAtrasada } from '../util.js';
 import { statusBadge, visitDetailModal, openModal, closeModal, visitCard, techAvatar } from '../components.js';
 import { visitFormModal } from '../form.js';
 import { workOrderModal } from '../components.js';
@@ -64,10 +64,11 @@ export function renderCalendario(root) {
           ${shown.map((v) => {
             const z = zonaDeVisita(v);
             const dim = local.zona && (!z || z.key !== local.zona) ? ' cal-ev--dim' : '';
+            const late = esAtrasada(v);
             return `
-            <button class="cal-ev${dim}" data-open="${esc(v._uid)}" data-zona="${z ? z.key : ''}" title="${esc(v.cliente)} · ${esc(v.tipo)}${z ? ' · ' + z.label : ''}" ${z ? `style="border-left:3px solid ${z.color}"` : ''}>
-              <span class="cal-ev-dot" style="background:${STATUS_DOT[v.estado] || '#94a3b8'}"></span>
-              <span class="cal-ev-txt">${z ? `📍 ${z.abbr} · ` : ''}${esc(bloqueShort(v.bloque))} · ${esc(v.cliente || v.tipo || 'Visita')}</span>
+            <button class="cal-ev${dim}${late ? ' cal-ev--late' : ''}" data-open="${esc(v._uid)}" data-zona="${z ? z.key : ''}" title="${late ? 'ATRASADA · ' : ''}${esc(v.cliente)} · ${esc(v.tipo)}${z ? ' · ' + z.label : ''}" ${z ? `style="border-left:3px solid ${z.color}"` : ''}>
+              <span class="cal-ev-dot" style="background:${late ? '#ef4444' : (STATUS_DOT[v.estado] || '#94a3b8')}"></span>
+              <span class="cal-ev-txt">${late ? '⏰ ' : ''}${z ? `📍 ${z.abbr} · ` : ''}${esc(bloqueShort(v.bloque))} · ${esc(v.cliente || v.tipo || 'Visita')}</span>
             </button>`;
           }).join('')}
           ${extra > 0 ? `<button class="cal-more" data-day-open="${iso}">+${extra} más</button>` : ''}

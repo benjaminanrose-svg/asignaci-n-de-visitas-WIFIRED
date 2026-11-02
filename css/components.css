@@ -408,6 +408,10 @@ table.data tbody tr:hover { background: var(--surface-2); }
 .cal-ev-txt { font-size:11px; color:var(--text-2); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .cal-more { border:0; background:transparent; color:var(--brand-700); font-size:11px; font-weight:700; cursor:pointer; text-align:left; padding:2px 6px; }
 .cal-ev--dim { opacity:.26; }
+/* Atrasada: activa con fecha pasada (aviso para coordinación) */
+.cal-ev--late { background:color-mix(in srgb, #ef4444 14%, transparent); }
+.cal-ev--late .cal-ev-txt { color:#ef4444; }
+.tag-late { color:#ef4444; border-color:color-mix(in srgb, #ef4444 45%, var(--border)); background:color-mix(in srgb, #ef4444 12%, transparent); font-weight:700; }
 /* Filtro de zonas */
 .cal-zonas { display:flex; gap:6px; flex-wrap:wrap; }
 .cal-zbtn { padding:4px 10px; border-radius:999px; border:1px solid var(--border); background:var(--surface); color:var(--text-2); font-size:12px; font-weight:700; cursor:pointer; }

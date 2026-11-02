@@ -46,6 +46,10 @@ export function fmtDateShort(iso) {
   return `${DIAS[dt.getDay()].slice(0, 3)} ${dt.getDate()} ${MESES[dt.getMonth()]}`;
 }
 export function todayISO() { return toISO(new Date()); }
+/** Atrasada: sigue activa y su fecha ya pasó (para avisar a coordinación). */
+export function esAtrasada(v) {
+  return !!v && ['Pendiente', 'Programada', 'Reprogramada'].includes(v.estado) && !!v.fecha && v.fecha < todayISO();
+}
 export function addDays(iso, n) {
   const dt = parseDate(iso) || new Date();
   dt.setDate(dt.getDate() + n);
