@@ -47,7 +47,8 @@ export function renderTecnico(root) {
 
   const filtros = {
     hoy: (v) => v.fecha === today && activas(v),
-    porhacer: (v) => activas(v),
+    // Solo de hoy en adelante (o sin fecha): las de días pasados no se muestran.
+    porhacer: (v) => activas(v) && (!v.fecha || v.fecha >= today),
     completadas: (v) => v.estado === 'Completada',
   };
   // Primera carga: abrir en la primera pestaña con contenido (evita pantalla vacía)
