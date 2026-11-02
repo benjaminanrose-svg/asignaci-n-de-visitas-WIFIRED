@@ -49,12 +49,11 @@ export function renderTecnico(root) {
     hoy: (v) => v.fecha === today && activas(v),
     porhacer: (v) => activas(v),
     completadas: (v) => v.estado === 'Completada',
-    todas: () => true,
   };
   // Primera carga: abrir en la primera pestaña con contenido (evita pantalla vacía)
   if (!local.inited) {
     local.inited = true;
-    local.filtro = ['hoy', 'porhacer', 'completadas', 'todas'].find((k) => all.filter(filtros[k]).length) || 'todas';
+    local.filtro = ['hoy', 'porhacer', 'completadas'].find((k) => all.filter(filtros[k]).length) || 'hoy';
   }
   if (!filtros[local.filtro]) local.filtro = 'porhacer';
   let list = all.filter(filtros[local.filtro] || (() => true))
@@ -89,9 +88,7 @@ export function renderTecnico(root) {
     <div class="tec-tabs">
       ${tab('hoy', 'Hoy', count('hoy'))}
       ${tab('porhacer', 'Por hacer', count('porhacer'))}
-      ${tab('completadas', 'Completadas', count('completadas'))}
-      ${tab('todas', 'Todas', all.length)}
-    </div>
+      ${tab('completadas', 'Completadas', count('completadas'))}    </div>
 
     <div class="tec-list">
       ${list.length ? list.map(card).join('') : `<div class="empty-state"><div class="es-ico">✓</div><p>No tienes visitas en esta sección.</p></div>`}
