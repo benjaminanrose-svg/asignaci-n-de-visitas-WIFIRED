@@ -2,6 +2,14 @@
 
 > Registro corto de lo hecho. Lo nuevo arriba.
 
+- **2026-11-02** 💾 Pérdida de datos del técnico (antes con VPN): causas y arreglos.
+  1) Cierre con PIN no se encolaba (`validarYCompletar`) → ya no se usa (sin PIN).
+  2) Cola en localStorage (~5 MB) fallaba en silencio con fotos/video → ahora **IndexedDB** (`persistir`,
+     `cargarColas` en store.js; localStorage solo respaldo). 3) Sin reintento si había "señal" pero servidor
+     inalcanzable → `setInterval` 20 s + al volver a la app. 4) Traefik cortaba envíos >60 s → readTimeout 600 s;
+     Node `requestTimeout` 15 min. Probado: cierre con foto 6 MB sin red → guardado → llega solo al reconectar.
+  ⚠️ Cola es por dirección (origen): antes de cambiar a wengan.wifired.cl, sincronizar en la dirección antigua.
+
 - **2026-11-02** ✂️ Técnico cierra visitas SIN PIN ni autorización: basta observación + foto + firma del cliente
   (correo opcional, recibe la orden). Server: `validada='tecnico'`. Panel técnico: sin botón GPS, sin pestaña
   "Todas", "Por hacer" sin fechas pasadas. Calendario: atrasadas en rojo (`esAtrasada` en util.js).

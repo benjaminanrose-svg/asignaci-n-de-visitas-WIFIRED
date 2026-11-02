@@ -30,7 +30,43 @@ let queue = load(QUEUE, []);
 const listeners = new Set();
 
 function load(k, def) { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch (e) { return def; } }
-function saveQueue() { try { localStorage.setItem(QUEUE, JSON.stringify(queue)); } catch (e) {} }
+
+// ── Guardado de la cola en el celular ────────────────────────────────────────
+// localStorage tiene ~5 MB: un cierre con fotos/video no cabe y antes se perdía
+// en silencio. Ahora la cola vive en IndexedDB (cientos de MB) y localStorage
+// queda solo como respaldo cuando cabe.
+const IDB = { name: 'wifired', store: 'kv' };
+function idbOpen() {
+  return new Promise((res, rej) => {
+    if (typeof indexedDB === 'undefined') return rej(new Error('sin IndexedDB'));
+    const r = indexedDB.open(IDB.name, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(IDB.store);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function idbSet(k, v) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => { const tx = db.transaction(IDB.store, 'readwrite'); tx.objectStore(IDB.store).put(v, k); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
+}
+async function idbGet(k) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => { const rq = db.transaction(IDB.store, 'readonly').objectStore(IDB.store).get(k); rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); });
+}
+function persistir(key, val) {
+  let enLS = true;
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { enLS = false; try { localStorage.removeItem(key); } catch (e2) { /* nada */ } }
+  idbSet(key, val).catch(() => {
+    if (!enLS && val && val.length) toast('⚠️ El celular no tiene espacio para guardar este cambio. No cierres la app hasta que se sincronice.', 'info');
+  });
+}
+function saveQueue() { persistir(QUEUE, queue); }
+// Al abrir la app: recupera la cola guardada (IndexedDB primero; si no, localStorage).
+async function cargarColas() {
+  // IndexedDB es la copia principal; la primera vez (aún vacía) se migra lo de localStorage.
+  try { const q = await idbGet(QUEUE); if (Array.isArray(q)) queue = q; else if (queue.length) saveQueue(); } catch (e) { /* queda la de localStorage */ }
+  try { const f = await idbGet(QUEUE_FAIL); if (Array.isArray(f)) fallidos = f; else if (fallidos.length) saveFallidos(); } catch (e) { /* idem */ }
+}
 function saveCache() { try { localStorage.setItem(CACHE, JSON.stringify({ visitas: state.visitas.map(sinMedia), tecnicos: state.tecnicos, tickets: state.tickets, config: state.config, me })); } catch (e) {} }
 
 export function currentUser() { return me; }
@@ -98,6 +134,7 @@ export async function conMedia(v) {
 }
 
 export async function initStore() {
+  await cargarColas();
   try {
     const data = await rawApi('GET', '/bootstrap');
     state.visitas = data.visitas; state.tecnicos = data.tecnicos; state.tickets = data.tickets || []; state.config = data.config; me = data.me || null;
@@ -156,7 +193,7 @@ let flushing = false;
 // Nunca se descarta nada: lo rechazado queda apartado en "fallidos" para reintentar.
 const QUEUE_FAIL = 'wifired_queue_fallidos';
 let fallidos = load(QUEUE_FAIL, []);
-function saveFallidos() { try { localStorage.setItem(QUEUE_FAIL, JSON.stringify(fallidos)); } catch (e) {} }
+function saveFallidos() { persistir(QUEUE_FAIL, fallidos); }
 export function fallidosCount() { return fallidos.length; }
 export function reintentarFallidos() {
   if (!fallidos.length) return;
@@ -441,4 +478,8 @@ export async function refresh() {
 
 // ---------- Reconexión ----------
 window.addEventListener('online', () => { flushQueue(); emit(); });
+// Reintento automático: con "señal" pero servidor inalcanzable (VPN caída, túnel),
+// el evento 'online' no llega; así la cola igual se envía sola apenas haya conexión.
+setInterval(() => { if (queue.length) flushQueue(); }, 20000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && queue.length) flushQueue(); });
 window.addEventListener('offline', () => emit());

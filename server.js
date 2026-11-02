@@ -1428,8 +1428,10 @@ app.use((req, res, next) => {
 app.use(express.static(__dirname, { etag: true, lastModified: true, dotfiles: 'deny', setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
+// Envíos lentos (fotos/video con mala señal): Node corta a los 5 min por defecto; se da hasta 15.
+const conLimite = (srv) => { srv.requestTimeout = 15 * 60 * 1000; return srv; };
 getStore()
-  .then(() => app.listen(PORT, '0.0.0.0', () => {
+  .then(() => conLimite(app.listen(PORT, '0.0.0.0', () => {
     console.log(`WIFIRED Agenda — servidor en http://0.0.0.0:${PORT}`);
     // Avisos de seguridad para exposición a IP pública.
     const avisos = [];
@@ -1442,5 +1444,5 @@ getStore()
     const tick = () => { correrRecordatorios(); correrConfirmaciones(); correrRespaldo(); };
     tick();
     setInterval(tick, 30 * 60 * 1000);
-  }))
+  })))
   .catch((e) => { console.error('Fallo al iniciar:', e); process.exit(1); });
