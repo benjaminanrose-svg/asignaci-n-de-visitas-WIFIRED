@@ -213,7 +213,9 @@ const COMPANY = {
 const app = express();
 const PORT = process.env.PORT || 8080;
 app.disable('x-powered-by');       // no revelar que corre Express
-app.set('trust proxy', 1);         // detrás del proxy de Coolify (para req.ip y HTTPS)
+// Solo se cree el header X-Forwarded-For si viene de un proxy de la red interna (Traefik de
+// Coolify). Si alguien llega directo (ej. puerto 8081 publicado) no puede falsear su IP.
+app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
 // --- Cabeceras de seguridad (para exposición a IP pública) ---
 // Sistema ISP que puede incrustar el calendario (ej. http://192.168.11.236:3000).
