@@ -226,31 +226,18 @@ function completarModal(uid) {
   if (String(v.tipo || '').trim().toLowerCase() === 'factibilidad') return completarFactibilidadModal(uid, v);
   const node = document.createElement('div');
   node.innerHTML = `
-    <div class="modal-head"><h3>Completar y validar visita</h3><button class="icon-btn" data-close>✕</button></div>
+    <div class="modal-head"><h3>Completar visita</h3><button class="icon-btn" data-close>✕</button></div>
     <div class="modal-body">
       <p class="muted-sm" style="margin-bottom:14px">${esc(v.id)} · ${esc(v.cliente)} · ${esc(v.tipo)}</p>
-      <div class="field"><label>Correo del cliente (recibe el código y la orden) *</label>
+      <div class="field"><label>Correo del cliente <span class="muted-sm">(opcional: recibe la orden de trabajo)</span></label>
         <input class="input" type="email" name="email" value="${esc(v.email || '')}" placeholder="cliente@correo.com"></div>
       <div class="field" style="margin-top:12px"><label>Observación del trabajo *</label>
         <textarea class="textarea" name="detalle" required placeholder="Trabajo realizado, equipos, mediciones…">${esc(v.detalle || '')}</textarea></div>
       <div class="field" style="margin-top:12px"><label>Evidencia * <span class="muted-sm">(al menos una foto o video ≤30s)</span></label><div data-photos></div></div>
       <div class="field" style="margin-top:14px"><label>Firma del cliente *</label><div data-sig-cliente></div></div>
       <div class="field" style="margin-top:6px"><label>Firma del técnico</label><div data-sig-tecnico></div></div>
-
-      <div class="pin-box" style="margin-top:16px;border-top:1px dashed var(--border-2);padding-top:14px">
-        <label style="font-size:13.5px;font-weight:700;color:var(--text)">🔐 Validación del cliente</label>
-        <p class="muted-sm" style="margin:4px 0 10px">Envía un código al correo del cliente. Él te lo dicta y lo ingresas aquí para poder cerrar la visita.</p>
-        <button class="btn btn-block" data-send-pin>📧 Enviar código al cliente</button>
-        <div data-pin-area style="display:none;margin-top:12px">
-          <div class="field"><label>Código recibido por el cliente</label>
-            <input class="input" name="pin" inputmode="numeric" autocomplete="off" maxlength="6" placeholder="6 dígitos" style="letter-spacing:6px;font-size:18px;text-align:center"></div>
-          <button class="btn btn-primary btn-block" data-validar style="margin-top:10px">✓ Validar y completar</button>
-          <button class="btn btn-sm btn-block" data-reenviar style="margin-top:8px">↻ Reenviar código</button>
-        </div>
-        <button class="btn btn-sm btn-block" data-fallback style="margin-top:10px;color:var(--text-3)">El cliente no puede darme el código — enviar a coordinación</button>
-      </div>
     </div>
-    <div class="modal-foot"><button class="btn" data-close>Cancelar</button></div>`;
+    <div class="modal-foot"><button class="btn" data-close>Cancelar</button><div class="grow"></div><button class="btn btn-primary" data-completar>✓ Completar visita</button></div>`;
   node.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
   const picker = attachPicker(node);
   const sigC = createSignaturePad('Firma del cliente');
@@ -259,9 +246,7 @@ function completarModal(uid) {
   node.querySelector('[data-sig-tecnico]').appendChild(sigT.element);
 
   const emailEl = node.querySelector('[name=email]');
-  const pinArea = node.querySelector('[data-pin-area]');
-  const sendBtn = node.querySelector('[data-send-pin]');
-  bindField(emailEl, { validate: validaEmail, msg: 'Correo inválido' });
+  bindField(emailEl, { validate: (x) => !x || validaEmail(x), msg: 'Correo inválido' });
 
   // Nota y al menos una foto son obligatorias para cerrar la visita
   const faltaNotaFoto = () => {
@@ -286,44 +271,14 @@ function completarModal(uid) {
     };
   };
 
-  const enviarPin = async (btn) => {
-    const email = (emailEl.value || '').trim();
-    if (!email) { toast('Escribe el correo del cliente para enviarle el código', 'info'); emailEl.focus(); return; }
-    if (!validaEmail(email)) { toast('El correo del cliente no es válido', 'info'); emailEl.focus(); return; }
-    btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Enviando…';
-    try {
-      await store.enviarPin(uid, email);
-      toast('Código enviado a ' + email + ' 📧');
-      pinArea.style.display = '';
-      sendBtn.style.display = 'none';
-      node.querySelector('[name=pin]').focus();
-    } catch (e) { toast(e.message || 'No se pudo enviar el código', 'info'); }
-    btn.disabled = false; btn.textContent = orig;
-  };
-  sendBtn.onclick = () => enviarPin(sendBtn);
-  node.querySelector('[data-reenviar]').onclick = (e) => enviarPin(e.currentTarget);
-
-  node.querySelector('[data-validar]').onclick = async (e) => {
+  // Cierre directo (sin código ni autorización): observación + foto + firma del cliente.
+  node.querySelector('[data-completar]').onclick = () => {
     if (faltaNotaFoto()) return;
     if (sigC.isEmpty()) { toast('Falta la firma del cliente', 'info'); return; }
-    const pin = (node.querySelector('[name=pin]').value || '').trim();
-    if (!pin) { toast('Ingresa el código que recibió el cliente', 'info'); return; }
-    const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Validando…';
-    try {
-      await store.validarYCompletar(uid, { ...buildPatch({ estado: 'Completada' }, 'completada'), pin_ingresado: pin });
-      toast('Visita completada y validada ✓'); closeModal();
-    } catch (err) {
-      toast(err.message || 'Código incorrecto', 'info');
-      btn.disabled = false; btn.textContent = '✓ Validar y completar';
-    }
-  };
-
-  node.querySelector('[data-fallback]').onclick = () => {
-    if (faltaNotaFoto()) return;
-    if (sigC.isEmpty()) { toast('Toma la firma del cliente antes de enviar a coordinación', 'info'); return; }
-    if (!confirm('Se enviará a coordinación para que autoricen el cierre sin código. ¿Continuar?')) return;
-    store.updateVisita(uid, buildPatch({ validada: 'pendiente' }, 'validacion_pendiente'));
-    toast('Enviada a coordinación para autorizar ✓'); closeModal();
+    const email = (emailEl.value || '').trim();
+    if (email && !validaEmail(email)) { toast('El correo del cliente no es válido', 'info'); emailEl.focus(); return; }
+    store.updateVisita(uid, buildPatch({ estado: 'Completada' }, 'completada'));
+    toast('Visita completada ✓'); closeModal();
   };
 
   openModal(node, 'lg', { dismissable: false });

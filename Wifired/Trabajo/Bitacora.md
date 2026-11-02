@@ -2,6 +2,11 @@
 
 > Registro corto de lo hecho. Lo nuevo arriba.
 
+- **2026-11-02** ✂️ Técnico cierra visitas SIN PIN ni autorización: basta observación + foto + firma del cliente
+  (correo opcional, recibe la orden). Server: `validada='tecnico'`. Panel técnico: sin botón GPS, sin pestaña
+  "Todas", "Por hacer" sin fechas pasadas. Calendario: atrasadas en rojo (`esAtrasada` en util.js).
+  Menú: sin Tickets/Servicios/Bodega/Ubicación (rutas siguen vivas). Dominio `https://wengan.wifired.cl`.
+
 - **2026-10-30** 🔒 Revisión de seguridad antes de publicar por IP pública: bot/ISP solo red local,
   cuerpo grande solo con token válido, límite de intentos de PIN, href seguro. Ver [[Seguridad]].
   Certificado Sectigo `*.wifired.cl` del jefe VENCIDO (18-04-2026); plan: Let's Encrypt por IP.

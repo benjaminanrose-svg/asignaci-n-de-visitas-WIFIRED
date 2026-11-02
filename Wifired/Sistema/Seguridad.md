@@ -25,7 +25,8 @@ Probado en servidor local (2026-10): todas las pruebas OK.
 - **Bot e ISP solo desde red local** (2026-10-30): `/api/bot/*` y `/api/isp/*` responden 404 si `req.ip`
   no es privada (127/10/172.16-31/192.168), aunque se tenga la clave.
 - **Cuerpo grande (100 MB)** solo con token de firma válida o `x-bot-key` correcta (antes bastaba un header falso).
-- **PIN**: 5 intentos fallidos → el código se anula (`pinFallos` en server.js).
+- **PIN**: 5 intentos fallidos → el código se anula (`pinFallos` en server.js). ⚠️ Desde 2026-11-02 el técnico
+  ya NO usa PIN para cerrar (decisión del usuario): cierra con firma del cliente, `validada='tecnico'`.
 - **Links en href**: `mapsHref` (util.js) codifica comillas/espacios de links pegados (antes se podía inyectar atributos; CSP lo frenaba).
 - **Revisión 2026-10-30 antes de publicar**: 3 técnicos con clave de fábrica (benjamin.rojas, cristian, benito) → restablecer.
 - **Sistema ISP**: clave propia `ISP_API_KEY` (header `x-isp-key`). El calendario solo se deja

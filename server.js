@@ -512,25 +512,9 @@ api.put('/visitas/:id', auth, wrap(async (req, res) => {
       // Factibilidad se cierra con firma/observación, sin código PIN
       patch.estado = 'Completada';
     } else if (body.estado === 'Completada') {
-      // Requiere el código (PIN) que el cliente recibió por correo
-      const stored = await (s.getPin ? s.getPin(req.params.id) : Promise.resolve({ pin: '', ts: 0 }));
-      const ingresado = String(body.pin_ingresado || '').trim();
-      const tsMs = stored && stored.ts ? new Date(stored.ts).getTime() : 0;
-      const vigente = tsMs && (Date.now() - tsMs) < PIN_VIGENCIA_MS;
-      if (!stored || !stored.pin || ingresado !== stored.pin || !vigente) {
-        const n = (pinFallos.get(req.params.id) || 0) + 1;
-        pinFallos.set(req.params.id, n);
-        if (n >= PIN_MAX_FALLOS && stored && stored.pin && s.setPin) {
-          await s.setPin(req.params.id, '').catch(() => {});
-          pinFallos.delete(req.params.id);
-          console.warn(`[PIN] anulado por ${n} intentos fallidos · visita ${req.params.id} · ${req.user.username}`);
-          return res.status(403).json({ error: 'Demasiados intentos con el código. Se anuló: reenvía un código nuevo al cliente.' });
-        }
-        return res.status(403).json({ error: 'Código de validación incorrecto o vencido. Reenvía el código al cliente e inténtalo de nuevo.' });
-      }
+      // Cierre directo por el técnico (sin código PIN ni autorización de coordinación).
       patch.estado = 'Completada';
-      patch.validada = 'pin';
-      pinFallos.delete(req.params.id);
+      patch.validada = 'tecnico';
     }
     // Fallback: el cliente no puede entregar el código → queda pendiente de autorización por coordinación
     if (body.validada === 'pendiente') patch.validada = 'pendiente';
