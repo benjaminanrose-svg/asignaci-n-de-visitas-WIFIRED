@@ -49,7 +49,7 @@ export async function renderUbicaciones(root) {
 
   root.innerHTML = `
     <div class="hist-intro muted-sm">📍 Ubicación <b>en vivo</b> de los técnicos. Se actualiza sola cada 1 minuto (mientras el técnico tenga la app abierta y con permiso de ubicación).</div>
-    <div id="mapa-tec" style="height:min(60vh,520px);width:100%;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--panel-2,#0d1117)"></div>
+    <div id="mapa-tec" style="position:relative;z-index:0;isolation:isolate;height:min(60vh,520px);width:100%;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--panel-2,#0d1117)"></div>
     <div id="lista-tec" style="margin-top:14px"></div>`;
 
   const mapEl = root.querySelector('#mapa-tec');
