@@ -35,6 +35,12 @@ Ver [[Reglas]] · [[Arquitectura]]
 - **Dominio (2026-11-02, HECHO):** `https://wengan.wifired.cl` (subdominio creado por el jefe en cPanel, A → 45.169.163.102).
   Routers `agenda-dom-https/http` en `dynamic/agenda-ip.yaml`, resolver normal `letsencrypt` (90 días, se renueva solo).
   El certificado Sectigo pagado del jefe NO hace falta.
+- **2026-11-04: Tailscale DESINSTALADO** (técnicos ya usan wengan.wifired.cl). Trampa: al quitarlo el servidor
+  quedó sin red hasta reiniciar la VM desde VMware. Además su DNS (100.100.100.100) dejaba al servidor sin DNS.
+  - DNS fijo: `nmcli con mod "Wired connection 1" ipv4.dns "1.1.1.1 8.8.8.8" ipv4.ignore-auto-dns yes`
+    (los DNS del DHCP .237/.238 no responden).
+  - Proxy: 443 vuelve a `'443:443'` (sin Tailscale no hay choque; ligarlo a IPs fijas hacía que NO arrancara
+    tras reiniciar). Copia también en BD de Coolify. Limpieza: `docker image prune -a`, journald 100M.
 
 ## 🔴 Restricción de red: NO hay IP pública
 El servidor **solo es accesible por VPN** (técnicos y coordinación entran así).
