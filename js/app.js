@@ -195,13 +195,17 @@ function setupOnlineOfflineListeners() {
 
 async function startApp() {
   clearLogin();
-  document.getElementById('app').style.display = '';
+  const appEl = document.getElementById('app');
   viewEl.innerHTML = `<div class="empty-state"><div class="es-ico">◐</div><p>Cargando…</p></div>`;
   try {
+    // El diseño se muestra recién cuando el servidor confirmó la sesión (o hay
+    // datos guardados sin conexión): una sesión vencida va directo al login.
     await initStore();
+    appEl.style.display = '';
   } catch (e) {
     // Debe crear su propia clave → vuelve al login (que se la pide).
-    if (e.status === 403) { logout(); return; }
+    if (e.status === 403 || e.auth) { logout(); return; }
+    appEl.style.display = '';
     viewEl.innerHTML = `<div class="empty-state"><div class="es-ico">⚠</div><p>No se pudo conectar.</p><p class="muted-sm">${esc(e.message || '')}</p></div>`;
     return;
   }

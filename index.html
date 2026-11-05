@@ -19,7 +19,8 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Cpath d='M8 19c4.5-4.5 11.5-4.5 16 0M11 22c2.8-2.8 7.2-2.8 10 0M16 25.2a1.4 1.4 0 100-2.8 1.4 1.4 0 000 2.8z' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
 </head>
 <body>
-  <div id="app" class="app-shell">
+  <!-- Oculto hasta confirmar la sesión (app.js lo muestra): así no se ve el diseño antes del login. -->
+  <div id="app" class="app-shell" style="display:none">
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="brand">
